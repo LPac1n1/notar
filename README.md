@@ -1,37 +1,66 @@
 # Notar
 
-Aplicação web em React para apoiar a gestão operacional do projeto Notar, com foco em organização de doadores, regras de cálculo mensal e estrutura para futuras importações e relatórios.
+Sistema web local e portátil para apoiar a gestão dos abatimentos da Nota Fiscal Paulista em uma ONG que atua com demandas de moradia.
 
-## Estado atual
+O foco do projeto é reduzir trabalho manual, evitar erros operacionais, manter histórico confiável e facilitar a conferência mensal dos valores que devem ser abatidos para cada doador cadastrado.
 
-O projeto já possui:
+## Contexto do projeto
 
-- layout principal com navegação lateral e cabeçalho;
-- roteamento com React Router;
-- página de doadores com cadastro e remoção em memória;
-- página mensal com exemplo de cálculo por quantidade de notas;
-- gerenciamento de regras de valor por nota via Zustand;
-- estrutura inicial para demandas, importações, exportações e configurações.
+A ONG trabalha com pessoas vinculadas a demandas de moradia e recebe doações de notas fiscais por meio da Nota Fiscal Paulista. Para incentivar a participação, cada doador cadastrado pode gerar um valor de abatimento calculado a partir da quantidade de notas fiscais doadas em determinado mês.
 
-Hoje, parte das telas ainda está em fase inicial e alguns serviços existem como base para evolução futura.
+O sistema foi pensado para uso local, simples e portátil, sem depender de instalação complexa ou infraestrutura de servidor. A proposta é que ele possa funcionar em qualquer computador, mantendo os dados armazenados localmente e com possibilidade de evolução futura para exportações, backups, auditoria e integração com outros sistemas.
 
-## Páginas disponíveis
+## Objetivo
 
-- `/` - dashboard inicial;
-- `/doadores` - cadastro e listagem simples de doadores;
-- `/demandas` - área reservada para gestão de demandas;
-- `/mensal` - cálculo mensal com regras por data;
-- `/importacoes` - área reservada para importação de dados;
-- `/configuracoes` - área reservada para ajustes do sistema.
+O objetivo do Notar é centralizar o fluxo operacional de:
 
-## Stack do projeto
+- cadastro de doadores e demandas;
+- importação mensal das planilhas da Nota Fiscal Paulista;
+- cruzamento automático dos CPFs importados com os doadores cadastrados;
+- cálculo do valor de abatimento com base na quantidade de notas e no valor por nota informado na própria importação;
+- acompanhamento mensal do que está pendente ou já foi realizado no sistema externo de abatimento.
+
+## Como o sistema funciona hoje
+
+O fluxo principal atual é este:
+
+1. cadastrar as demandas existentes;
+2. cadastrar os doadores com nome, CPF, demanda e mês/ano de início das doações;
+3. importar uma planilha mensal da Nota Fiscal Paulista em formato `CSV` ou `TXT`;
+4. informar o mês de referência e o valor por nota daquele arquivo;
+5. escolher a coluna de CPF após a pré-visualização da planilha;
+6. deixar o sistema consolidar as notas por CPF, identificar quais CPFs já pertencem a doadores e gerar o resumo mensal;
+7. acompanhar na tela de gestão mensal o valor a ser abatido por doador e marcar manualmente se o abatimento está `pendente` ou `realizado`.
+
+Ponto importante:
+
+- o `valor por nota` não é mais controlado por uma tabela de regras históricas;
+- ele é definido diretamente no momento da importação;
+- depois disso, o valor daquele mês fica fechado no histórico da importação e do resumo mensal.
+
+Se houver erro no valor informado, o caminho correto é:
+
+1. excluir a importação;
+2. importar novamente a planilha com o valor correto.
+
+Isso simplifica bastante o sistema e evita recalcular meses antigos de forma confusa.
+
+## Arquitetura atual
+
+### Frontend
 
 - React 19
 - Vite 8
 - React Router DOM 7
-- Zustand
 - Tailwind CSS 4
 - ESLint 9
+
+### Dados e processamento
+
+- DuckDB WASM no navegador como fonte principal de dados;
+- leitura e agregação local das planilhas;
+- armazenamento local no próprio ambiente do navegador;
+- sem Zustand no fluxo atual.
 
 ## Estrutura principal
 
@@ -39,13 +68,133 @@ Hoje, parte das telas ainda está em fase inicial e alguns serviços existem com
 src/
   components/
     layout/
+    ui/
   pages/
   routes/
   services/
-  store/
   styles/
   utils/
 ```
+
+## Módulos do sistema
+
+### Doadores
+
+Permite:
+
+- cadastrar doadores;
+- formatar CPF no padrão brasileiro;
+- vincular cada doador a uma demanda já cadastrada;
+- informar o início das doações por mês e ano;
+- buscar por nome, CPF e demanda;
+- reconciliar importações antigas quando um novo doador é cadastrado.
+
+Quando um CPF que já apareceu em importações anteriores passa a ser cadastrado como doador, o sistema revisa as importações e atualiza os resumos mensais correspondentes.
+
+### Demandas
+
+Permite:
+
+- cadastrar demandas;
+- listar e filtrar demandas;
+- usar a demanda como seleção obrigatória no cadastro de doadores.
+
+### Importações
+
+Permite:
+
+- importar arquivos `CSV` ou `TXT`;
+- visualizar as primeiras linhas antes do processamento;
+- detectar e selecionar a coluna de CPF;
+- informar o mês de referência;
+- informar o valor por nota daquele arquivo;
+- consolidar a quantidade de notas por CPF;
+- registrar quais CPFs já são doadores e quais ainda não estão cadastrados.
+
+Além disso, a tela mostra:
+
+- histórico das importações;
+- valor por nota usado em cada importação;
+- total de linhas processadas;
+- total de linhas compatíveis com doadores cadastrados;
+- total de doadores encontrados;
+- destaque visual para CPFs ainda não cadastrados.
+
+### Gestão Mensal
+
+Permite:
+
+- visualizar o resumo mensal consolidado;
+- filtrar por mês, nome, CPF, demanda e status;
+- ver quantidade de notas, valor por nota e valor total de abatimento;
+- marcar o abatimento como `pendente` ou `realizado`.
+
+O valor exibido nessa tela é sempre o valor salvo na importação correspondente. Isso evita mudanças retroativas no histórico.
+
+### Dashboard
+
+Existe como base visual e estrutural, mas ainda pode evoluir para indicadores mais completos, como:
+
+- total de doadores;
+- total de notas por mês;
+- total de abatimento do mês;
+- rankings de doadores;
+- indicadores por demanda.
+
+### Configurações
+
+Existe como espaço reservado para evoluções futuras, como:
+
+- backups;
+- importação de backup;
+- preferências de uso;
+- auditoria de ações;
+- integração com outros sistemas.
+
+## Modelo de dados atual
+
+As tabelas principais do projeto hoje são:
+
+- `demands`
+- `donors`
+- `imports`
+- `import_cpf_summary`
+- `monthly_donor_summary`
+
+Resumo do papel de cada uma:
+
+- `demands`: guarda os grupos ou demandas da ONG;
+- `donors`: guarda os doadores cadastrados e seus dados base;
+- `imports`: registra cada planilha importada, incluindo `mês de referência` e `valor por nota`;
+- `import_cpf_summary`: guarda os CPFs encontrados em cada importação e a quantidade de notas por CPF;
+- `monthly_donor_summary`: guarda o consolidado mensal por doador, com quantidade de notas, valor por nota, valor de abatimento e status manual.
+
+## Estado atual do projeto
+
+Hoje o sistema já possui:
+
+- layout principal com sidebar e cabeçalho;
+- roteamento funcionando;
+- persistência local com DuckDB;
+- cadastro real de demandas e doadores;
+- importação real de planilhas `CSV` e `TXT`;
+- reconciliação retroativa entre doadores e importações antigas;
+- filtros separados e combináveis nas principais telas;
+- resumo mensal com valor fechado por importação;
+- marcação manual de status do abatimento;
+- estados vazios e feedbacks visuais nas abas.
+
+## Funcionalidades em evolução
+
+Ainda há bastante espaço para crescimento. Entre os próximos passos possíveis:
+
+- suporte a arquivos `XLSX` e `Excel`;
+- dashboard com indicadores reais;
+- relatórios em `CSV` ou `Excel`;
+- exportação e importação de backup;
+- histórico de ações e auditoria;
+- melhorias de usabilidade para conferência mensal;
+- futura integração com sistemas externos de abatimento.
 
 ## Como rodar localmente
 
@@ -84,33 +233,10 @@ npm run preview
 npm run lint
 ```
 
-## Regras de negócio já iniciadas
+## Observações importantes
 
-### Doadores
-
-A página de doadores permite adicionar e remover registros usando estado global com Zustand.
-
-### Gestão mensal
-
-A página mensal já demonstra a lógica de cálculo com base em:
-
-- quantidade de notas;
-- valor por nota vigente na data informada;
-- regras com `startDate` e `valuePerNote`.
-
-O cálculo atualmente é feito em [`src/services/calculationService.js`](./src/services/calculationService.js).
-
-## Pontos em evolução
-
-- persistência de dados;
-- tela real de demandas;
-- fluxo real de importação;
-- exportação de dados;
-- configurações funcionais;
-- integração futura mencionada com DuckDB.
-
-## Observações
-
-- O projeto usa armazenamento em memória no estado atual.
-- Alguns arquivos de serviço e store ainda estão como esqueleto para próximas etapas.
-- O repositório já está preparado para versionamento com `.gitignore` ajustado para Node/Vite.
+- o projeto roda localmente e usa DuckDB WASM no navegador;
+- a importação real atual está preparada para `CSV` e `TXT`;
+- o valor por nota é informado no momento da importação e passa a fazer parte do histórico daquele mês;
+- para corrigir uma importação, o fluxo recomendado é excluir e importar novamente;
+- o arquivo legado `src/services/ruleService.js` ficou apenas como resíduo neutralizado do processo de refatoração, sem papel ativo no fluxo atual, porque o ambiente bloqueou a exclusão física do arquivo.

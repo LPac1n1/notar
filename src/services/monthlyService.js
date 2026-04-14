@@ -53,22 +53,24 @@ export async function listMonthlySummaries({
 
   const rows = await query(`
     SELECT
-      id,
-      import_id,
-      donor_id,
-      reference_month,
-      cpf,
-      donor_name,
-      demand,
-      notes_count,
-      rule_id,
-      value_per_note,
-      abatement_amount,
-      abatement_status,
-      abatement_marked_at
+      monthly_donor_summary.id,
+      monthly_donor_summary.import_id,
+      monthly_donor_summary.donor_id,
+      strftime(monthly_donor_summary.reference_month, '%Y-%m-%d') AS reference_month,
+      monthly_donor_summary.cpf,
+      monthly_donor_summary.donor_name,
+      monthly_donor_summary.demand,
+      monthly_donor_summary.notes_count,
+      monthly_donor_summary.value_per_note,
+      monthly_donor_summary.abatement_amount,
+      monthly_donor_summary.abatement_status,
+      strftime(monthly_donor_summary.abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at,
+      strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date
     FROM monthly_donor_summary
+    LEFT JOIN donors
+      ON donors.id = monthly_donor_summary.donor_id
     ${whereClause}
-    ORDER BY reference_month DESC, donor_name ASC
+    ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
   `);
 
   return rows.map((row) => ({
@@ -80,11 +82,11 @@ export async function listMonthlySummaries({
     donorName: row.donor_name,
     demand: row.demand ?? "",
     notesCount: Number(row.notes_count ?? 0),
-    ruleId: row.rule_id,
     valuePerNote: Number(row.value_per_note ?? 0),
     abatementAmount: Number(row.abatement_amount ?? 0),
     abatementStatus: row.abatement_status,
     abatementMarkedAt: row.abatement_marked_at,
+    donationStartDate: row.donation_start_date ?? "",
   }));
 }
 

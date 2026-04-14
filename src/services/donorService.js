@@ -7,7 +7,6 @@ import {
 } from "./db";
 import {
   reconcileAllImports,
-  reconcileDonorHistory,
 } from "./importService";
 import { formatCpf } from "../utils/cpf";
 import { formatMonthYear } from "../utils/date";
@@ -132,10 +131,7 @@ export async function createDonor({
     )
   `);
 
-  await reconcileDonorHistory({
-    donorId: id,
-    cpf: normalizedCpf,
-  });
+  await reconcileAllImports();
 }
 
 export async function deleteDonor(id) {

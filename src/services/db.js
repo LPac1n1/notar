@@ -36,19 +36,11 @@ async function initSchema() {
   `);
 
   await conn.query(`
-    CREATE TABLE IF NOT EXISTS rule_versions (
-      id TEXT,
-      start_date DATE,
-      value_per_note DOUBLE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await conn.query(`
     CREATE TABLE IF NOT EXISTS imports (
       id TEXT,
       reference_month DATE,
       file_name TEXT,
+      value_per_note DOUBLE DEFAULT 0,
       total_rows INTEGER DEFAULT 0,
       matched_rows INTEGER DEFAULT 0,
       matched_donors INTEGER DEFAULT 0,
@@ -83,7 +75,6 @@ async function initSchema() {
       donor_name TEXT,
       demand TEXT,
       notes_count INTEGER,
-      rule_id TEXT,
       value_per_note DOUBLE,
       abatement_amount DOUBLE,
       abatement_status TEXT DEFAULT 'pending',
@@ -140,6 +131,11 @@ async function initSchema() {
 
   await conn.query(`
     ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS value_per_note DOUBLE DEFAULT 0
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'
   `);
 
@@ -152,6 +148,11 @@ async function initSchema() {
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
+
+  await conn.query(`
+    ALTER TABLE monthly_donor_summary
+    DROP COLUMN IF EXISTS rule_id
+  `).catch(() => null);
 
   await conn.query(`
     INSERT INTO demands (id, name, is_active, created_at, updated_at)
@@ -180,15 +181,15 @@ async function initSchema() {
   `);
 
   await conn.query(`
-    INSERT INTO rule_versions (id, start_date, value_per_note, created_at)
-    SELECT rules.id, rules.start_date, rules.value_per_note, rules.created_at
-    FROM rules
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM rule_versions
-      WHERE rule_versions.id = rules.id
-    )
-  `).catch(() => null);
+    UPDATE imports
+    SET
+      value_per_note = coalesce((
+        SELECT max(monthly_donor_summary.value_per_note)
+        FROM monthly_donor_summary
+        WHERE monthly_donor_summary.import_id = imports.id
+      ), value_per_note, 0),
+      updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
+  `);
 
   await conn.query(`
     INSERT INTO import_cpf_summary (
@@ -218,6 +219,14 @@ async function initSchema() {
       FROM import_cpf_summary
       WHERE import_cpf_summary.id = import_items.id
     )
+  `).catch(() => null);
+
+  await conn.query(`
+    DROP TABLE IF EXISTS rule_versions
+  `).catch(() => null);
+
+  await conn.query(`
+    DROP TABLE IF EXISTS rules
   `).catch(() => null);
 
   console.log("Tabelas principais criadas");
@@ -264,10 +273,9 @@ export async function execute(sql) {
   await connection.query(sql);
 }
 
-export async function executeBatch(statements) {
-  for (const statement of statements) {
-    await execute(statement);
-  }
+export async function registerFileText(fileName, text) {
+  await initDB();
+  await db.registerFileText(fileName, text);
 }
 
 export function escapeSqlString(value) {
