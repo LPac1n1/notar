@@ -1,0 +1,300 @@
+import * as duckdb from "@duckdb/duckdb-wasm";
+import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
+import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
+
+let db = null;
+let conn = null;
+let initPromise = null;
+
+const MVP_BUNDLE = {
+  mainModule: duckdbMvpWasm,
+  mainWorker: duckdbMvpWorker,
+};
+
+async function initSchema() {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS demands (
+      id TEXT,
+      name TEXT,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS donors (
+      id TEXT,
+      name TEXT,
+      cpf TEXT,
+      demand TEXT,
+      donation_start_date DATE,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS rule_versions (
+      id TEXT,
+      start_date DATE,
+      value_per_note DOUBLE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS imports (
+      id TEXT,
+      reference_month DATE,
+      file_name TEXT,
+      total_rows INTEGER DEFAULT 0,
+      matched_rows INTEGER DEFAULT 0,
+      matched_donors INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      notes TEXT,
+      imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS import_cpf_summary (
+      id TEXT,
+      import_id TEXT,
+      reference_month DATE,
+      cpf TEXT,
+      notes_count INTEGER,
+      matched_donor_id TEXT,
+      is_registered_donor BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS monthly_donor_summary (
+      id TEXT,
+      import_id TEXT,
+      donor_id TEXT,
+      reference_month DATE,
+      cpf TEXT,
+      donor_name TEXT,
+      demand TEXT,
+      notes_count INTEGER,
+      rule_id TEXT,
+      value_per_note DOUBLE,
+      abatement_amount DOUBLE,
+      abatement_status TEXT DEFAULT 'pending',
+      abatement_marked_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await conn.query(`
+    ALTER TABLE demands
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
+  `);
+
+  await conn.query(`
+    ALTER TABLE demands
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS demand TEXT
+  `);
+
+  await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS donation_start_date DATE
+  `);
+
+  await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
+  `);
+
+  await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS total_rows INTEGER DEFAULT 0
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS matched_rows INTEGER DEFAULT 0
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS matched_donors INTEGER DEFAULT 0
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS notes TEXT
+  `);
+
+  await conn.query(`
+    ALTER TABLE imports
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await conn.query(`
+    INSERT INTO demands (id, name, is_active, created_at, updated_at)
+    SELECT
+      lower(replace(trim(demand), ' ', '-')),
+      trim(demand),
+      TRUE,
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    FROM donors
+    WHERE demand IS NOT NULL
+      AND trim(demand) <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM demands
+        WHERE lower(trim(demands.name)) = lower(trim(donors.demand))
+      )
+    GROUP BY trim(demand)
+  `);
+
+  await conn.query(`
+    UPDATE donors
+    SET
+      is_active = coalesce(is_active, TRUE),
+      updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO rule_versions (id, start_date, value_per_note, created_at)
+    SELECT rules.id, rules.start_date, rules.value_per_note, rules.created_at
+    FROM rules
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM rule_versions
+      WHERE rule_versions.id = rules.id
+    )
+  `).catch(() => null);
+
+  await conn.query(`
+    INSERT INTO import_cpf_summary (
+      id,
+      import_id,
+      reference_month,
+      cpf,
+      notes_count,
+      is_registered_donor,
+      created_at,
+      updated_at
+    )
+    SELECT
+      import_items.id,
+      import_items.import_id,
+      imports.reference_month,
+      import_items.cpf,
+      import_items.notes_count,
+      FALSE,
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    FROM import_items
+    INNER JOIN imports
+      ON imports.id = import_items.import_id
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM import_cpf_summary
+      WHERE import_cpf_summary.id = import_items.id
+    )
+  `).catch(() => null);
+
+  console.log("Tabelas principais criadas");
+}
+
+export async function initDB() {
+  if (conn) return conn;
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    const worker = new Worker(MVP_BUNDLE.mainWorker);
+    const logger = new duckdb.ConsoleLogger();
+
+    db = new duckdb.AsyncDuckDB(logger, worker);
+    await db.instantiate(MVP_BUNDLE.mainModule);
+
+    conn = await db.connect();
+
+    console.log("DuckDB inicializado");
+
+    await initSchema();
+
+    return conn;
+  })();
+
+  try {
+    return await initPromise;
+  } catch (error) {
+    db = null;
+    conn = null;
+    initPromise = null;
+    throw error;
+  }
+}
+
+export async function query(sql) {
+  const connection = await initDB();
+  const result = await connection.query(sql);
+  return result.toArray();
+}
+
+export async function execute(sql) {
+  const connection = await initDB();
+  await connection.query(sql);
+}
+
+export async function executeBatch(statements) {
+  for (const statement of statements) {
+    await execute(statement);
+  }
+}
+
+export function escapeSqlString(value) {
+  return String(value ?? "").replaceAll("'", "''");
+}
+
+export function normalizeCpf(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+export function startOfMonth(value) {
+  if (!value) return "";
+
+  if (/^\d{4}-\d{2}$/.test(value)) {
+    return `${value}-01`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value.slice(0, 7) + "-01";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}-01`;
+}

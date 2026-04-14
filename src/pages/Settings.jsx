@@ -1,8 +1,14 @@
+import EmptyState from "../components/ui/EmptyState";
+import PageHeader from "../components/ui/PageHeader";
+
 export default function Settings() {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Configurações</h1>
-      <p>Aqui você pode ajustar as configurações do Notar.</p>
+      <PageHeader title="Configurações" className="mb-4" />
+      <EmptyState
+        title="Nenhuma configuração disponível por enquanto"
+        description="As configurações do sistema aparecerão aqui conforme os próximos módulos forem implementados."
+      />
     </div>
   );
 }

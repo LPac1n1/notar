@@ -1,16 +1,116 @@
-# React + Vite
+# Notar
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicação web em React para apoiar a gestão operacional do projeto Notar, com foco em organização de doadores, regras de cálculo mensal e estrutura para futuras importações e relatórios.
 
-Currently, two official plugins are available:
+## Estado atual
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+O projeto já possui:
 
-## React Compiler
+- layout principal com navegação lateral e cabeçalho;
+- roteamento com React Router;
+- página de doadores com cadastro e remoção em memória;
+- página mensal com exemplo de cálculo por quantidade de notas;
+- gerenciamento de regras de valor por nota via Zustand;
+- estrutura inicial para demandas, importações, exportações e configurações.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Hoje, parte das telas ainda está em fase inicial e alguns serviços existem como base para evolução futura.
 
-## Expanding the ESLint configuration
+## Páginas disponíveis
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- `/` - dashboard inicial;
+- `/doadores` - cadastro e listagem simples de doadores;
+- `/demandas` - área reservada para gestão de demandas;
+- `/mensal` - cálculo mensal com regras por data;
+- `/importacoes` - área reservada para importação de dados;
+- `/configuracoes` - área reservada para ajustes do sistema.
+
+## Stack do projeto
+
+- React 19
+- Vite 8
+- React Router DOM 7
+- Zustand
+- Tailwind CSS 4
+- ESLint 9
+
+## Estrutura principal
+
+```text
+src/
+  components/
+    layout/
+  pages/
+  routes/
+  services/
+  store/
+  styles/
+  utils/
+```
+
+## Como rodar localmente
+
+### Pré-requisitos
+
+- Node.js 20+ recomendado
+- npm
+
+### Instalação
+
+```bash
+npm install
+```
+
+### Ambiente de desenvolvimento
+
+```bash
+npm run dev
+```
+
+### Build de produção
+
+```bash
+npm run build
+```
+
+### Preview da build
+
+```bash
+npm run preview
+```
+
+### Lint
+
+```bash
+npm run lint
+```
+
+## Regras de negócio já iniciadas
+
+### Doadores
+
+A página de doadores permite adicionar e remover registros usando estado global com Zustand.
+
+### Gestão mensal
+
+A página mensal já demonstra a lógica de cálculo com base em:
+
+- quantidade de notas;
+- valor por nota vigente na data informada;
+- regras com `startDate` e `valuePerNote`.
+
+O cálculo atualmente é feito em [`src/services/calculationService.js`](./src/services/calculationService.js).
+
+## Pontos em evolução
+
+- persistência de dados;
+- tela real de demandas;
+- fluxo real de importação;
+- exportação de dados;
+- configurações funcionais;
+- integração futura mencionada com DuckDB.
+
+## Observações
+
+- O projeto usa armazenamento em memória no estado atual.
+- Alguns arquivos de serviço e store ainda estão como esqueleto para próximas etapas.
+- O repositório já está preparado para versionamento com `.gitignore` ajustado para Node/Vite.

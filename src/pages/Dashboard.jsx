@@ -1,8 +1,14 @@
+import EmptyState from "../components/ui/EmptyState";
+import PageHeader from "../components/ui/PageHeader";
+
 export default function Dashboard() {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
-      <p>Bem-vindo ao painel de controle do Notar!</p>
+      <PageHeader title="Dashboard" className="mb-4" />
+      <EmptyState
+        title="Ainda não há dados suficientes para o dashboard"
+        description="Cadastre doadores, demandas e importe uma planilha para começar a visualizar os indicadores gerais."
+      />
     </div>
   );
 }
