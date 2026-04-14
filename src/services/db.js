@@ -1,15 +1,218 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
+import { normalizeCpf } from "../utils/cpf";
+import { startOfMonth } from "../utils/date";
 
 let db = null;
 let conn = null;
 let initPromise = null;
+let transactionDepth = 0;
+let connectedDatabaseFileHandle = null;
 
 const MVP_BUNDLE = {
   mainModule: duckdbMvpWasm,
   mainWorker: duckdbMvpWorker,
 };
+const HANDLE_DB_NAME = "notar-local-settings";
+const HANDLE_STORE_NAME = "settings";
+const HANDLE_KEY = "database-file-handle";
+const DEFAULT_STORAGE_INFO = {
+  mode: "unknown",
+  isPersistent: false,
+  label: "Armazenamento nao inicializado",
+  description: "O banco de dados ainda nao foi carregado.",
+  path: "",
+  fileName: "",
+};
+let storageInfo = { ...DEFAULT_STORAGE_INFO };
+
+function supportsFileDatabaseSelection() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.showOpenFilePicker === "function" &&
+    typeof window.showSaveFilePicker === "function" &&
+    typeof indexedDB !== "undefined"
+  );
+}
+
+function openHandleDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(HANDLE_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const { result } = request;
+      if (!result.objectStoreNames.contains(HANDLE_STORE_NAME)) {
+        result.createObjectStore(HANDLE_STORE_NAME);
+      }
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      reject(request.error ?? new Error("Nao foi possivel abrir o armazenamento local."));
+    };
+  });
+}
+
+async function readStoredDatabaseFileHandle() {
+  if (!supportsFileDatabaseSelection()) {
+    return null;
+  }
+
+  const idb = await openHandleDatabase();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = idb.transaction(HANDLE_STORE_NAME, "readonly");
+      const store = transaction.objectStore(HANDLE_STORE_NAME);
+      const request = store.get(HANDLE_KEY);
+
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () =>
+        reject(request.error ?? new Error("Nao foi possivel ler o arquivo salvo."));
+    });
+  } finally {
+    idb.close();
+  }
+}
+
+async function writeStoredDatabaseFileHandle(handle) {
+  const idb = await openHandleDatabase();
+
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = idb.transaction(HANDLE_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(HANDLE_STORE_NAME);
+      const request = store.put(handle, HANDLE_KEY);
+
+      request.onsuccess = () => resolve(null);
+      request.onerror = () =>
+        reject(request.error ?? new Error("Nao foi possivel salvar o arquivo selecionado."));
+    });
+  } finally {
+    idb.close();
+  }
+}
+
+async function removeStoredDatabaseFileHandle() {
+  if (!supportsFileDatabaseSelection()) {
+    return;
+  }
+
+  const idb = await openHandleDatabase();
+
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = idb.transaction(HANDLE_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(HANDLE_STORE_NAME);
+      const request = store.delete(HANDLE_KEY);
+
+      request.onsuccess = () => resolve(null);
+      request.onerror = () =>
+        reject(request.error ?? new Error("Nao foi possivel limpar o arquivo salvo."));
+    });
+  } finally {
+    idb.close();
+  }
+}
+
+async function ensureFileHandlePermission(handle, requestPermission = false) {
+  if (!handle) {
+    return false;
+  }
+
+  const options = { mode: "readwrite" };
+  const currentPermission = await handle.queryPermission?.(options);
+
+  if (currentPermission === "granted") {
+    return true;
+  }
+
+  if (!requestPermission || typeof handle.requestPermission !== "function") {
+    return false;
+  }
+
+  return (await handle.requestPermission(options)) === "granted";
+}
+
+async function flushOpenFiles() {
+  if (!storageInfo.isPersistent) {
+    return;
+  }
+
+  if (storageInfo.mode === "file") {
+    await persistConnectedFileSnapshot();
+    return;
+  }
+
+  if (db) {
+    try {
+      await db.flushFiles();
+    } catch (error) {
+      console.warn("Nao foi possivel sincronizar os arquivos do DuckDB.", error);
+    }
+  }
+}
+
+async function openDatabase() {
+  const baseConfig = {
+    accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
+  };
+
+  const storedFileHandle = await readStoredDatabaseFileHandle().catch(() => null);
+  let requiresFileReconnect = false;
+
+  if (storedFileHandle) {
+    const hasPermission = await ensureFileHandlePermission(storedFileHandle, false);
+
+    if (hasPermission) {
+      connectedDatabaseFileHandle = storedFileHandle;
+      await db.open(baseConfig);
+      storageInfo = {
+        mode: "file",
+        isPersistent: true,
+        label: "Arquivo de dados conectado",
+        description:
+          "Os dados do Notar estao sendo gravados em um arquivo local escolhido por voce.",
+        path: "",
+        fileName: storedFileHandle.name ?? "notar-dados.json",
+      };
+      return;
+    } else {
+      requiresFileReconnect = true;
+    }
+  }
+
+  if (requiresFileReconnect) {
+    await db.open(baseConfig);
+    storageInfo = {
+      mode: "file-permission-required",
+      isPersistent: false,
+      label: "Reconecte o arquivo de dados",
+      description:
+        "O navegador ainda nao liberou acesso ao arquivo de dados salvo. Abra Configuracoes e conecte o arquivo novamente para voltar a gravar em disco.",
+      path: "",
+      fileName: storedFileHandle?.name ?? "notar-dados.json",
+    };
+    return;
+  }
+
+  await db.open(baseConfig);
+  storageInfo = {
+    mode: "memory",
+    isPersistent: false,
+    label: "Armazenamento temporario da sessao",
+    description:
+      supportsFileDatabaseSelection()
+        ? "Os dados atuais estao apenas nesta sessao. Para gravar em arquivo, conecte um arquivo de dados em Configuracoes."
+        : "Este navegador nao disponibilizou a selecao de arquivo necessaria para persistencia. Os dados podem se perder ao fechar ou recarregar a aplicacao.",
+    path: "",
+    fileName: "",
+  };
+}
 
 async function initSchema() {
   await conn.query(`
@@ -242,12 +445,14 @@ export async function initDB() {
 
     db = new duckdb.AsyncDuckDB(logger, worker);
     await db.instantiate(MVP_BUNDLE.mainModule);
+    await openDatabase();
 
     conn = await db.connect();
 
     console.log("DuckDB inicializado");
 
     await initSchema();
+    await restoreSnapshotFromConnectedFile();
 
     return conn;
   })();
@@ -258,6 +463,9 @@ export async function initDB() {
     db = null;
     conn = null;
     initPromise = null;
+    transactionDepth = 0;
+    connectedDatabaseFileHandle = null;
+    storageInfo = { ...DEFAULT_STORAGE_INFO };
     throw error;
   }
 }
@@ -268,9 +476,13 @@ export async function query(sql) {
   return result.toArray();
 }
 
-export async function execute(sql) {
+export async function execute(sql, { flush = true } = {}) {
   const connection = await initDB();
   await connection.query(sql);
+
+  if (flush && transactionDepth === 0) {
+    await flushOpenFiles();
+  }
 }
 
 export async function registerFileText(fileName, text) {
@@ -278,31 +490,403 @@ export async function registerFileText(fileName, text) {
   await db.registerFileText(fileName, text);
 }
 
+export async function releaseRegisteredFile(fileName) {
+  if (!fileName) {
+    return;
+  }
+
+  await initDB();
+  await db.dropFile(fileName).catch(() => null);
+}
+
 export function escapeSqlString(value) {
   return String(value ?? "").replaceAll("'", "''");
 }
 
-export function normalizeCpf(value) {
-  return String(value ?? "").replace(/\D/g, "");
+export { normalizeCpf, startOfMonth };
+
+export async function flushDatabase() {
+  await initDB();
+  await flushOpenFiles();
 }
 
-export function startOfMonth(value) {
-  if (!value) return "";
+export async function runInTransaction(callback) {
+  await initDB();
 
-  if (/^\d{4}-\d{2}$/.test(value)) {
-    return `${value}-01`;
+  if (transactionDepth > 0) {
+    return callback();
   }
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value.slice(0, 7) + "-01";
+  await conn.query("BEGIN TRANSACTION");
+  transactionDepth = 1;
+
+  try {
+    const result = await callback();
+    await conn.query("COMMIT");
+    await flushOpenFiles();
+    return result;
+  } catch (error) {
+    await conn.query("ROLLBACK").catch(() => null);
+    throw error;
+  } finally {
+    transactionDepth = 0;
+  }
+}
+
+export async function getDatabaseStorageInfo() {
+  await initDB();
+  return { ...storageInfo };
+}
+
+async function terminateDatabase() {
+  try {
+    await conn?.close?.();
+  } catch {
+    // Ignora erro de fechamento da conexao.
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
+  try {
+    await db?.terminate?.();
+  } catch {
+    // Ignora erro de terminacao do worker.
   }
 
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${year}-${month}-01`;
+  db = null;
+  conn = null;
+  initPromise = null;
+  transactionDepth = 0;
+  connectedDatabaseFileHandle = null;
+  storageInfo = { ...DEFAULT_STORAGE_INFO };
+}
+
+function serializeSqlValue(value) {
+  if (value === null || value === undefined) {
+    return "NULL";
+  }
+
+  if (value instanceof Date) {
+    return `'${escapeSqlString(value.toISOString())}'`;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "TRUE" : "FALSE";
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "NULL";
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  return `'${escapeSqlString(String(value))}'`;
+}
+
+function normalizeSnapshotPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if ("data" in payload && payload.data && typeof payload.data === "object") {
+    return payload.data;
+  }
+
+  return payload;
+}
+
+async function exportDatabaseSnapshot() {
+  if (!conn) {
+    return null;
+  }
+
+  const demands = await query(`
+    SELECT
+      id,
+      name,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM demands
+    ORDER BY name ASC, id ASC
+  `);
+
+  const donors = await query(`
+    SELECT
+      id,
+      name,
+      cpf,
+      demand,
+      CAST(donation_start_date AS VARCHAR) AS donation_start_date,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM donors
+    ORDER BY name ASC, id ASC
+  `);
+
+  const imports = await query(`
+    SELECT
+      id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      file_name,
+      value_per_note,
+      total_rows,
+      matched_rows,
+      matched_donors,
+      status,
+      notes,
+      CAST(imported_at AS VARCHAR) AS imported_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM imports
+    ORDER BY reference_month ASC, id ASC
+  `);
+
+  const importCpfSummary = await query(`
+    SELECT
+      id,
+      import_id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      cpf,
+      notes_count,
+      matched_donor_id,
+      is_registered_donor,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM import_cpf_summary
+    ORDER BY reference_month ASC, cpf ASC, id ASC
+  `);
+
+  const monthlyDonorSummary = await query(`
+    SELECT
+      id,
+      import_id,
+      donor_id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      cpf,
+      donor_name,
+      demand,
+      notes_count,
+      value_per_note,
+      abatement_amount,
+      abatement_status,
+      CAST(abatement_marked_at AS VARCHAR) AS abatement_marked_at,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM monthly_donor_summary
+    ORDER BY reference_month ASC, donor_name ASC, id ASC
+  `);
+
+  return {
+    demands,
+    donors,
+    imports,
+    importCpfSummary,
+    monthlyDonorSummary,
+  };
+}
+
+async function readSnapshotFromConnectedFile() {
+  if (!connectedDatabaseFileHandle) {
+    return null;
+  }
+
+  const file = await connectedDatabaseFileHandle.getFile();
+  const text = await file.text();
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  const parsedPayload = JSON.parse(text);
+  return normalizeSnapshotPayload(parsedPayload);
+}
+
+async function persistConnectedFileSnapshot() {
+  if (!connectedDatabaseFileHandle) {
+    return;
+  }
+
+  const snapshot = await exportDatabaseSnapshot();
+  const writable = await connectedDatabaseFileHandle.createWritable();
+  const payload = JSON.stringify(
+    {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: snapshot,
+    },
+    null,
+    2,
+  );
+
+  await writable.write(payload);
+  await writable.close();
+}
+
+function snapshotHasData(snapshot) {
+  if (!snapshot) {
+    return false;
+  }
+
+  return Object.values(snapshot).some(
+    (rows) => Array.isArray(rows) && rows.length > 0,
+  );
+}
+
+async function restoreDatabaseSnapshot(snapshot) {
+  if (!snapshotHasData(snapshot)) {
+    return;
+  }
+
+  const tableOrderToClear = [
+    "monthly_donor_summary",
+    "import_cpf_summary",
+    "imports",
+    "donors",
+    "demands",
+  ];
+  const tableEntriesToInsert = [
+    ["demands", snapshot.demands ?? []],
+    ["donors", snapshot.donors ?? []],
+    ["imports", snapshot.imports ?? []],
+    ["import_cpf_summary", snapshot.importCpfSummary ?? []],
+    ["monthly_donor_summary", snapshot.monthlyDonorSummary ?? []],
+  ];
+
+  await runInTransaction(async () => {
+    for (const tableName of tableOrderToClear) {
+      await execute(`DELETE FROM ${tableName}`);
+    }
+
+    for (const [tableName, rows] of tableEntriesToInsert) {
+      for (const row of rows) {
+        const columns = Object.keys(row);
+
+        if (columns.length === 0) {
+          continue;
+        }
+
+        const values = columns.map((columnName) =>
+          serializeSqlValue(row[columnName]),
+        );
+
+        await execute(`
+          INSERT INTO ${tableName} (${columns.join(", ")})
+          VALUES (${values.join(", ")})
+        `);
+      }
+    }
+  });
+}
+
+async function restoreSnapshotFromConnectedFile() {
+  if (!connectedDatabaseFileHandle) {
+    return;
+  }
+
+  try {
+    const snapshot = await readSnapshotFromConnectedFile();
+    await restoreDatabaseSnapshot(snapshot);
+  } catch (error) {
+    console.warn(
+      "Nao foi possivel restaurar os dados a partir do arquivo conectado.",
+      error,
+    );
+  }
+}
+
+async function connectDatabaseFileHandle(handle, { preserveCurrentData } = {}) {
+  if (!supportsFileDatabaseSelection()) {
+    throw new Error(
+      "Este navegador nao suporta selecao de arquivo para usar um banco local em disco.",
+    );
+  }
+
+  const hasPermission = await ensureFileHandlePermission(handle, true);
+  if (!hasPermission) {
+    throw new Error(
+      "O navegador nao liberou acesso de leitura e escrita ao arquivo selecionado.",
+    );
+  }
+
+  const file = await handle.getFile();
+  const isEmptyFile = file.size === 0;
+  const currentSnapshot = preserveCurrentData
+    ? await exportDatabaseSnapshot()
+    : null;
+
+  await writeStoredDatabaseFileHandle(handle);
+  await terminateDatabase();
+  await initDB();
+
+  if (isEmptyFile && snapshotHasData(currentSnapshot)) {
+    await restoreDatabaseSnapshot(currentSnapshot);
+  }
+
+  return {
+    storageInfo: await getDatabaseStorageInfo(),
+    migratedCurrentSession: isEmptyFile && snapshotHasData(currentSnapshot),
+    usedExistingFile: !isEmptyFile,
+  };
+}
+
+export async function createDatabaseFile() {
+  if (!supportsFileDatabaseSelection()) {
+    throw new Error(
+      "Este navegador nao suporta a criacao de arquivo local para o banco de dados.",
+    );
+  }
+
+  const handle = await window.showSaveFilePicker({
+    suggestedName: "notar-dados.json",
+    types: [
+      {
+        description: "Banco de dados do Notar",
+        accept: {
+          "application/json": [".json"],
+        },
+      },
+    ],
+  });
+
+  return connectDatabaseFileHandle(handle, { preserveCurrentData: true });
+}
+
+export async function openDatabaseFile() {
+  if (!supportsFileDatabaseSelection()) {
+    throw new Error(
+      "Este navegador nao suporta a abertura de arquivo local para o banco de dados.",
+    );
+  }
+
+  const [handle] = await window.showOpenFilePicker({
+    multiple: false,
+    types: [
+      {
+        description: "Banco de dados do Notar",
+        accept: {
+          "application/json": [".json"],
+        },
+      },
+    ],
+  });
+
+  if (!handle) {
+    throw new Error("Nenhum arquivo foi selecionado.");
+  }
+
+  return connectDatabaseFileHandle(handle, { preserveCurrentData: false });
+}
+
+export async function disconnectDatabaseFile() {
+  const currentSnapshot = await exportDatabaseSnapshot();
+
+  await removeStoredDatabaseFileHandle();
+  await terminateDatabase();
+  await initDB();
+  await restoreDatabaseSnapshot(currentSnapshot);
+
+  return {
+    storageInfo: await getDatabaseStorageInfo(),
+  };
 }

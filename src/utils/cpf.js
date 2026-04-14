@@ -1,5 +1,9 @@
+export function normalizeCpf(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 export function formatCpf(value) {
-  const digits = String(value ?? "").replace(/\D/g, "").slice(0, 11);
+  const digits = normalizeCpf(value).slice(0, 11);
 
   return digits
     .replace(/^(\d{3})(\d)/, "$1.$2")

@@ -233,6 +233,12 @@ npm run preview
 npm run lint
 ```
 
+### Testes automatizados
+
+```bash
+npm run test
+```
+
 ## Observações importantes
 
 - o projeto roda localmente e usa DuckDB WASM no navegador;

@@ -6,6 +6,7 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
 import TextInput from "../components/ui/TextInput";
+import { releaseRegisteredFile } from "../services/db";
 import {
   deleteImport,
   listImportCpfSummary,
@@ -83,10 +84,8 @@ export default function Imports() {
   const loadData = useCallback(async () => {
     try {
       setError("");
-      const [importRows, cpfRows] = await Promise.all([
-        listImports(importFilters),
-        listImportCpfSummary(cpfFilters),
-      ]);
+      const importRows = await listImports(importFilters);
+      const cpfRows = await listImportCpfSummary(cpfFilters);
       setImports(importRows);
       setCpfSummary(cpfRows);
     } catch (err) {
@@ -103,6 +102,12 @@ export default function Imports() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => () => {
+    if (previewData?.registeredFileName) {
+      releaseRegisteredFile(previewData.registeredFileName).catch(() => null);
+    }
+  }, [previewData]);
 
   const handleImportFilterChange = (event) => {
     const { name, value } = event.target;
@@ -130,6 +135,10 @@ export default function Imports() {
 
   const handlePreviewImport = async (event) => {
     const file = event.target.files?.[0];
+
+    if (previewData?.registeredFileName) {
+      await releaseRegisteredFile(previewData.registeredFileName);
+    }
 
     if (!file) {
       setSelectedFile(null);
@@ -166,7 +175,11 @@ export default function Imports() {
     }
   };
 
-  const resetImportSelection = () => {
+  const resetImportSelection = async () => {
+    if (previewData?.registeredFileName) {
+      await releaseRegisteredFile(previewData.registeredFileName);
+    }
+
     setSelectedFile(null);
     setPreviewData(null);
     setFileInputKey((current) => current + 1);
@@ -192,7 +205,7 @@ export default function Imports() {
         cpfColumn: uploadForm.cpfColumn,
       });
       await loadData();
-      resetImportSelection();
+      await resetImportSelection();
       setUploadForm({
         referenceMonth: "",
         valuePerNote: "",

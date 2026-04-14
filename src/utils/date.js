@@ -1,3 +1,27 @@
+export function startOfMonth(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}$/.test(value)) {
+    return `${value}-01`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${value.slice(0, 7)}-01`;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}-01`;
+}
+
 export function formatMonthYear(value) {
   if (!value) {
     return "";
@@ -58,4 +82,15 @@ export function subtractOneMonth(value) {
   const nextYear = date.getFullYear();
   const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
   return `${nextYear}-${nextMonth}-01`;
+}
+
+export function hasDonationStartConflict(donationStartDate, referenceMonth) {
+  const normalizedDonationStartDate = startOfMonth(donationStartDate);
+  const normalizedReferenceMonth = startOfMonth(referenceMonth);
+
+  if (!normalizedDonationStartDate || !normalizedReferenceMonth) {
+    return false;
+  }
+
+  return normalizedDonationStartDate > normalizedReferenceMonth;
 }

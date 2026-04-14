@@ -11,7 +11,11 @@ import {
   listMonthlySummaries,
   updateAbatementStatus,
 } from "../services/monthlyService";
-import { formatDatePtBR, formatMonthYear } from "../utils/date";
+import {
+  formatDatePtBR,
+  formatMonthYear,
+  hasDonationStartConflict,
+} from "../utils/date";
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", {
@@ -106,9 +110,7 @@ export default function Monthly() {
   );
   const summariesWithStartDateConflict = summaries.filter(
     (summary) =>
-      summary.donationStartDate &&
-      summary.referenceMonth &&
-      summary.donationStartDate > summary.referenceMonth,
+      hasDonationStartConflict(summary.donationStartDate, summary.referenceMonth),
   );
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
@@ -311,9 +313,10 @@ export default function Monthly() {
           <div className="space-y-3">
             {summaries.map((summary) => {
               const hasStartDateConflict =
-                summary.donationStartDate &&
-                summary.referenceMonth &&
-                summary.donationStartDate > summary.referenceMonth;
+                hasDonationStartConflict(
+                  summary.donationStartDate,
+                  summary.referenceMonth,
+                );
 
               return (
                 <div
