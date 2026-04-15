@@ -5,18 +5,9 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { getDashboardOverview } from "../services/dashboardService";
 import { formatCpf } from "../utils/cpf";
+import { getErrorMessage } from "../utils/error";
+import { formatCurrency, formatInteger } from "../utils/format";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number(value) || 0);
-}
-
-function formatInteger(value) {
-  return new Intl.NumberFormat("pt-BR").format(Number(value) || 0);
-}
 
 function MetricCard({ label, value, helper = "" }) {
   return (
@@ -40,8 +31,16 @@ export default function Dashboard() {
       const overview = await getDashboardOverview();
       setDashboard(overview);
     } catch (dashboardError) {
-      console.error(dashboardError);
-      setError("Nao foi possivel carregar os indicadores do dashboard.");
+      console.error(
+        "Erro ao carregar dashboard:",
+        getErrorMessage(dashboardError, "Erro desconhecido."),
+      );
+      setError(
+        getErrorMessage(
+          dashboardError,
+          "Nao foi possivel carregar os indicadores do dashboard.",
+        ),
+      );
     } finally {
       setIsLoading(false);
     }

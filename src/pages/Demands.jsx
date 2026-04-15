@@ -11,18 +11,7 @@ import {
   listDemands,
   updateDemand,
 } from "../services/demandService";
-
-function getErrorMessage(error, fallbackMessage) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error) {
-    return error;
-  }
-
-  return fallbackMessage;
-}
+import { getErrorMessage } from "../utils/error";
 
 export default function Demands() {
   const [demands, setDemands] = useState([]);

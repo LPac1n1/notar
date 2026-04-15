@@ -17,6 +17,7 @@ import {
   parseValuePerNote,
   toPositiveInteger,
 } from "../utils/import";
+import { getErrorMessage } from "../utils/error";
 
 function escapeIdentifier(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
@@ -67,29 +68,6 @@ async function registerSpreadsheetPreviewFile(file, registeredFileName) {
     worksheetName: "",
     worksheetCount: 0,
   };
-}
-
-function getErrorMessage(error, fallbackMessage) {
-  try {
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-
-    if (typeof error === "object" && error !== null && "message" in error) {
-      const message = String(error.message ?? "");
-      if (message) {
-        return message;
-      }
-    }
-
-    if (typeof error === "string" && error) {
-      return error;
-    }
-  } catch {
-    return fallbackMessage;
-  }
-
-  return fallbackMessage;
 }
 
 export async function prepareImportPreview(file) {

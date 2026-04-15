@@ -19,37 +19,9 @@ import {
   processImportedFile,
 } from "../services/importService";
 import { formatCpf } from "../utils/cpf";
+import { getErrorMessage } from "../utils/error";
+import { formatCurrency } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number(value) || 0);
-}
-
-function getErrorMessage(error, fallbackMessage) {
-  try {
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-
-    if (typeof error === "object" && error !== null && "message" in error) {
-      const message = String(error.message ?? "");
-      if (message) {
-        return message;
-      }
-    }
-
-    if (typeof error === "string" && error) {
-      return error;
-    }
-  } catch {
-    return fallbackMessage;
-  }
-
-  return fallbackMessage;
-}
 
 export default function Imports() {
   const [imports, setImports] = useState([]);

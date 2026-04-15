@@ -13,18 +13,7 @@ import {
   importDatabaseBackup,
   openDatabaseFile,
 } from "../services/db";
-
-function getErrorMessage(error, fallbackMessage) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error) {
-    return error;
-  }
-
-  return fallbackMessage;
-}
+import { getErrorMessage } from "../utils/error";
 
 function formatBackupStats(stats = {}) {
   return [
@@ -56,7 +45,10 @@ export default function Settings() {
           setStorageInfo(info);
         }
       } catch (storageError) {
-        console.error(storageError);
+        console.error(
+          "Erro ao verificar armazenamento local:",
+          getErrorMessage(storageError, "Erro desconhecido."),
+        );
 
         if (isMounted) {
           setError(

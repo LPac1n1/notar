@@ -12,30 +12,13 @@ import {
   listMonthlySummaries,
   updateAbatementStatus,
 } from "../services/monthlyService";
+import { getErrorMessage } from "../utils/error";
+import { formatCurrency } from "../utils/format";
 import {
   formatDatePtBR,
   formatMonthYear,
   hasDonationStartConflict,
 } from "../utils/date";
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number(value) || 0);
-}
-
-function getErrorMessage(error, fallbackMessage) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error) {
-    return error;
-  }
-
-  return fallbackMessage;
-}
 
 export default function Monthly() {
   const [summaries, setSummaries] = useState([]);
@@ -69,7 +52,10 @@ export default function Monthly() {
       const monthlyRows = await listMonthlySummaries(filters);
       setSummaries(monthlyRows);
     } catch (err) {
-      console.error(err);
+      console.error(
+        "Erro ao carregar resumo mensal:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
       setError("Nao foi possivel carregar o resumo mensal.");
     } finally {
       setIsLoading(false);
@@ -97,7 +83,10 @@ export default function Monthly() {
       await loadSummaries();
       setSuccessMessage("Status do abatimento atualizado.");
     } catch (err) {
-      console.error(err);
+      console.error(
+        "Erro ao atualizar status do abatimento:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
       setError(
         getErrorMessage(err, "Nao foi possivel atualizar o status do abatimento."),
       );
@@ -121,7 +110,10 @@ export default function Monthly() {
         `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
       );
     } catch (err) {
-      console.error(err);
+      console.error(
+        "Erro ao exportar resumo mensal:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
       setError("Nao foi possivel exportar o resumo mensal.");
     } finally {
       setIsExporting(false);
