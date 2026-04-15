@@ -8,6 +8,10 @@ import SelectInput from "../components/ui/SelectInput";
 import TextInput from "../components/ui/TextInput";
 import { releaseRegisteredFile } from "../services/db";
 import {
+  exportImportCpfSummaryCsv,
+  exportImportsCsv,
+} from "../services/exportService";
+import {
   deleteImport,
   listImportCpfSummary,
   listImports,
@@ -76,6 +80,8 @@ export default function Imports() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isExportingImports, setIsExportingImports] = useState(false);
+  const [isExportingCpfSummary, setIsExportingCpfSummary] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState("");
   const unregisteredCpfSummary = cpfSummary.filter(
     (item) => !item.isRegisteredDonor,
@@ -224,6 +230,16 @@ export default function Imports() {
   };
 
   const handleDeleteImport = async (importId) => {
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(
+        "Tem certeza de que deseja excluir esta importacao? O resumo mensal ligado a ela tambem sera removido.",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -242,28 +258,72 @@ export default function Imports() {
     }
   };
 
+  const handleExportImports = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsExportingImports(true);
+      const result = await exportImportsCsv(importFilters);
+      setSuccessMessage(
+        `${result.rowCount} importacao(oes) exportada(s) em CSV.`,
+      );
+    } catch (err) {
+      console.error(
+        "Erro ao exportar historico de importacoes:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError("Nao foi possivel exportar o historico de importacoes.");
+    } finally {
+      setIsExportingImports(false);
+    }
+  };
+
+  const handleExportCpfSummary = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsExportingCpfSummary(true);
+      const result = await exportImportCpfSummaryCsv(cpfFilters);
+      setSuccessMessage(
+        `${result.rowCount} CPF(s) exportado(s) em CSV.`,
+      );
+    } catch (err) {
+      console.error(
+        "Erro ao exportar CPFs encontrados:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError("Nao foi possivel exportar os CPFs encontrados.");
+    } finally {
+      setIsExportingCpfSummary(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader title="Importações" className="mb-4" />
-      <FeedbackMessage message={isLoading ? "Carregando importações..." : ""} />
+      <FeedbackMessage
+        message={isLoading ? "Carregando importações..." : ""}
+        persistent
+      />
       <FeedbackMessage
         message={
           isPreviewLoading ? "Gerando pre-visualizacao da planilha..." : ""
         }
+        persistent
       />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard
         title="Nova importação"
-        description="Selecione um arquivo CSV/TXT da Nota Fiscal Paulista, escolha o mês de referência, informe o valor por nota desse mês e confirme a coluna de CPF."
+        description="Selecione um arquivo CSV, TXT ou XLSX da Nota Fiscal Paulista, escolha o mês de referência, informe o valor por nota desse mês e confirme a coluna de CPF."
         className="mb-8"
       >
         <div className="mb-5 grid gap-3 md:grid-cols-4">
           <TextInput
             key={fileInputKey}
             type="file"
-            accept=".csv,.txt,text/csv,text/plain"
+            accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={handlePreviewImport}
           />
 
@@ -314,6 +374,17 @@ export default function Imports() {
             <p className="mb-3 break-all text-sm text-zinc-600">
               Arquivo: {previewData.originalFileName}
             </p>
+            {previewData.sourceType === "excel" ? (
+              <FeedbackMessage
+                tone="info"
+                message={
+                  previewData.worksheetCount > 1
+                    ? `Aba utilizada: ${previewData.worksheetName}. Por enquanto, o sistema usa apenas a primeira aba com dados do arquivo Excel.`
+                    : `Aba utilizada: ${previewData.worksheetName}.`
+                }
+                persistent
+              />
+            ) : null}
             {previewData.previewRows.length === 0 ? (
               <EmptyState
                 title="Planilha sem linhas visíveis"
@@ -356,6 +427,16 @@ export default function Imports() {
       </SectionCard>
 
       <SectionCard title="Histórico de importações" className="mb-8">
+        <div className="mb-4">
+          <Button
+            variant="subtle"
+            onClick={handleExportImports}
+            disabled={isExportingImports}
+          >
+            {isExportingImports ? "Exportando..." : "Exportar histórico CSV"}
+          </Button>
+        </div>
+
         <div className="mb-5 grid gap-3 md:grid-cols-3">
           <TextInput
             type="text"
@@ -453,7 +534,18 @@ export default function Imports() {
               ? `${unregisteredCpfSummary.length} CPF(s) encontrados ainda não estão cadastrados como doadores.`
               : ""
           }
+          persistent
         />
+
+        <div className="mb-4">
+          <Button
+            variant="subtle"
+            onClick={handleExportCpfSummary}
+            disabled={isExportingCpfSummary}
+          >
+            {isExportingCpfSummary ? "Exportando..." : "Exportar CSV"}
+          </Button>
+        </div>
 
         <div className="mb-5 grid gap-3 md:grid-cols-3">
           <SelectInput

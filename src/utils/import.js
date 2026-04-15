@@ -1,3 +1,6 @@
+const TEXT_IMPORT_EXTENSIONS = ["csv", "txt"];
+const EXCEL_IMPORT_EXTENSIONS = ["xlsx"];
+
 export function toPositiveInteger(value) {
   const parsed = Number(value);
 
@@ -32,5 +35,26 @@ export function detectCpfColumn(columnNames = []) {
       const normalized = normalizeColumnName(columnName);
       return normalized === "cpf" || normalized.includes("cpf");
     }) ?? ""
+  );
+}
+
+export function getImportFileExtension(fileName = "") {
+  return String(fileName).split(".").pop()?.toLowerCase() ?? "";
+}
+
+export function isTextImportExtension(fileExtension) {
+  return TEXT_IMPORT_EXTENSIONS.includes(String(fileExtension ?? "").toLowerCase());
+}
+
+export function isExcelImportExtension(fileExtension) {
+  return EXCEL_IMPORT_EXTENSIONS.includes(
+    String(fileExtension ?? "").toLowerCase(),
+  );
+}
+
+export function isSupportedImportExtension(fileExtension) {
+  return (
+    isTextImportExtension(fileExtension) ||
+    isExcelImportExtension(fileExtension)
   );
 }

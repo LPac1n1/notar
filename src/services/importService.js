@@ -11,6 +11,9 @@ import {
 } from "./db";
 import {
   detectCpfColumn,
+  getImportFileExtension,
+  isExcelImportExtension,
+  isSupportedImportExtension,
   parseValuePerNote,
   toPositiveInteger,
 } from "../utils/import";
@@ -21,6 +24,49 @@ function escapeIdentifier(value) {
 
 function buildCsvSource(fileName) {
   return `read_csv_auto('${escapeSqlString(fileName)}', all_varchar = true)`;
+}
+
+async function registerSpreadsheetPreviewFile(file, registeredFileName) {
+  const fileExtension = getImportFileExtension(file.name);
+
+  if (isExcelImportExtension(fileExtension)) {
+    const { default: ExcelJS } = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    const fileBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(fileBuffer);
+
+    const worksheet =
+      workbook.worksheets.find(
+        (currentWorksheet) =>
+          currentWorksheet.actualRowCount > 0 ||
+          currentWorksheet.actualColumnCount > 0,
+      ) ?? workbook.worksheets[0];
+
+    if (!worksheet) {
+      throw new Error("A planilha do Excel nao possui nenhuma aba com dados.");
+    }
+
+    const csvBuffer = await workbook.csv.writeBuffer({
+      sheetName: worksheet.name,
+    });
+    const csvText = new TextDecoder("utf-8").decode(csvBuffer);
+    await registerFileText(registeredFileName, csvText);
+
+    return {
+      sourceType: "excel",
+      worksheetName: worksheet.name,
+      worksheetCount: workbook.worksheets.length,
+    };
+  }
+
+  const fileText = await file.text();
+  await registerFileText(registeredFileName, fileText);
+
+  return {
+    sourceType: "text",
+    worksheetName: "",
+    worksheetCount: 0,
+  };
 }
 
 function getErrorMessage(error, fallbackMessage) {
@@ -51,18 +97,20 @@ export async function prepareImportPreview(file) {
     throw new Error("Selecione um arquivo para importar.");
   }
 
-  const fileExtension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const fileExtension = getImportFileExtension(file.name);
 
-  if (!["csv", "txt"].includes(fileExtension)) {
+  if (!isSupportedImportExtension(fileExtension)) {
     throw new Error(
-      "Por enquanto, a importacao suporta apenas arquivos CSV ou TXT.",
+      "Por enquanto, a importacao suporta apenas arquivos CSV, TXT ou XLSX.",
     );
   }
 
   const registeredFileName = `${nanoid()}-${file.name}`;
   try {
-    const fileText = await file.text();
-    await registerFileText(registeredFileName, fileText);
+    const sourceMetadata = await registerSpreadsheetPreviewFile(
+      file,
+      registeredFileName,
+    );
 
     const columns = await query(`
       DESCRIBE SELECT *
@@ -84,6 +132,9 @@ export async function prepareImportPreview(file) {
       columns: columnNames,
       previewRows,
       detectedCpfColumn: cpfColumn ?? "",
+      sourceType: sourceMetadata.sourceType,
+      worksheetName: sourceMetadata.worksheetName,
+      worksheetCount: sourceMetadata.worksheetCount,
     };
   } catch (error) {
     await releaseRegisteredFile(registeredFileName);

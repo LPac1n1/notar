@@ -6,6 +6,7 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
 import TextInput from "../components/ui/TextInput";
+import { exportMonthlySummariesCsv } from "../services/exportService";
 import { listImports } from "../services/importService";
 import {
   listMonthlySummaries,
@@ -48,6 +49,7 @@ export default function Monthly() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [updatingSummaryId, setUpdatingSummaryId] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
@@ -104,6 +106,28 @@ export default function Monthly() {
     }
   };
 
+  const handleExport = async () => {
+    if (!hasSelectedReferenceMonth) {
+      setError("Selecione um mes antes de exportar o resumo mensal.");
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsExporting(true);
+      const result = await exportMonthlySummariesCsv(filters);
+      setSuccessMessage(
+        `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
+      );
+    } catch (err) {
+      console.error(err);
+      setError("Nao foi possivel exportar o resumo mensal.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const totalAbatement = summaries.reduce(
     (accumulator, item) => accumulator + item.abatementAmount,
     0,
@@ -121,12 +145,14 @@ export default function Monthly() {
       <PageHeader title="Gestão Mensal" className="mb-4" />
       <FeedbackMessage
         message={isLoading ? "Carregando resumo mensal..." : ""}
+        persistent
       />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
       <FeedbackMessage
         message="O valor por nota é definido no momento da importação e o histórico mensal usa esse valor fixo."
         tone="info"
+        persistent
       />
       <FeedbackMessage
         message={
@@ -135,6 +161,7 @@ export default function Monthly() {
             : ""
         }
         tone="warning"
+        persistent
       />
 
       <SectionCard
@@ -232,23 +259,23 @@ export default function Monthly() {
           <p className="text-sm font-medium text-zinc-700">
             Total filtrado: {formatCurrency(totalAbatement)}
           </p>
-          {selectedImport ? (
-            <p className="text-sm text-zinc-600">
-              Visualizando {formatMonthYear(selectedImport.referenceMonth)} a
-              partir do arquivo{" "}
-              <span className="font-medium">{selectedImport.fileName}</span>.
-            </p>
-          ) : null}
+          <div className="flex flex-col gap-3 md:items-end">
+            {selectedImport ? (
+              <p className="text-sm text-zinc-600">
+                Visualizando {formatMonthYear(selectedImport.referenceMonth)} a
+                partir do arquivo{" "}
+                <span className="font-medium">{selectedImport.fileName}</span>.
+              </p>
+            ) : null}
+            <Button
+              variant="subtle"
+              onClick={handleExport}
+              disabled={isExporting || !hasSelectedReferenceMonth}
+            >
+              {isExporting ? "Exportando..." : "Exportar CSV"}
+            </Button>
+          </div>
         </div>
-
-        <FeedbackMessage
-          message={
-            !hasSelectedReferenceMonth
-              ? "Selecione um mes e um ano para visualizar as doacoes e os abatimentos."
-              : ""
-          }
-          tone="warning"
-        />
 
         <div className="mb-5 grid gap-3 md:grid-cols-3">
           <TextInput

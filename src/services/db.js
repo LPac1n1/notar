@@ -1,6 +1,12 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
+import {
+  buildSnapshotStats,
+  createSnapshotPayload,
+  normalizeSnapshotPayload,
+  snapshotHasData,
+} from "../utils/backup";
 import { normalizeCpf } from "../utils/cpf";
 import { startOfMonth } from "../utils/date";
 
@@ -17,6 +23,7 @@ const MVP_BUNDLE = {
 const HANDLE_DB_NAME = "notar-local-settings";
 const HANDLE_STORE_NAME = "settings";
 const HANDLE_KEY = "database-file-handle";
+export const STORAGE_INFO_EVENT = "notar:storage-info-changed";
 const DEFAULT_STORAGE_INFO = {
   mode: "unknown",
   isPersistent: false,
@@ -26,6 +33,18 @@ const DEFAULT_STORAGE_INFO = {
   fileName: "",
 };
 let storageInfo = { ...DEFAULT_STORAGE_INFO };
+
+function updateStorageInfo(nextStorageInfo) {
+  storageInfo = { ...nextStorageInfo };
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(STORAGE_INFO_EVENT, {
+        detail: { ...storageInfo },
+      }),
+    );
+  }
+}
 
 function supportsFileDatabaseSelection() {
   return (
@@ -171,7 +190,7 @@ async function openDatabase() {
     if (hasPermission) {
       connectedDatabaseFileHandle = storedFileHandle;
       await db.open(baseConfig);
-      storageInfo = {
+      updateStorageInfo({
         mode: "file",
         isPersistent: true,
         label: "Arquivo de dados conectado",
@@ -179,7 +198,7 @@ async function openDatabase() {
           "Os dados do Notar estao sendo gravados em um arquivo local escolhido por voce.",
         path: "",
         fileName: storedFileHandle.name ?? "notar-dados.json",
-      };
+      });
       return;
     } else {
       requiresFileReconnect = true;
@@ -188,7 +207,7 @@ async function openDatabase() {
 
   if (requiresFileReconnect) {
     await db.open(baseConfig);
-    storageInfo = {
+    updateStorageInfo({
       mode: "file-permission-required",
       isPersistent: false,
       label: "Reconecte o arquivo de dados",
@@ -196,12 +215,12 @@ async function openDatabase() {
         "O navegador ainda nao liberou acesso ao arquivo de dados salvo. Abra Configuracoes e conecte o arquivo novamente para voltar a gravar em disco.",
       path: "",
       fileName: storedFileHandle?.name ?? "notar-dados.json",
-    };
+    });
     return;
   }
 
   await db.open(baseConfig);
-  storageInfo = {
+  updateStorageInfo({
     mode: "memory",
     isPersistent: false,
     label: "Armazenamento temporario da sessao",
@@ -211,7 +230,7 @@ async function openDatabase() {
         : "Este navegador nao disponibilizou a selecao de arquivo necessaria para persistencia. Os dados podem se perder ao fechar ou recarregar a aplicacao.",
     path: "",
     fileName: "",
-  };
+  });
 }
 
 async function initSchema() {
@@ -465,7 +484,7 @@ export async function initDB() {
     initPromise = null;
     transactionDepth = 0;
     connectedDatabaseFileHandle = null;
-    storageInfo = { ...DEFAULT_STORAGE_INFO };
+    updateStorageInfo(DEFAULT_STORAGE_INFO);
     throw error;
   }
 }
@@ -556,7 +575,7 @@ async function terminateDatabase() {
   initPromise = null;
   transactionDepth = 0;
   connectedDatabaseFileHandle = null;
-  storageInfo = { ...DEFAULT_STORAGE_INFO };
+  updateStorageInfo(DEFAULT_STORAGE_INFO);
 }
 
 function serializeSqlValue(value) {
@@ -581,18 +600,6 @@ function serializeSqlValue(value) {
   }
 
   return `'${escapeSqlString(String(value))}'`;
-}
-
-function normalizeSnapshotPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  if ("data" in payload && payload.data && typeof payload.data === "object") {
-    return payload.data;
-  }
-
-  return payload;
 }
 
 async function exportDatabaseSnapshot() {
@@ -709,32 +716,20 @@ async function persistConnectedFileSnapshot() {
 
   const snapshot = await exportDatabaseSnapshot();
   const writable = await connectedDatabaseFileHandle.createWritable();
-  const payload = JSON.stringify(
-    {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      data: snapshot,
-    },
-    null,
-    2,
-  );
+  const payload = JSON.stringify(createSnapshotPayload(snapshot), null, 2);
 
   await writable.write(payload);
   await writable.close();
 }
 
-function snapshotHasData(snapshot) {
-  if (!snapshot) {
-    return false;
+async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
+  const normalizedSnapshot = normalizeSnapshotPayload(snapshot);
+
+  if (!normalizedSnapshot) {
+    throw new Error("O arquivo de backup nao esta em um formato valido.");
   }
 
-  return Object.values(snapshot).some(
-    (rows) => Array.isArray(rows) && rows.length > 0,
-  );
-}
-
-async function restoreDatabaseSnapshot(snapshot) {
-  if (!snapshotHasData(snapshot)) {
+  if (!allowEmpty && !snapshotHasData(normalizedSnapshot)) {
     return;
   }
 
@@ -746,11 +741,11 @@ async function restoreDatabaseSnapshot(snapshot) {
     "demands",
   ];
   const tableEntriesToInsert = [
-    ["demands", snapshot.demands ?? []],
-    ["donors", snapshot.donors ?? []],
-    ["imports", snapshot.imports ?? []],
-    ["import_cpf_summary", snapshot.importCpfSummary ?? []],
-    ["monthly_donor_summary", snapshot.monthlyDonorSummary ?? []],
+    ["demands", normalizedSnapshot.demands],
+    ["donors", normalizedSnapshot.donors],
+    ["imports", normalizedSnapshot.imports],
+    ["import_cpf_summary", normalizedSnapshot.importCpfSummary],
+    ["monthly_donor_summary", normalizedSnapshot.monthlyDonorSummary],
   ];
 
   await runInTransaction(async () => {
@@ -786,6 +781,9 @@ async function restoreSnapshotFromConnectedFile() {
 
   try {
     const snapshot = await readSnapshotFromConnectedFile();
+    if (!snapshot) {
+      return;
+    }
     await restoreDatabaseSnapshot(snapshot);
   } catch (error) {
     console.warn(
@@ -888,5 +886,63 @@ export async function disconnectDatabaseFile() {
 
   return {
     storageInfo: await getDatabaseStorageInfo(),
+  };
+}
+
+function createBackupFileName() {
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+
+  return `notar-backup-${year}-${month}-${day}-${hours}${minutes}.json`;
+}
+
+export async function exportDatabaseBackup() {
+  await initDB();
+
+  const snapshot = await exportDatabaseSnapshot();
+  const payload = createSnapshotPayload(snapshot);
+
+  return {
+    fileName: createBackupFileName(),
+    text: JSON.stringify(payload, null, 2),
+    exportedAt: payload.exportedAt,
+    stats: buildSnapshotStats(payload.data),
+  };
+}
+
+export async function importDatabaseBackup(file) {
+  if (!file) {
+    throw new Error("Selecione um arquivo de backup para importar.");
+  }
+
+  const fileText = await file.text();
+
+  if (!fileText.trim()) {
+    throw new Error("O arquivo de backup esta vazio.");
+  }
+
+  let parsedPayload = null;
+
+  try {
+    parsedPayload = JSON.parse(fileText);
+  } catch {
+    throw new Error("O arquivo selecionado nao contem um JSON valido.");
+  }
+
+  const snapshot = normalizeSnapshotPayload(parsedPayload);
+
+  if (!snapshot) {
+    throw new Error("O arquivo selecionado nao parece ser um backup valido do Notar.");
+  }
+
+  await restoreDatabaseSnapshot(snapshot, { allowEmpty: true });
+
+  return {
+    storageInfo: await getDatabaseStorageInfo(),
+    stats: buildSnapshotStats(snapshot),
   };
 }

@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   detectCpfColumn,
+  getImportFileExtension,
+  isExcelImportExtension,
+  isSupportedImportExtension,
+  isTextImportExtension,
   normalizeColumnName,
   parseValuePerNote,
   toPositiveInteger,
@@ -15,6 +19,15 @@ test("normalizeColumnName removes accents and separators", () => {
 test("detectCpfColumn finds the cpf-like column", () => {
   assert.equal(detectCpfColumn(["Nome", "CPF do Doador", "Cidade"]), "CPF do Doador");
   assert.equal(detectCpfColumn(["Nome", "Cidade"]), "");
+});
+
+test("import file extension helpers recognize supported files", () => {
+  assert.equal(getImportFileExtension("planilha.xlsx"), "xlsx");
+  assert.equal(getImportFileExtension("dados.CSV"), "csv");
+  assert.equal(isTextImportExtension("csv"), true);
+  assert.equal(isExcelImportExtension("xlsx"), true);
+  assert.equal(isSupportedImportExtension("txt"), true);
+  assert.equal(isSupportedImportExtension("pdf"), false);
 });
 
 test("parseValuePerNote accepts only positive numbers", () => {

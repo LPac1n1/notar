@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { escapeSqlString, execute, query } from "./db";
+import { reconcileAllImports } from "./importService";
 
 export async function listDemands(filters = {}) {
   const { name = "" } = filters;
@@ -55,6 +56,61 @@ export async function createDemand({ id = nanoid(), name }) {
       CURRENT_TIMESTAMP
     )
   `);
+}
+
+export async function updateDemand({ id, name }) {
+  const trimmedName = name.trim();
+
+  if (!id) {
+    throw new Error("O identificador da demanda e obrigatorio.");
+  }
+
+  if (!trimmedName) {
+    throw new Error("O nome da demanda e obrigatorio.");
+  }
+
+  const currentDemandRows = await query(`
+    SELECT name
+    FROM demands
+    WHERE id = '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
+
+  if (currentDemandRows.length === 0) {
+    throw new Error("A demanda selecionada nao existe mais.");
+  }
+
+  const currentName = String(currentDemandRows[0].name ?? "").trim();
+
+  const existingDemand = await query(`
+    SELECT id
+    FROM demands
+    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(trimmedName)}'))
+      AND id <> '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
+
+  if (existingDemand.length > 0) {
+    throw new Error("Ja existe outra demanda cadastrada com esse nome.");
+  }
+
+  await execute(`
+    UPDATE demands
+    SET
+      name = '${escapeSqlString(trimmedName)}',
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = '${escapeSqlString(id)}'
+  `);
+
+  await execute(`
+    UPDATE donors
+    SET
+      demand = '${escapeSqlString(trimmedName)}',
+      updated_at = CURRENT_TIMESTAMP
+    WHERE lower(trim(demand)) = lower(trim('${escapeSqlString(currentName)}'))
+  `);
+
+  await reconcileAllImports();
 }
 
 export async function deleteDemand(id) {

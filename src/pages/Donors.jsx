@@ -12,7 +12,9 @@ import {
   createDonor,
   deleteDonor,
   listDonors,
+  updateDonor,
 } from "../services/donorService";
+import { exportDonorsCsv } from "../services/exportService";
 import { formatCpf } from "../utils/cpf";
 
 function getErrorMessage(error, fallbackMessage) {
@@ -41,6 +43,7 @@ function getErrorMessage(error, fallbackMessage) {
 export default function Donors() {
   const [donors, setDonors] = useState([]);
   const [demands, setDemands] = useState([]);
+  const [editingDonorId, setEditingDonorId] = useState("");
   const [form, setForm] = useState({
     name: "",
     cpf: "",
@@ -54,6 +57,7 @@ export default function Donors() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -113,13 +117,23 @@ export default function Donors() {
       setError("");
       setSuccessMessage("");
       setIsSubmitting(true);
-      await createDonor({
-        id: nanoid(),
-        name: form.name.trim(),
-        cpf: form.cpf.trim(),
-        demand: form.demand.trim(),
-        donationStartDate: form.donationStartDate,
-      });
+      if (editingDonorId) {
+        await updateDonor({
+          id: editingDonorId,
+          name: form.name.trim(),
+          cpf: form.cpf.trim(),
+          demand: form.demand.trim(),
+          donationStartDate: form.donationStartDate,
+        });
+      } else {
+        await createDonor({
+          id: nanoid(),
+          name: form.name.trim(),
+          cpf: form.cpf.trim(),
+          demand: form.demand.trim(),
+          donationStartDate: form.donationStartDate,
+        });
+      }
       await loadDonors();
       setForm({
         name: "",
@@ -127,26 +141,88 @@ export default function Donors() {
         demand: "",
         donationStartDate: "",
       });
+      setEditingDonorId("");
       setSuccessMessage(
-        "Doador cadastrado e reconciliado com as importacoes ja existentes.",
+        editingDonorId
+          ? "Doador atualizado e reconciliado com as importacoes existentes."
+          : "Doador cadastrado e reconciliado com as importacoes ja existentes.",
       );
     } catch (err) {
       console.error("Erro ao adicionar doador:", getErrorMessage(err, "Erro desconhecido."));
-      setError(getErrorMessage(err, "Nao foi possivel adicionar o doador."));
+      setError(
+        getErrorMessage(
+          err,
+          editingDonorId
+            ? "Nao foi possivel atualizar o doador."
+            : "Nao foi possivel adicionar o doador.",
+        ),
+      );
       return;
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleEdit = (donor) => {
+    setError("");
+    setSuccessMessage("");
+    setEditingDonorId(donor.id);
+    setForm({
+      name: donor.name,
+      cpf: donor.cpf,
+      demand: donor.demand,
+      donationStartDate: donor.donationStartDateValue,
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDonorId("");
+    setForm({
+      name: "",
+      cpf: "",
+      demand: "",
+      donationStartDate: "",
+    });
+  };
+
   const handleRemove = async (id) => {
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(
+        "Tem certeza de que deseja remover este doador? As importacoes serao reconciliadas em seguida.",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
       setError("");
       await deleteDonor(id);
       await loadDonors();
+      if (editingDonorId === id) {
+        handleCancelEdit();
+      }
     } catch (err) {
       console.error("Erro ao remover doador:", getErrorMessage(err, "Erro desconhecido."));
       setError("Nao foi possivel remover o doador.");
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsExporting(true);
+      const result = await exportDonorsCsv(filters);
+      setSuccessMessage(
+        `${result.rowCount} doador(es) exportado(s) em CSV.`,
+      );
+    } catch (err) {
+      console.error("Erro ao exportar doadores:", getErrorMessage(err, "Erro desconhecido."));
+      setError("Nao foi possivel exportar os doadores.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -158,7 +234,10 @@ export default function Donors() {
         className="mb-4"
       />
 
-      <SectionCard title="Novo doador" className="mb-6">
+      <SectionCard
+        title={editingDonorId ? "Editar doador" : "Novo doador"}
+        className="mb-6"
+      >
         <div className="mb-4 grid gap-2 md:grid-cols-4">
           <TextInput
             name="name"
@@ -192,12 +271,27 @@ export default function Donors() {
           />
         </div>
 
-        <Button
-          onClick={handleAdd}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Salvando..." : "Adicionar doador"}
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={handleAdd}
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? "Salvando..."
+              : editingDonorId
+                ? "Salvar alteracoes"
+                : "Adicionar doador"}
+          </Button>
+          {editingDonorId ? (
+            <Button
+              variant="subtle"
+              onClick={handleCancelEdit}
+              disabled={isSubmitting}
+            >
+              Cancelar edicao
+            </Button>
+          ) : null}
+        </div>
       </SectionCard>
 
       <SectionCard title="Buscar doadores" className="mb-4">
@@ -227,9 +321,22 @@ export default function Donors() {
             ))}
           </SelectInput>
         </div>
+
+        <div className="mt-4">
+          <Button
+            variant="subtle"
+            onClick={handleExport}
+            disabled={isExporting}
+          >
+            {isExporting ? "Exportando..." : "Exportar CSV"}
+          </Button>
+        </div>
       </SectionCard>
 
-      <FeedbackMessage message={isLoading ? "Carregando doadores..." : ""} />
+      <FeedbackMessage
+        message={isLoading ? "Carregando doadores..." : ""}
+        persistent
+      />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
 
@@ -255,12 +362,20 @@ export default function Donors() {
                   Inicio: {d.donationStartDate || "Nao informado"}
                 </p>
               </div>
-              <Button
-                onClick={() => handleRemove(d.id)}
-                variant="danger"
-              >
-                Remover
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => handleEdit(d)}
+                  variant="subtle"
+                >
+                  Editar
+                </Button>
+                <Button
+                  onClick={() => handleRemove(d.id)}
+                  variant="danger"
+                >
+                  Remover
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

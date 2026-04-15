@@ -58,6 +58,9 @@ export async function listDonors(filters = {}) {
     name: row.name,
     cpf: formatCpf(row.cpf),
     demand: row.demand ?? "",
+    donationStartDateValue: row.donation_start_date
+      ? String(row.donation_start_date).slice(0, 7)
+      : "",
     donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
     isActive: Boolean(row.is_active),
   }));
@@ -129,6 +132,72 @@ export async function createDonor({
       TRUE,
       CURRENT_TIMESTAMP
     )
+  `);
+
+  await reconcileAllImports();
+}
+
+export async function updateDonor({
+  id,
+  name,
+  cpf,
+  demand = "",
+  donationStartDate = "",
+}) {
+  if (!id) {
+    throw new Error("O identificador do doador e obrigatorio.");
+  }
+
+  const normalizedCpf = normalizeCpf(cpf);
+
+  if (!name.trim()) {
+    throw new Error("O nome do doador e obrigatorio.");
+  }
+
+  if (normalizedCpf.length !== 11) {
+    throw new Error("Informe um CPF valido com 11 digitos.");
+  }
+
+  const existingDonor = await query(`
+    SELECT id
+    FROM donors
+    WHERE cpf = '${escapeSqlString(normalizedCpf)}'
+      AND id <> '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
+
+  if (existingDonor.length > 0) {
+    throw new Error("Ja existe outro doador cadastrado com esse CPF.");
+  }
+
+  if (!demand.trim()) {
+    throw new Error("Selecione uma demanda para o doador.");
+  }
+
+  const existingDemand = await query(`
+    SELECT id
+    FROM demands
+    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(demand.trim())}'))
+    LIMIT 1
+  `);
+
+  if (existingDemand.length === 0) {
+    throw new Error("A demanda selecionada nao existe mais.");
+  }
+
+  const normalizedStartDate = donationStartDate
+    ? startOfMonth(donationStartDate)
+    : null;
+
+  await execute(`
+    UPDATE donors
+    SET
+      name = '${escapeSqlString(name.trim())}',
+      cpf = '${escapeSqlString(normalizedCpf)}',
+      demand = '${escapeSqlString(demand.trim())}',
+      donation_start_date = ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = '${escapeSqlString(id)}'
   `);
 
   await reconcileAllImports();

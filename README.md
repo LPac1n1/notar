@@ -26,7 +26,7 @@ O fluxo principal atual é este:
 
 1. cadastrar as demandas existentes;
 2. cadastrar os doadores com nome, CPF, demanda e mês/ano de início das doações;
-3. importar uma planilha mensal da Nota Fiscal Paulista em formato `CSV` ou `TXT`;
+3. importar uma planilha mensal da Nota Fiscal Paulista em formato `CSV`, `TXT` ou `XLSX`;
 4. informar o mês de referência e o valor por nota daquele arquivo;
 5. escolher a coluna de CPF após a pré-visualização da planilha;
 6. deixar o sistema consolidar as notas por CPF, identificar quais CPFs já pertencem a doadores e gerar o resumo mensal;
@@ -103,7 +103,7 @@ Permite:
 
 Permite:
 
-- importar arquivos `CSV` ou `TXT`;
+- importar arquivos `CSV`, `TXT` ou `XLSX`;
 - visualizar as primeiras linhas antes do processamento;
 - detectar e selecionar a coluna de CPF;
 - informar o mês de referência;
@@ -143,13 +143,12 @@ Existe como base visual e estrutural, mas ainda pode evoluir para indicadores ma
 
 ### Configurações
 
-Existe como espaço reservado para evoluções futuras, como:
+Hoje concentra os recursos de armazenamento e segurança operacional, como:
 
-- backups;
+- conexão com arquivo local de dados;
+- exportação de backup em `JSON`;
 - importação de backup;
-- preferências de uso;
-- auditoria de ações;
-- integração com outros sistemas.
+- base para evoluções futuras, como auditoria e preferências.
 
 ## Modelo de dados atual
 
@@ -175,23 +174,22 @@ Hoje o sistema já possui:
 
 - layout principal com sidebar e cabeçalho;
 - roteamento funcionando;
-- persistência local com DuckDB;
+- persistência local com DuckDB e arquivo de dados em `JSON`;
 - cadastro real de demandas e doadores;
-- importação real de planilhas `CSV` e `TXT`;
+- importação real de planilhas `CSV`, `TXT` e `XLSX`;
 - reconciliação retroativa entre doadores e importações antigas;
 - filtros separados e combináveis nas principais telas;
 - resumo mensal com valor fechado por importação;
 - marcação manual de status do abatimento;
+- exportação e importação de backup;
 - estados vazios e feedbacks visuais nas abas.
 
 ## Funcionalidades em evolução
 
 Ainda há bastante espaço para crescimento. Entre os próximos passos possíveis:
 
-- suporte a arquivos `XLSX` e `Excel`;
 - dashboard com indicadores reais;
 - relatórios em `CSV` ou `Excel`;
-- exportação e importação de backup;
 - histórico de ações e auditoria;
 - melhorias de usabilidade para conferência mensal;
 - futura integração com sistemas externos de abatimento.
@@ -242,7 +240,7 @@ npm run test
 ## Observações importantes
 
 - o projeto roda localmente e usa DuckDB WASM no navegador;
-- a importação real atual está preparada para `CSV` e `TXT`;
+- a importação real atual está preparada para `CSV`, `TXT` e `XLSX`;
 - o valor por nota é informado no momento da importação e passa a fazer parte do histórico daquele mês;
 - para corrigir uma importação, o fluxo recomendado é excluir e importar novamente;
 - o arquivo legado `src/services/ruleService.js` ficou apenas como resíduo neutralizado do processo de refatoração, sem papel ativo no fluxo atual, porque o ambiente bloqueou a exclusão física do arquivo.
