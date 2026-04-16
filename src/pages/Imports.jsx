@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Button from "../components/ui/Button";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import EmptyState from "../components/ui/EmptyState";
+import LoadingScreen from "../components/ui/LoadingScreen";
+import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
@@ -22,9 +25,26 @@ import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
+import { buildSelectOptions } from "../utils/select";
+
+const INITIAL_IMPORT_FILTERS = {
+  importId: "",
+  referenceMonth: "",
+  status: "",
+};
+
+const INITIAL_CPF_FILTERS = {
+  importId: "",
+  referenceMonth: "",
+  cpf: "",
+  donorId: "",
+  demand: "",
+  registrationFilter: "all",
+};
 
 export default function Imports() {
   const [imports, setImports] = useState([]);
+  const [availableImports, setAvailableImports] = useState([]);
   const [cpfSummary, setCpfSummary] = useState([]);
   const [uploadForm, setUploadForm] = useState({
     referenceMonth: "",
@@ -35,17 +55,10 @@ export default function Imports() {
   const [previewData, setPreviewData] = useState(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [importFilters, setImportFilters] = useState({
-    fileName: "",
-    referenceMonth: "",
-    status: "",
+    ...INITIAL_IMPORT_FILTERS,
   });
   const [cpfFilters, setCpfFilters] = useState({
-    importId: "",
-    referenceMonth: "",
-    cpf: "",
-    donorName: "",
-    demand: "",
-    registrationFilter: "all",
+    ...INITIAL_CPF_FILTERS,
   });
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -55,15 +68,111 @@ export default function Imports() {
   const [isExportingImports, setIsExportingImports] = useState(false);
   const [isExportingCpfSummary, setIsExportingCpfSummary] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState("");
-  const unregisteredCpfSummary = cpfSummary.filter(
-    (item) => !item.isRegisteredDonor,
+  const [importPendingRemoval, setImportPendingRemoval] = useState(null);
+  const [selectedCpfSummaryDetails, setSelectedCpfSummaryDetails] = useState(null);
+
+  const previewColumnOptions = useMemo(
+    () =>
+      buildSelectOptions(previewData?.columns ?? [], {
+        emptyLabel: "Selecione a coluna de CPF",
+      }),
+    [previewData],
+  );
+
+  const importHistorySource = useMemo(() => {
+    const importMap = new Map(imports.map((item) => [item.id, item]));
+
+    if (importFilters.importId) {
+      const selectedImport = availableImports.find(
+        (item) => item.id === importFilters.importId,
+      );
+
+      if (selectedImport) {
+        importMap.set(selectedImport.id, selectedImport);
+      }
+    }
+
+    return Array.from(importMap.values());
+  }, [availableImports, importFilters.importId, imports]);
+
+  const importHistoryOptions = useMemo(
+    () =>
+      buildSelectOptions(importHistorySource, {
+        getValue: (item) => item.id,
+        getLabel: (item) => `${item.fileName} • ${formatMonthYear(item.referenceMonth)}`,
+        emptyLabel: "Todos os arquivos",
+      }),
+    [importHistorySource],
+  );
+
+  const cpfSummaryImportOptions = useMemo(
+    () =>
+      buildSelectOptions(availableImports, {
+        getValue: (item) => item.id,
+        getLabel: (item) => `${formatMonthYear(item.referenceMonth)} • ${item.fileName}`,
+        emptyLabel: "Todas as importações",
+      }),
+    [availableImports],
+  );
+
+  const importStatusOptions = useMemo(
+    () => [
+      { value: "", label: "Todos os status" },
+      { value: "processed", label: "Processadas" },
+      { value: "pending", label: "Pendentes" },
+    ],
+    [],
+  );
+
+  const registrationFilterOptions = useMemo(
+    () => [
+      { value: "all", label: "Todos" },
+      { value: "registered", label: "Somente cadastrados" },
+      { value: "unregistered", label: "Somente não cadastrados" },
+    ],
+    [],
+  );
+
+  const cpfOptions = useMemo(
+    () =>
+      buildSelectOptions(cpfSummary, {
+        getValue: (item) => item.cpf,
+        getLabel: (item) => formatCpf(item.cpf),
+        emptyLabel: "Todos os CPFs",
+      }),
+    [cpfSummary],
+  );
+
+  const donorOptions = useMemo(
+    () =>
+      buildSelectOptions(
+        cpfSummary.filter((item) => item.matchedDonorId),
+        {
+          getValue: (item) => item.matchedDonorId,
+          getLabel: (item) => item.donorName,
+          emptyLabel: "Todos os doadores",
+        },
+      ),
+    [cpfSummary],
+  );
+
+  const demandOptions = useMemo(
+    () =>
+      buildSelectOptions(cpfSummary, {
+        getValue: (item) => item.demand,
+        getLabel: (item) => item.demand,
+        emptyLabel: "Todas as demandas",
+      }),
+    [cpfSummary],
   );
 
   const loadData = useCallback(async () => {
     try {
       setError("");
+      const availableImportRows = await listImports();
       const importRows = await listImports(importFilters);
       const cpfRows = await listImportCpfSummary(cpfFilters);
+      setAvailableImports(availableImportRows);
       setImports(importRows);
       setCpfSummary(cpfRows);
     } catch (err) {
@@ -201,23 +310,18 @@ export default function Imports() {
     }
   };
 
-  const handleDeleteImport = async (importId) => {
-    const confirmed =
-      typeof window === "undefined" ||
-      window.confirm(
-        "Tem certeza de que deseja excluir esta importacao? O resumo mensal ligado a ela tambem sera removido.",
-      );
-
-    if (!confirmed) {
+  const handleDeleteImport = async () => {
+    if (!importPendingRemoval) {
       return;
     }
 
     try {
       setError("");
       setSuccessMessage("");
-      setDeletingImportId(importId);
-      await deleteImport(importId);
+      setDeletingImportId(importPendingRemoval.id);
+      await deleteImport(importPendingRemoval.id);
       await loadData();
+      setImportPendingRemoval(null);
       setSuccessMessage("Importacao excluida com sucesso.");
     } catch (err) {
       console.error(
@@ -270,18 +374,36 @@ export default function Imports() {
     }
   };
 
+  const handleClearImportFilters = () => {
+    setImportFilters({ ...INITIAL_IMPORT_FILTERS });
+  };
+
+  const handleClearCpfFilters = () => {
+    setCpfFilters({ ...INITIAL_CPF_FILTERS });
+  };
+
+  if (isLoading && !imports.length && !cpfSummary.length && !error) {
+    return (
+      <div>
+        <PageHeader
+          title="Importações"
+          subtitle="Leia planilhas da Nota Fiscal Paulista, confira o preview e acompanhe os CPFs encontrados em cada arquivo."
+          className="mb-6"
+        />
+        <LoadingScreen
+          title="Organizando as importações"
+          description="Buscando histórico, CPFs consolidados e arquivos já processados."
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageHeader title="Importações" className="mb-4" />
-      <FeedbackMessage
-        message={isLoading ? "Carregando importações..." : ""}
-        persistent
-      />
-      <FeedbackMessage
-        message={
-          isPreviewLoading ? "Gerando pre-visualizacao da planilha..." : ""
-        }
-        persistent
+      <PageHeader
+        title="Importações"
+        subtitle="Leia planilhas da Nota Fiscal Paulista, confira o preview e acompanhe os CPFs encontrados em cada arquivo."
+        className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
@@ -320,15 +442,12 @@ export default function Imports() {
             name="cpfColumn"
             value={uploadForm.cpfColumn}
             onChange={handleUploadChange}
+            options={previewColumnOptions}
+            placeholder="Selecione a coluna de CPF"
+            searchable={previewColumnOptions.length > 8}
+            searchPlaceholder="Buscar coluna..."
             disabled={!previewData}
-          >
-            <option value="">Selecione a coluna de CPF</option>
-            {(previewData?.columns ?? []).map((column) => (
-              <option key={column} value={column}>
-                {column}
-              </option>
-            ))}
-          </SelectInput>
+          />
         </div>
 
         <Button
@@ -340,10 +459,10 @@ export default function Imports() {
 
         {previewData ? (
           <div className="mt-6">
-            <h3 className="mb-3 text-lg font-semibold text-zinc-900">
+            <h3 className="mb-3 font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
               Pré-visualização
             </h3>
-            <p className="mb-3 break-all text-sm text-zinc-600">
+            <p className="mb-3 break-all text-sm text-[var(--muted)]">
               Arquivo: {previewData.originalFileName}
             </p>
             {previewData.sourceType === "excel" ? (
@@ -363,14 +482,14 @@ export default function Imports() {
                 description="Confira se o arquivo possui cabeçalho e dados para importar."
               />
             ) : (
-              <div className="overflow-auto rounded-lg border border-zinc-200">
+              <div className="overflow-auto rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)]">
                 <table className="min-w-full text-sm">
-                  <thead className="bg-zinc-50">
+                  <thead className="bg-[color:var(--surface-muted)]">
                     <tr>
                       {previewData.columns.map((column) => (
                         <th
                           key={column}
-                          className="border-b border-zinc-200 px-3 py-2 text-left font-medium text-zinc-700"
+                          className="border-b border-[var(--line)] px-3 py-2 text-left font-medium text-[var(--text-soft)]"
                         >
                           {column}
                         </th>
@@ -379,11 +498,11 @@ export default function Imports() {
                   </thead>
                   <tbody>
                     {previewData.previewRows.map((row, index) => (
-                      <tr key={index} className="border-b border-zinc-100">
+                      <tr key={index} className="border-b border-[var(--line)]/60">
                         {previewData.columns.map((column) => (
                           <td
                             key={`${index}-${column}`}
-                            className="px-3 py-2 text-zinc-700"
+                            className="px-3 py-2 text-[var(--text-soft)]"
                           >
                             {String(row[column] ?? "")}
                           </td>
@@ -395,11 +514,19 @@ export default function Imports() {
               </div>
             )}
           </div>
+        ) : isPreviewLoading ? (
+          <div className="mt-6">
+            <LoadingScreen
+              compact
+              title="Lendo a planilha"
+              description="Analisando colunas, detectando CPF e montando a pré-visualização."
+            />
+          </div>
         ) : null}
       </SectionCard>
 
       <SectionCard title="Histórico de importações" className="mb-8">
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap gap-3">
           <Button
             variant="subtle"
             onClick={handleExportImports}
@@ -407,15 +534,23 @@ export default function Imports() {
           >
             {isExportingImports ? "Exportando..." : "Exportar histórico CSV"}
           </Button>
+          <Button
+            variant="subtle"
+            onClick={handleClearImportFilters}
+          >
+            Limpar filtros
+          </Button>
         </div>
 
         <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <TextInput
-            type="text"
-            name="fileName"
-            placeholder="Filtrar por arquivo"
-            value={importFilters.fileName}
+          <SelectInput
+            name="importId"
+            value={importFilters.importId}
             onChange={handleImportFilterChange}
+            options={importHistoryOptions}
+            placeholder="Todos os arquivos"
+            searchable
+            searchPlaceholder="Buscar arquivo..."
           />
 
           <TextInput
@@ -429,11 +564,9 @@ export default function Imports() {
             name="status"
             value={importFilters.status}
             onChange={handleImportFilterChange}
-          >
-            <option value="">Todos os status</option>
-            <option value="processed">Processadas</option>
-            <option value="pending">Pendentes</option>
-          </SelectInput>
+            options={importStatusOptions}
+            placeholder="Todos os status"
+          />
         </div>
 
         {imports.length === 0 ? (
@@ -446,10 +579,10 @@ export default function Imports() {
             {imports.map((item) => (
               <div
                 key={item.id}
-                className="grid gap-3 rounded-lg border border-zinc-200 p-4 md:grid-cols-6"
+                className="grid gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-6"
               >
                 <div className="min-w-0">
-                  <p className="text-sm text-zinc-500">Arquivo</p>
+                  <p className="text-sm text-[var(--muted)]">Arquivo</p>
                   <p
                     className="break-all font-medium"
                     title={item.fileName}
@@ -458,33 +591,33 @@ export default function Imports() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Mês</p>
+                  <p className="text-sm text-[var(--muted)]">Mês</p>
                   <p className="font-medium">
                     {formatMonthYear(item.referenceMonth)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Valor por nota</p>
+                  <p className="text-sm text-[var(--muted)]">Valor por nota</p>
                   <p className="font-medium">
                     {formatCurrency(item.valuePerNote)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Linhas</p>
+                  <p className="text-sm text-[var(--muted)]">Linhas</p>
                   <p className="font-medium">{item.totalRows}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Linhas compatíveis</p>
+                  <p className="text-sm text-[var(--muted)]">Linhas compatíveis</p>
                   <p className="font-medium">{item.matchedRows}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Doadores encontrados</p>
+                  <p className="text-sm text-[var(--muted)]">Doadores encontrados</p>
                   <p className="font-medium">{item.matchedDonors}</p>
                 </div>
                 <div className="md:col-span-6">
                   <Button
                     variant="danger"
-                    onClick={() => handleDeleteImport(item.id)}
+                    onClick={() => setImportPendingRemoval(item)}
                     disabled={deletingImportId === item.id}
                   >
                     {deletingImportId === item.id
@@ -499,23 +632,19 @@ export default function Imports() {
       </SectionCard>
 
       <SectionCard title="CPFs encontrados">
-        <FeedbackMessage
-          tone="warning"
-          message={
-            unregisteredCpfSummary.length > 0
-              ? `${unregisteredCpfSummary.length} CPF(s) encontrados ainda não estão cadastrados como doadores.`
-              : ""
-          }
-          persistent
-        />
-
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap gap-3">
           <Button
             variant="subtle"
             onClick={handleExportCpfSummary}
             disabled={isExportingCpfSummary}
           >
             {isExportingCpfSummary ? "Exportando..." : "Exportar CSV"}
+          </Button>
+          <Button
+            variant="subtle"
+            onClick={handleClearCpfFilters}
+          >
+            Limpar filtros
           </Button>
         </div>
 
@@ -524,14 +653,11 @@ export default function Imports() {
             name="importId"
             value={cpfFilters.importId}
             onChange={handleCpfFilterChange}
-          >
-            <option value="">Todas as importações</option>
-            {imports.map((item) => (
-              <option key={item.id} value={item.id}>
-                {formatMonthYear(item.referenceMonth)} - {item.fileName}
-              </option>
-            ))}
-          </SelectInput>
+            options={cpfSummaryImportOptions}
+            placeholder="Todas as importações"
+            searchable
+            searchPlaceholder="Buscar importação..."
+          />
 
           <TextInput
             type="month"
@@ -544,36 +670,40 @@ export default function Imports() {
             name="registrationFilter"
             value={cpfFilters.registrationFilter}
             onChange={handleCpfFilterChange}
-          >
-            <option value="all">Todos</option>
-            <option value="registered">Somente cadastrados</option>
-            <option value="unregistered">Somente não cadastrados</option>
-          </SelectInput>
+            options={registrationFilterOptions}
+            placeholder="Todos"
+          />
         </div>
 
         <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <TextInput
-            type="text"
+          <SelectInput
             name="cpf"
-            placeholder="Filtrar por CPF"
             value={cpfFilters.cpf}
             onChange={handleCpfFilterChange}
+            options={cpfOptions}
+            placeholder="Todos os CPFs"
+            searchable
+            searchPlaceholder="Buscar CPF..."
           />
 
-          <TextInput
-            type="text"
-            name="donorName"
-            placeholder="Filtrar por nome do doador"
-            value={cpfFilters.donorName}
+          <SelectInput
+            name="donorId"
+            value={cpfFilters.donorId}
             onChange={handleCpfFilterChange}
+            options={donorOptions}
+            placeholder="Todos os doadores"
+            searchable
+            searchPlaceholder="Buscar doador..."
           />
 
-          <TextInput
-            type="text"
+          <SelectInput
             name="demand"
-            placeholder="Filtrar por demanda"
             value={cpfFilters.demand}
             onChange={handleCpfFilterChange}
+            options={demandOptions}
+            placeholder="Todas as demandas"
+            searchable
+            searchPlaceholder="Buscar demanda..."
           />
         </div>
 
@@ -587,77 +717,124 @@ export default function Imports() {
             {cpfSummary.map((item) => (
               <div
                 key={item.id}
-                className={`grid gap-3 rounded-lg border p-4 md:grid-cols-[1fr_120px_160px_1fr] ${
+                className={`grid gap-3 rounded-[22px] border p-4 md:grid-cols-[1fr_120px_160px_1fr] ${
                   item.isRegisteredDonor
-                    ? "border-zinc-200"
-                    : "border-amber-300 bg-amber-50/60"
+                    ? "border-[var(--line)] bg-[var(--surface-elevated)]"
+                    : "border-[color:var(--danger-soft)] bg-[color:var(--danger-soft)]"
                 }`}
               >
                 <div>
                   <p className="font-medium">{formatCpf(item.cpf)}</p>
-                  <p className="text-sm text-zinc-600">
+                  <p className="text-sm text-[var(--muted)]">
                     {item.donorName || "CPF ainda nao cadastrado"}
                   </p>
-                  <p className="text-sm text-zinc-600">
+                  <p className="text-sm text-[var(--muted)]">
                     Demanda: {item.demand || "Nao informada"}
                   </p>
                   {!item.isRegisteredDonor ? (
-                    <p className="mt-2 text-sm text-amber-700">
+                    <p className="mt-2 text-sm text-[var(--danger)]">
                       Cadastre este CPF como doador para que ele entre
                       automaticamente na gestão mensal.
                     </p>
                   ) : null}
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Total de notas</p>
+                  <p className="text-sm text-[var(--muted)]">Total de notas</p>
                   <p className="font-medium">{item.notesCount}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Status</p>
+                  <p className="text-sm text-[var(--muted)]">Status</p>
                   <p
                     className={`font-medium ${
                       item.isRegisteredDonor
-                        ? "text-emerald-700"
-                        : "text-amber-700"
+                        ? "text-[var(--success)]"
+                        : "text-[var(--danger)]"
                     }`}
                   >
                     {item.isRegisteredDonor ? "Cadastrado" : "Nao cadastrado"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Meses</p>
+                  <p className="text-sm text-[var(--muted)]">Meses</p>
                   <p className="font-medium">
                     {item.monthCount} {item.monthCount === 1 ? "mês" : "meses"}
                   </p>
                 </div>
-                <details className="md:col-span-4">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-700">
+                <div className="md:col-span-4">
+                  <Button
+                    variant="subtle"
+                    onClick={() => setSelectedCpfSummaryDetails(item)}
+                  >
                     Ver meses e arquivos
-                  </summary>
-                  <div className="mt-3 space-y-2">
-                    {item.appearances.map((appearance) => (
-                      <div
-                        key={`${item.id}-${appearance.referenceMonth}`}
-                        className="rounded-lg border border-zinc-200 bg-white/70 p-3"
-                      >
-                        <p className="font-medium text-zinc-900">
-                          {formatMonthYear(appearance.referenceMonth)}
-                        </p>
-                        <p className="text-sm text-zinc-600">
-                          Notas no mês: {appearance.notesCount}
-                        </p>
-                        <p className="mt-1 text-sm text-zinc-600 break-all">
-                          Arquivo(s): {appearance.fileNames.join(", ")}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </details>
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </SectionCard>
+
+      {selectedCpfSummaryDetails ? (
+        <Modal
+          title="Meses e arquivos do CPF"
+          description={`${formatCpf(selectedCpfSummaryDetails.cpf)} • ${selectedCpfSummaryDetails.donorName || "CPF ainda nao cadastrado"}`}
+          onClose={() => setSelectedCpfSummaryDetails(null)}
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-sm text-[var(--muted)]">Total de notas</p>
+                <p className="mt-1 font-semibold text-[var(--text-main)]">
+                  {selectedCpfSummaryDetails.notesCount}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-sm text-[var(--muted)]">Meses encontrados</p>
+                <p className="mt-1 font-semibold text-[var(--text-main)]">
+                  {selectedCpfSummaryDetails.monthCount}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-sm text-[var(--muted)]">Demanda</p>
+                <p className="mt-1 font-semibold text-[var(--text-main)]">
+                  {selectedCpfSummaryDetails.demand || "Nao informada"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {selectedCpfSummaryDetails.appearances.map((appearance) => (
+                <div
+                  key={`${selectedCpfSummaryDetails.id}-${appearance.referenceMonth}`}
+                  className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                >
+                  <p className="font-medium text-[var(--text-main)]">
+                    {formatMonthYear(appearance.referenceMonth)}
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    Notas no mês: {appearance.notesCount}
+                  </p>
+                  <p className="mt-2 break-all text-sm text-[var(--muted)]">
+                    Arquivo(s): {appearance.fileNames.join(", ")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {importPendingRemoval ? (
+        <ConfirmModal
+          title="Excluir importação"
+          description={`Tem certeza de que deseja excluir a importação ${importPendingRemoval.fileName}? O resumo mensal ligado a ela também será removido.`}
+          confirmLabel="Excluir importação"
+          isLoading={deletingImportId === importPendingRemoval.id}
+          onCancel={() => setImportPendingRemoval(null)}
+          onConfirm={handleDeleteImport}
+        />
+      ) : null}
     </div>
   );
 }

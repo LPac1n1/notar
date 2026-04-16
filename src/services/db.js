@@ -1,6 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
-import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
+import duckdbMvpWorker from "../vendor/duckdb/duckdb-browser-mvp.worker.js?url";
 import {
   buildSnapshotStats,
   createSnapshotPayload,
@@ -20,9 +20,6 @@ const MVP_BUNDLE = {
   mainModule: duckdbMvpWasm,
   mainWorker: duckdbMvpWorker,
 };
-const HANDLE_DB_NAME = "notar-local-settings";
-const HANDLE_STORE_NAME = "settings";
-const HANDLE_KEY = "database-file-handle";
 export const STORAGE_INFO_EVENT = "notar:storage-info-changed";
 const DEFAULT_STORAGE_INFO = {
   mode: "unknown",
@@ -50,92 +47,8 @@ function supportsFileDatabaseSelection() {
   return (
     typeof window !== "undefined" &&
     typeof window.showOpenFilePicker === "function" &&
-    typeof window.showSaveFilePicker === "function" &&
-    typeof indexedDB !== "undefined"
+    typeof window.showSaveFilePicker === "function"
   );
-}
-
-function openHandleDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(HANDLE_DB_NAME, 1);
-
-    request.onupgradeneeded = () => {
-      const { result } = request;
-      if (!result.objectStoreNames.contains(HANDLE_STORE_NAME)) {
-        result.createObjectStore(HANDLE_STORE_NAME);
-      }
-    };
-
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-
-    request.onerror = () => {
-      reject(request.error ?? new Error("Nao foi possivel abrir o armazenamento local."));
-    };
-  });
-}
-
-async function readStoredDatabaseFileHandle() {
-  if (!supportsFileDatabaseSelection()) {
-    return null;
-  }
-
-  const idb = await openHandleDatabase();
-
-  try {
-    return await new Promise((resolve, reject) => {
-      const transaction = idb.transaction(HANDLE_STORE_NAME, "readonly");
-      const store = transaction.objectStore(HANDLE_STORE_NAME);
-      const request = store.get(HANDLE_KEY);
-
-      request.onsuccess = () => resolve(request.result ?? null);
-      request.onerror = () =>
-        reject(request.error ?? new Error("Nao foi possivel ler o arquivo salvo."));
-    });
-  } finally {
-    idb.close();
-  }
-}
-
-async function writeStoredDatabaseFileHandle(handle) {
-  const idb = await openHandleDatabase();
-
-  try {
-    await new Promise((resolve, reject) => {
-      const transaction = idb.transaction(HANDLE_STORE_NAME, "readwrite");
-      const store = transaction.objectStore(HANDLE_STORE_NAME);
-      const request = store.put(handle, HANDLE_KEY);
-
-      request.onsuccess = () => resolve(null);
-      request.onerror = () =>
-        reject(request.error ?? new Error("Nao foi possivel salvar o arquivo selecionado."));
-    });
-  } finally {
-    idb.close();
-  }
-}
-
-async function removeStoredDatabaseFileHandle() {
-  if (!supportsFileDatabaseSelection()) {
-    return;
-  }
-
-  const idb = await openHandleDatabase();
-
-  try {
-    await new Promise((resolve, reject) => {
-      const transaction = idb.transaction(HANDLE_STORE_NAME, "readwrite");
-      const store = transaction.objectStore(HANDLE_STORE_NAME);
-      const request = store.delete(HANDLE_KEY);
-
-      request.onsuccess = () => resolve(null);
-      request.onerror = () =>
-        reject(request.error ?? new Error("Nao foi possivel limpar o arquivo salvo."));
-    });
-  } finally {
-    idb.close();
-  }
 }
 
 async function ensureFileHandlePermission(handle, requestPermission = false) {
@@ -158,21 +71,8 @@ async function ensureFileHandlePermission(handle, requestPermission = false) {
 }
 
 async function flushOpenFiles() {
-  if (!storageInfo.isPersistent) {
-    return;
-  }
-
-  if (storageInfo.mode === "file") {
+  if (storageInfo.mode === "file" && connectedDatabaseFileHandle) {
     await persistConnectedFileSnapshot();
-    return;
-  }
-
-  if (db) {
-    try {
-      await db.flushFiles();
-    } catch (error) {
-      console.warn("Nao foi possivel sincronizar os arquivos do DuckDB.", error);
-    }
   }
 }
 
@@ -181,44 +81,6 @@ async function openDatabase() {
     accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
   };
 
-  const storedFileHandle = await readStoredDatabaseFileHandle().catch(() => null);
-  let requiresFileReconnect = false;
-
-  if (storedFileHandle) {
-    const hasPermission = await ensureFileHandlePermission(storedFileHandle, false);
-
-    if (hasPermission) {
-      connectedDatabaseFileHandle = storedFileHandle;
-      await db.open(baseConfig);
-      updateStorageInfo({
-        mode: "file",
-        isPersistent: true,
-        label: "Arquivo de dados conectado",
-        description:
-          "Os dados do Notar estao sendo gravados em um arquivo local escolhido por voce.",
-        path: "",
-        fileName: storedFileHandle.name ?? "notar-dados.json",
-      });
-      return;
-    } else {
-      requiresFileReconnect = true;
-    }
-  }
-
-  if (requiresFileReconnect) {
-    await db.open(baseConfig);
-    updateStorageInfo({
-      mode: "file-permission-required",
-      isPersistent: false,
-      label: "Reconecte o arquivo de dados",
-      description:
-        "O navegador ainda nao liberou acesso ao arquivo de dados salvo. Abra Configuracoes e conecte o arquivo novamente para voltar a gravar em disco.",
-      path: "",
-      fileName: storedFileHandle?.name ?? "notar-dados.json",
-    });
-    return;
-  }
-
   await db.open(baseConfig);
   updateStorageInfo({
     mode: "memory",
@@ -226,8 +88,8 @@ async function openDatabase() {
     label: "Armazenamento temporario da sessao",
     description:
       supportsFileDatabaseSelection()
-        ? "Os dados atuais estao apenas nesta sessao. Para gravar em arquivo, conecte um arquivo de dados em Configuracoes."
-        : "Este navegador nao disponibilizou a selecao de arquivo necessaria para persistencia. Os dados podem se perder ao fechar ou recarregar a aplicacao.",
+        ? "Os dados atuais estao apenas nesta sessao. Para persistir, crie ou abra um arquivo de dados em Configuracoes."
+        : "Este navegador nao disponibilizou a selecao de arquivo necessaria. Os dados podem se perder ao fechar ou recarregar a aplicacao.",
     path: "",
     fileName: "",
   });
@@ -471,7 +333,6 @@ export async function initDB() {
     console.log("DuckDB inicializado");
 
     await initSchema();
-    await restoreSnapshotFromConnectedFile();
 
     return conn;
   })();
@@ -555,27 +416,6 @@ export async function runInTransaction(callback) {
 export async function getDatabaseStorageInfo() {
   await initDB();
   return { ...storageInfo };
-}
-
-async function terminateDatabase() {
-  try {
-    await conn?.close?.();
-  } catch {
-    // Ignora erro de fechamento da conexao.
-  }
-
-  try {
-    await db?.terminate?.();
-  } catch {
-    // Ignora erro de terminacao do worker.
-  }
-
-  db = null;
-  conn = null;
-  initPromise = null;
-  transactionDepth = 0;
-  connectedDatabaseFileHandle = null;
-  updateStorageInfo(DEFAULT_STORAGE_INFO);
 }
 
 function serializeSqlValue(value) {
@@ -693,33 +533,13 @@ async function exportDatabaseSnapshot() {
   };
 }
 
-async function readSnapshotFromConnectedFile() {
-  if (!connectedDatabaseFileHandle) {
-    return null;
-  }
-
-  const file = await connectedDatabaseFileHandle.getFile();
-  const text = await file.text();
-
-  if (!text.trim()) {
-    return null;
-  }
-
-  const parsedPayload = JSON.parse(text);
-  return normalizeSnapshotPayload(parsedPayload);
-}
-
 async function persistConnectedFileSnapshot() {
   if (!connectedDatabaseFileHandle) {
     return;
   }
 
   const snapshot = await exportDatabaseSnapshot();
-  const writable = await connectedDatabaseFileHandle.createWritable();
-  const payload = JSON.stringify(createSnapshotPayload(snapshot), null, 2);
-
-  await writable.write(payload);
-  await writable.close();
+  await persistSnapshotToFileHandle(connectedDatabaseFileHandle, snapshot);
 }
 
 async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
@@ -774,23 +594,40 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
   });
 }
 
-async function restoreSnapshotFromConnectedFile() {
-  if (!connectedDatabaseFileHandle) {
-    return;
+async function readSnapshotFromFileHandle(handle) {
+  if (!handle) {
+    return null;
   }
 
-  try {
-    const snapshot = await readSnapshotFromConnectedFile();
-    if (!snapshot) {
-      return;
-    }
-    await restoreDatabaseSnapshot(snapshot);
-  } catch (error) {
-    console.warn(
-      "Nao foi possivel restaurar os dados a partir do arquivo conectado.",
-      error,
-    );
+  const file = await handle.getFile();
+  const text = await file.text();
+
+  if (!text.trim()) {
+    return null;
   }
+
+  const parsedPayload = JSON.parse(text);
+  return normalizeSnapshotPayload(parsedPayload);
+}
+
+async function persistSnapshotToFileHandle(handle, snapshot) {
+  const writable = await handle.createWritable();
+  const payload = JSON.stringify(createSnapshotPayload(snapshot), null, 2);
+
+  await writable.write(payload);
+  await writable.close();
+}
+
+function buildConnectedFileStorageInfo(handle) {
+  return {
+    mode: "file",
+    isPersistent: true,
+    label: "Arquivo de dados conectado",
+    description:
+      "Os dados do Notar estao sendo gravados no arquivo local conectado nesta sessao.",
+    path: "",
+    fileName: handle.name ?? "notar-dados.json",
+  };
 }
 
 async function connectDatabaseFileHandle(handle, { preserveCurrentData } = {}) {
@@ -807,18 +644,30 @@ async function connectDatabaseFileHandle(handle, { preserveCurrentData } = {}) {
     );
   }
 
+  await initDB();
+
   const file = await handle.getFile();
   const isEmptyFile = file.size === 0;
+  const snapshotFromFile = isEmptyFile
+    ? null
+    : await readSnapshotFromFileHandle(handle);
   const currentSnapshot = preserveCurrentData
     ? await exportDatabaseSnapshot()
     : null;
 
-  await writeStoredDatabaseFileHandle(handle);
-  await terminateDatabase();
-  await initDB();
+  connectedDatabaseFileHandle = handle;
+  updateStorageInfo(buildConnectedFileStorageInfo(handle));
+
+  if (!isEmptyFile && snapshotFromFile) {
+    await restoreDatabaseSnapshot(snapshotFromFile, { allowEmpty: true });
+  } else if (!isEmptyFile && !snapshotFromFile) {
+    throw new Error(
+      "O arquivo selecionado nao parece ser um arquivo de dados valido do Notar.",
+    );
+  }
 
   if (isEmptyFile && snapshotHasData(currentSnapshot)) {
-    await restoreDatabaseSnapshot(currentSnapshot);
+    await persistSnapshotToFileHandle(handle, currentSnapshot);
   }
 
   return {
@@ -877,12 +726,17 @@ export async function openDatabaseFile() {
 }
 
 export async function disconnectDatabaseFile() {
-  const currentSnapshot = await exportDatabaseSnapshot();
-
-  await removeStoredDatabaseFileHandle();
-  await terminateDatabase();
   await initDB();
-  await restoreDatabaseSnapshot(currentSnapshot);
+  connectedDatabaseFileHandle = null;
+  updateStorageInfo({
+    mode: "memory",
+    isPersistent: false,
+    label: "Arquivo desconectado",
+    description:
+      "Os dados atuais continuam na memoria desta sessao. Para voltar a persistir, conecte um arquivo novamente.",
+    path: "",
+    fileName: "",
+  });
 
   return {
     storageInfo: await getDatabaseStorageInfo(),

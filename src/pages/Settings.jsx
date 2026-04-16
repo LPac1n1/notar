@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import Button from "../components/ui/Button";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
@@ -32,6 +34,7 @@ export default function Settings() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [backupInputKey, setBackupInputKey] = useState(0);
+  const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -193,14 +196,6 @@ export default function Settings() {
       return;
     }
 
-    const shouldContinue = window.confirm(
-      "Importar um backup vai substituir os dados atuais do sistema. Deseja continuar?",
-    );
-
-    if (!shouldContinue) {
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       setError("");
@@ -209,6 +204,7 @@ export default function Settings() {
       const result = await importDatabaseBackup(selectedBackupFile);
       setStorageInfo(result.storageInfo);
       resetBackupFileSelection();
+      setIsImportBackupConfirmOpen(false);
       setSuccessMessage(
         `Backup importado com sucesso: ${formatBackupStats(result.stats)}.`,
       );
@@ -224,30 +220,59 @@ export default function Settings() {
     }
   };
 
+  if (storageInfo === null && !error) {
+    return (
+      <div>
+        <PageHeader
+          title="Configurações"
+          subtitle="Gerencie o arquivo de dados principal, mantenha cópias de segurança e recupere o sistema quando precisar."
+          className="mb-6"
+        />
+        <LoadingScreen
+          title="Verificando o armazenamento"
+          description="Conferindo o estado do arquivo de dados e preparando as opções de backup."
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageHeader title="Configurações" className="mb-4" />
+      <PageHeader
+        title="Configurações"
+        subtitle="Gerencie o arquivo de dados principal, mantenha cópias de segurança e recupere o sistema quando precisar."
+        className="mb-6"
+      />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard
         title="Armazenamento local"
-        description="O Notar pode funcionar em memoria ou conectado a um arquivo local de banco de dados."
+        description="O Notar funciona na sessao atual e pode persistir os dados quando um arquivo local estiver conectado."
         className="mb-6"
       >
         {storageInfo ? (
           <div className="space-y-3">
-            <div>
-              <p className="text-sm text-zinc-500">Status</p>
-              <p className="font-medium text-zinc-900">{storageInfo.label}</p>
+            <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
+              <p className="font-medium text-[var(--text-main)]">Fluxo recomendado</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>Ao abrir o sistema, conecte seu arquivo de dados em `Abrir arquivo existente`.</li>
+                <li>Se for o primeiro uso, crie um arquivo em `Criar arquivo de dados`.</li>
+                <li>Use `Salvar backup` periodicamente para manter uma cópia de segurança.</li>
+              </ol>
             </div>
 
-            <p className="text-sm text-zinc-600">{storageInfo.description}</p>
+            <div>
+              <p className="text-sm text-[var(--muted)]">Status</p>
+              <p className="font-medium text-[var(--text-main)]">{storageInfo.label}</p>
+            </div>
+
+            <p className="text-sm text-[var(--muted)]">{storageInfo.description}</p>
 
             {storageInfo.fileName ? (
               <div>
-                <p className="text-sm text-zinc-500">Arquivo conectado</p>
-                <p className="font-medium text-zinc-900 break-all">
+                <p className="text-sm text-[var(--muted)]">Arquivo conectado</p>
+                <p className="font-medium text-[var(--text-main)] break-all">
                   {storageInfo.fileName}
                 </p>
               </div>
@@ -257,7 +282,7 @@ export default function Settings() {
               message={
                 storageInfo.isPersistent
                   ? "Os dados estao sendo gravados de forma persistente."
-                  : "Os dados podem se perder ao fechar ou recarregar a aplicacao neste ambiente."
+                  : "Sem um arquivo conectado, os dados atuais so existem nesta sessao e podem se perder ao fechar ou recarregar a aplicacao."
               }
               tone={storageInfo.isPersistent ? "success" : "warning"}
               className="mb-0"
@@ -287,7 +312,7 @@ export default function Settings() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-[var(--muted)]">
             Verificando o modo de armazenamento do sistema...
           </p>
         )}
@@ -303,17 +328,17 @@ export default function Settings() {
             <Button onClick={handleExportBackup} disabled={isSubmitting}>
               Salvar backup
             </Button>
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-[var(--muted)]">
               Cria um arquivo JSON com uma cópia completa dos dados atuais.
             </p>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <div className="mb-3">
-              <p className="text-sm font-medium text-zinc-900">
+              <p className="text-sm font-medium text-[var(--text-main)]">
                 Restaurar backup
               </p>
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-[var(--muted)]">
                 Traz de volta uma cópia salva antes e substitui os dados atuais do sistema.
               </p>
             </div>
@@ -329,7 +354,7 @@ export default function Settings() {
 
               <Button
                 variant="subtle"
-                onClick={handleImportBackup}
+                onClick={() => setIsImportBackupConfirmOpen(true)}
                 disabled={isSubmitting || !selectedBackupFile}
               >
                 Importar backup
@@ -337,9 +362,9 @@ export default function Settings() {
             </div>
 
             {selectedBackupFile ? (
-              <p className="mt-3 break-all text-sm text-zinc-600">
+              <p className="mt-3 break-all text-sm text-[var(--muted)]">
                 Arquivo selecionado:{" "}
-                <span className="font-medium text-zinc-900">
+                <span className="font-medium text-[var(--text-main)]">
                   {selectedBackupFile.name}
                 </span>
               </p>
@@ -352,6 +377,18 @@ export default function Settings() {
         title="Mais configurações virão depois"
         description="Esta área continuará crescendo conforme o Notar ganhar novos módulos operacionais."
       />
+
+      {isImportBackupConfirmOpen ? (
+        <ConfirmModal
+          title="Restaurar backup"
+          description="Importar um backup vai substituir os dados atuais do sistema. Deseja continuar?"
+          confirmLabel="Restaurar backup"
+          isLoading={isSubmitting}
+          onCancel={() => setIsImportBackupConfirmOpen(false)}
+          onConfirm={handleImportBackup}
+          tone="danger"
+        />
+      ) : null}
     </div>
   );
 }

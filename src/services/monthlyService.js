@@ -8,7 +8,7 @@ import {
 
 export async function listMonthlySummaries({
   referenceMonth = "",
-  donorName = "",
+  donorId = "",
   cpf = "",
   demand = "",
   abatementStatus = "all",
@@ -17,35 +17,31 @@ export async function listMonthlySummaries({
 
   if (referenceMonth) {
     conditions.push(
-      `reference_month = '${escapeSqlString(startOfMonth(referenceMonth))}'`,
+      `monthly_donor_summary.reference_month = '${escapeSqlString(startOfMonth(referenceMonth))}'`,
     );
   }
 
-  if (donorName.trim()) {
+  if (donorId.trim()) {
     conditions.push(
-      `lower(donor_name) LIKE lower('%${escapeSqlString(
-        donorName.trim(),
-      )}%')`,
+      `monthly_donor_summary.donor_id = '${escapeSqlString(donorId.trim())}'`,
     );
   }
 
   if (cpf.trim()) {
     conditions.push(
-      `cpf LIKE '%${escapeSqlString(normalizeCpf(cpf))}%'`,
+      `monthly_donor_summary.cpf = '${escapeSqlString(normalizeCpf(cpf))}'`,
     );
   }
 
   if (demand.trim()) {
     conditions.push(
-      `lower(coalesce(demand, '')) LIKE lower('%${escapeSqlString(
-        demand.trim(),
-      )}%')`,
+      `lower(coalesce(monthly_donor_summary.demand, '')) = lower('${escapeSqlString(demand.trim())}')`,
     );
   }
 
   if (abatementStatus !== "all") {
     conditions.push(
-      `abatement_status = '${escapeSqlString(abatementStatus)}'`,
+      `monthly_donor_summary.abatement_status = '${escapeSqlString(abatementStatus)}'`,
     );
   }
 

@@ -28,10 +28,40 @@ export async function getDashboardOverview() {
     LIMIT 6
   `);
 
+  const activeDonorRows = await query(`
+    SELECT
+      id,
+      name,
+      cpf,
+      demand,
+      strftime(donation_start_date, '%Y-%m-01') AS donation_start_date
+    FROM donors
+    WHERE is_active = TRUE
+    ORDER BY name ASC
+    LIMIT 20
+  `);
+
+  const activeDemandRows = await query(`
+    SELECT
+      demands.id,
+      demands.name,
+      count(donors.id) AS donor_count
+    FROM demands
+    LEFT JOIN donors
+      ON lower(trim(donors.demand)) = lower(trim(demands.name))
+      AND donors.is_active = TRUE
+    WHERE demands.is_active = TRUE
+    GROUP BY demands.id, demands.name
+    ORDER BY demands.name ASC
+    LIMIT 20
+  `);
+
   const latestImport = recentImportsRows[0] ?? null;
 
   let latestMonth = null;
   let demandBreakdown = [];
+  let latestMonthPendingSummaries = [];
+  let latestMonthUnregisteredCpfSamples = [];
 
   if (latestImport) {
     const latestMonthRows = await query(`
@@ -115,6 +145,45 @@ export async function getDashboardOverview() {
       pendingCount: toNumber(row.pending_count),
       appliedCount: toNumber(row.applied_count),
     }));
+
+    const latestPendingRows = await query(`
+      SELECT
+        donor_id,
+        donor_name,
+        cpf,
+        coalesce(nullif(trim(demand), ''), 'Sem demanda') AS demand,
+        notes_count,
+        abatement_amount
+      FROM monthly_donor_summary
+      WHERE import_id = '${latestImport.id}'
+        AND abatement_status = 'pending'
+      ORDER BY abatement_amount DESC, donor_name ASC
+      LIMIT 10
+    `);
+
+    latestMonthPendingSummaries = latestPendingRows.map((row) => ({
+      donorId: row.donor_id,
+      donorName: row.donor_name,
+      cpf: row.cpf,
+      demand: row.demand,
+      notesCount: toNumber(row.notes_count),
+      abatementAmount: toNumber(row.abatement_amount),
+    }));
+
+    const latestUnregisteredRows = await query(`
+      SELECT
+        cpf,
+        notes_count
+      FROM import_cpf_summary
+      WHERE import_id = '${latestImport.id}'
+        AND is_registered_donor = FALSE
+      ORDER BY notes_count DESC, cpf ASC
+    `);
+
+    latestMonthUnregisteredCpfSamples = latestUnregisteredRows.map((row) => ({
+      cpf: row.cpf,
+      notesCount: toNumber(row.notes_count),
+    }));
   }
 
   const topDonorRows = await query(`
@@ -166,7 +235,6 @@ export async function getDashboardOverview() {
     WHERE is_registered_donor = FALSE
     GROUP BY cpf
     ORDER BY latest_reference_month DESC, total_notes DESC, cpf ASC
-    LIMIT 5
   `);
 
   const donationStartConflictRows = await query(`
@@ -233,6 +301,20 @@ export async function getDashboardOverview() {
       processedImportCount: toNumber(totalsRows[0]?.processed_import_count),
     },
     latestMonth,
+    latestMonthPendingSummaries,
+    latestMonthUnregisteredCpfSamples,
+    activeDonors: activeDonorRows.map((row) => ({
+      donorId: row.id,
+      donorName: row.name,
+      cpf: row.cpf,
+      demand: row.demand ?? "",
+      donationStartDate: row.donation_start_date ?? "",
+    })),
+    activeDemands: activeDemandRows.map((row) => ({
+      demandId: row.id,
+      demandName: row.name,
+      donorCount: toNumber(row.donor_count),
+    })),
     recentImports: recentImportsRows.map((row) => ({
       id: row.id,
       referenceMonth: row.reference_month,

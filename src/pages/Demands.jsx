@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Button from "../components/ui/Button";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import LoadingScreen from "../components/ui/LoadingScreen";
+import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
@@ -13,15 +16,22 @@ import {
 } from "../services/demandService";
 import { getErrorMessage } from "../utils/error";
 
+const INITIAL_DEMAND_FILTERS = {
+  name: "",
+};
+
 export default function Demands() {
   const [demands, setDemands] = useState([]);
-  const [editingDemandId, setEditingDemandId] = useState("");
   const [name, setName] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editingDemand, setEditingDemand] = useState(null);
+  const [demandPendingRemoval, setDemandPendingRemoval] = useState(null);
   const [filters, setFilters] = useState({
-    name: "",
+    ...INITIAL_DEMAND_FILTERS,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -52,68 +62,76 @@ export default function Demands() {
       setError("");
       setSuccessMessage("");
       setIsSubmitting(true);
-      if (editingDemandId) {
-        await updateDemand({ id: editingDemandId, name });
-      } else {
-        await createDemand({ name });
-      }
+      await createDemand({ name });
       setName("");
-      setEditingDemandId("");
       await loadDemands();
-      setSuccessMessage(
-        editingDemandId
-          ? "Demanda atualizada com sucesso."
-          : "Demanda cadastrada com sucesso.",
-      );
+      setSuccessMessage("Demanda cadastrada com sucesso.");
     } catch (err) {
       console.error(
         "Erro ao adicionar demanda:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(
-        getErrorMessage(
-          err,
-          editingDemandId
-            ? "Nao foi possivel atualizar a demanda."
-            : "Nao foi possivel adicionar a demanda.",
-        ),
+        getErrorMessage(err, "Nao foi possivel adicionar a demanda."),
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEdit = (demand) => {
+  const handleOpenEditModal = (demand) => {
     setError("");
     setSuccessMessage("");
-    setEditingDemandId(demand.id);
-    setName(demand.name);
+    setEditingDemand(demand);
+    setEditName(demand.name);
   };
 
-  const handleCancelEdit = () => {
-    setEditingDemandId("");
-    setName("");
+  const handleCloseEditModal = () => {
+    setEditingDemand(null);
+    setEditName("");
   };
 
-  const handleRemove = async (id) => {
-    const confirmed =
-      typeof window === "undefined" ||
-      window.confirm(
-        "Tem certeza de que deseja remover esta demanda? Essa acao nao pode ser desfeita.",
-      );
-
-    if (!confirmed) {
+  const handleSaveEdit = async () => {
+    if (!editingDemand) {
       return;
     }
 
     try {
       setError("");
       setSuccessMessage("");
-      await deleteDemand(id);
+      setIsSubmitting(true);
+      await updateDemand({ id: editingDemand.id, name: editName });
       await loadDemands();
-      if (editingDemandId === id) {
-        handleCancelEdit();
+      handleCloseEditModal();
+      setSuccessMessage("Demanda atualizada com sucesso.");
+    } catch (err) {
+      console.error(
+        "Erro ao atualizar demanda:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(
+        getErrorMessage(err, "Nao foi possivel atualizar a demanda."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!demandPendingRemoval) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsDeleting(true);
+      await deleteDemand(demandPendingRemoval.id);
+      await loadDemands();
+      if (editingDemand?.id === demandPendingRemoval.id) {
+        handleCloseEditModal();
       }
+      setDemandPendingRemoval(null);
       setSuccessMessage("Demanda removida com sucesso.");
     } catch (err) {
       console.error(
@@ -121,6 +139,8 @@ export default function Demands() {
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(getErrorMessage(err, "Nao foi possivel remover a demanda."));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -133,14 +153,37 @@ export default function Demands() {
     await loadDemands(nextFilters);
   };
 
+  const handleClearFilters = async () => {
+    const clearedFilters = { ...INITIAL_DEMAND_FILTERS };
+    setFilters(clearedFilters);
+    await loadDemands(clearedFilters);
+  };
+
+  if (isLoading && !demands.length && !error) {
+    return (
+      <div>
+        <PageHeader
+          title="Demandas"
+          subtitle="Organize os grupos atendidos pela ONG e mantenha os vínculos prontos para os cadastros de doadores."
+          className="mb-6"
+        />
+        <LoadingScreen
+          title="Buscando demandas"
+          description="Carregando os grupos já cadastrados para deixar a gestão pronta."
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageHeader title="Demandas" className="mb-4" />
-
-      <SectionCard
-        title={editingDemandId ? "Editar demanda" : "Nova demanda"}
+      <PageHeader
+        title="Demandas"
+        subtitle="Organize os grupos atendidos pela ONG e mantenha os vínculos prontos para os cadastros de doadores."
         className="mb-6"
-      >
+      />
+
+      <SectionCard title="Nova demanda" className="mb-6">
         <div className="flex flex-col gap-3 md:flex-row">
           <TextInput
             className="md:flex-1"
@@ -152,64 +195,55 @@ export default function Demands() {
             onClick={handleAdd}
             disabled={isSubmitting}
           >
-            {isSubmitting
-              ? "Salvando..."
-              : editingDemandId
-                ? "Salvar alteracoes"
-                : "Adicionar demanda"}
+            {isSubmitting ? "Salvando..." : "Adicionar demanda"}
           </Button>
-          {editingDemandId ? (
-            <Button
-              variant="subtle"
-              onClick={handleCancelEdit}
-              disabled={isSubmitting}
-            >
-              Cancelar edicao
-            </Button>
-          ) : null}
         </div>
       </SectionCard>
 
       <SectionCard title="Buscar demandas" className="mb-4">
-        <TextInput
-          className="md:flex-1"
-          name="name"
-          placeholder="Buscar por nome"
-          value={filters.name}
-          onChange={handleFilterChange}
-        />
+        <div className="flex flex-col gap-3 md:flex-row">
+          <TextInput
+            className="md:flex-1"
+            name="name"
+            placeholder="Buscar por nome"
+            value={filters.name}
+            onChange={handleFilterChange}
+          />
+          <Button
+            variant="subtle"
+            onClick={handleClearFilters}
+          >
+            Limpar filtros
+          </Button>
+        </div>
       </SectionCard>
 
-      <FeedbackMessage
-        message={isLoading ? "Carregando demandas..." : ""}
-        persistent
-      />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
 
-      {demands.length === 0 ? (
+      {!isLoading && demands.length === 0 ? (
         <EmptyState
           title="Nenhuma demanda cadastrada"
           description="Cadastre uma demanda para poder vinculá-la aos doadores."
         />
-      ) : (
+      ) : !isLoading ? (
         <ul className="space-y-2">
           {demands.map((demand) => (
             <li
               key={demand.id}
-              className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-3 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
             >
               <p className="font-medium">{demand.name}</p>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="subtle"
-                  onClick={() => handleEdit(demand)}
+                  onClick={() => handleOpenEditModal(demand)}
                 >
                   Editar
                 </Button>
                 <Button
                   variant="danger"
-                  onClick={() => handleRemove(demand.id)}
+                  onClick={() => setDemandPendingRemoval(demand)}
                 >
                   Remover
                 </Button>
@@ -217,7 +251,51 @@ export default function Demands() {
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
+
+      {editingDemand ? (
+        <Modal
+          title="Editar demanda"
+          description="Atualize o nome da demanda e salve as alterações."
+          onClose={handleCloseEditModal}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <TextInput
+              placeholder="Nome da demanda"
+              value={editName}
+              onChange={(event) => setEditName(event.target.value)}
+            />
+
+            <div className="flex flex-wrap justify-end gap-3">
+              <Button
+                variant="subtle"
+                onClick={handleCloseEditModal}
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveEdit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Salvando..." : "Salvar alterações"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {demandPendingRemoval ? (
+        <ConfirmModal
+          title="Remover demanda"
+          description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Essa ação não pode ser desfeita.`}
+          confirmLabel="Remover demanda"
+          isLoading={isDeleting}
+          onCancel={() => setDemandPendingRemoval(null)}
+          onConfirm={handleConfirmRemove}
+        />
+      ) : null}
     </div>
   );
 }

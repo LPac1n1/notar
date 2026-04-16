@@ -122,11 +122,16 @@ export async function prepareImportPreview(file) {
 
 export async function listImports(filters = {}) {
   const {
+    importId = "",
     fileName = "",
     referenceMonth = "",
     status = "",
   } = filters;
   const conditions = [];
+
+  if (importId.trim()) {
+    conditions.push(`id = '${escapeSqlString(importId.trim())}'`);
+  }
 
   if (fileName.trim()) {
     conditions.push(
@@ -184,7 +189,7 @@ export async function listImportCpfSummary({
   importId,
   referenceMonth = "",
   cpf = "",
-  donorName = "",
+  donorId = "",
   demand = "",
   registrationFilter = "all",
 } = {}) {
@@ -204,23 +209,21 @@ export async function listImportCpfSummary({
 
   if (cpf.trim()) {
     conditions.push(
-      `import_cpf_summary.cpf LIKE '%${escapeSqlString(normalizeCpf(cpf))}%'`,
+      `import_cpf_summary.cpf = '${escapeSqlString(normalizeCpf(cpf))}'`,
     );
   }
 
-  if (donorName.trim()) {
+  if (donorId.trim()) {
     conditions.push(
-      `lower(coalesce(donors.name, '')) LIKE lower('%${escapeSqlString(
-        donorName.trim(),
-      )}%')`,
+      `donors.id = '${escapeSqlString(donorId.trim())}'`,
     );
   }
 
   if (demand.trim()) {
     conditions.push(
-      `lower(coalesce(donors.demand, '')) LIKE lower('%${escapeSqlString(
+      `lower(coalesce(donors.demand, '')) = lower('${escapeSqlString(
         demand.trim(),
-      )}%')`,
+      )}')`,
     );
   }
 

@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare:duckdb-worker": "node scripts/prepare-duckdb-worker.mjs",
+    "postinstall": "npm run prepare:duckdb-worker",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.59.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

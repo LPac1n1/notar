@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
@@ -19,16 +20,22 @@ import {
   formatMonthYear,
   hasDonationStartConflict,
 } from "../utils/date";
+import { formatCpf } from "../utils/cpf";
+import { buildSelectOptions } from "../utils/select";
+
+const INITIAL_MONTHLY_FILTERS = {
+  referenceMonth: "",
+  donorId: "",
+  cpf: "",
+  demand: "",
+  abatementStatus: "all",
+};
 
 export default function Monthly() {
   const [summaries, setSummaries] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
   const [filters, setFilters] = useState({
-    referenceMonth: "",
-    donorName: "",
-    cpf: "",
-    demand: "",
-    abatementStatus: "all",
+    ...INITIAL_MONTHLY_FILTERS,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [updatingSummaryId, setUpdatingSummaryId] = useState("");
@@ -36,6 +43,53 @@ export default function Monthly() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
+
+  const donorOptions = useMemo(
+    () =>
+      buildSelectOptions(summaries, {
+        getValue: (summary) => summary.donorId,
+        getLabel: (summary) => summary.donorName,
+        emptyLabel: "Todos os doadores",
+      }),
+    [summaries],
+  );
+
+  const cpfOptions = useMemo(
+    () =>
+      buildSelectOptions(summaries, {
+        getValue: (summary) => summary.cpf,
+        getLabel: (summary) => formatCpf(summary.cpf),
+        emptyLabel: "Todos os CPFs",
+      }),
+    [summaries],
+  );
+
+  const demandOptions = useMemo(
+    () =>
+      buildSelectOptions(summaries, {
+        getValue: (summary) => summary.demand,
+        getLabel: (summary) => summary.demand,
+        emptyLabel: "Todas as demandas",
+      }),
+    [summaries],
+  );
+
+  const abatementStatusOptions = useMemo(
+    () => [
+      { value: "all", label: "Todos os status" },
+      { value: "pending", label: "Pendentes" },
+      { value: "applied", label: "Realizados" },
+    ],
+    [],
+  );
+
+  const rowStatusOptions = useMemo(
+    () => [
+      { value: "pending", label: "Pendente" },
+      { value: "applied", label: "Realizado" },
+    ],
+    [],
+  );
 
   const loadSummaries = useCallback(async () => {
     try {
@@ -70,6 +124,13 @@ export default function Monthly() {
     const { name, value } = event.target;
     setFilters((current) => ({
       ...current,
+      ...(name === "referenceMonth"
+        ? {
+            donorId: "",
+            cpf: "",
+            demand: "",
+          }
+        : {}),
       [name]: value,
     }));
   };
@@ -120,39 +181,52 @@ export default function Monthly() {
     }
   };
 
+  const handleClearRefinements = () => {
+    setFilters((current) => ({
+      ...current,
+      donorId: "",
+      cpf: "",
+      demand: "",
+      abatementStatus: "all",
+    }));
+  };
+
   const totalAbatement = summaries.reduce(
     (accumulator, item) => accumulator + item.abatementAmount,
     0,
-  );
-  const summariesWithStartDateConflict = summaries.filter(
-    (summary) =>
-      hasDonationStartConflict(summary.donationStartDate, summary.referenceMonth),
   );
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
   );
 
+  if (isLoading && !availableImports.length && !error) {
+    return (
+      <div>
+        <PageHeader
+          title="Gestão Mensal"
+          subtitle="Escolha um mês importado, refine o resumo e acompanhe o status dos abatimentos de forma operacional."
+          className="mb-6"
+        />
+        <LoadingScreen
+          title="Montando o resumo mensal"
+          description="Conferindo meses disponíveis, importações processadas e abatimentos já consolidados."
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageHeader title="Gestão Mensal" className="mb-4" />
-      <FeedbackMessage
-        message={isLoading ? "Carregando resumo mensal..." : ""}
-        persistent
+      <PageHeader
+        title="Gestão Mensal"
+        subtitle="Escolha um mês importado, refine o resumo e acompanhe o status dos abatimentos de forma operacional."
+        className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
       <FeedbackMessage
         message="O valor por nota é definido no momento da importação e o histórico mensal usa esse valor fixo."
         tone="info"
-        persistent
-      />
-      <FeedbackMessage
-        message={
-          summariesWithStartDateConflict.length > 0
-            ? `${summariesWithStartDateConflict.length} resumo(s) mostram CPF em mês anterior ao início das doações informado no cadastro do doador.`
-            : ""
-        }
-        tone="warning"
         persistent
       />
 
@@ -167,17 +241,17 @@ export default function Monthly() {
             description="Depois que você importar uma planilha, os meses disponíveis para consulta aparecerão aqui."
           />
         ) : (
-          <div className="mb-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <div className="mb-5 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-semibold text-zinc-900">
+                <p className="text-sm font-semibold text-[var(--text-main)]">
                   Meses já importados
                 </p>
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-[var(--muted)]">
                   Escolha um mês abaixo para abrir rapidamente o resumo mensal.
                 </p>
               </div>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-[var(--muted)]">
                 {availableImports.length} mês(es) com planilha processada
               </p>
             </div>
@@ -191,39 +265,47 @@ export default function Monthly() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      if (isSelected) {
+                        setFilters({ ...INITIAL_MONTHLY_FILTERS });
+                        return;
+                      }
+
                       setFilters((current) => ({
                         ...current,
                         referenceMonth: item.referenceMonth.slice(0, 7),
-                      }))
-                    }
-                    className={`rounded-lg border p-4 text-left transition ${
+                        donorId: "",
+                        cpf: "",
+                        demand: "",
+                      }));
+                    }}
+                    className={`rounded-[22px] border p-4 text-left transition ${
                       isSelected
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-zinc-200 bg-white hover:border-zinc-300"
+                        ? "border-[var(--line-strong)] bg-[color:var(--accent-soft)]"
+                        : "border-[var(--line)] bg-[var(--surface-strong)] hover:border-[var(--line-strong)]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold text-zinc-900">
+                        <p className="font-semibold text-[var(--text-main)]">
                           {formatMonthYear(item.referenceMonth)}
                         </p>
-                        <p className="mt-1 text-sm text-zinc-600">
+                        <p className="mt-1 text-sm text-[var(--muted)]">
                           {item.matchedDonors} doador(es) encontrados
                         </p>
                       </div>
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-medium ${
                           isSelected
-                            ? "bg-blue-600 text-white"
-                            : "bg-zinc-100 text-zinc-700"
+                            ? "bg-[color:var(--accent)] text-[#08100d]"
+                            : "bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
                         }`}
                       >
-                        {isSelected ? "Aberto" : "Ver"}
+                        {isSelected ? "Fechar" : "Ver"}
                       </span>
                     </div>
 
-                    <div className="mt-3 space-y-1 text-sm text-zinc-600">
+                    <div className="mt-3 space-y-1 text-sm text-[var(--muted)]">
                       <p className="break-all">
                         Arquivo: <span className="font-medium">{item.fileName}</span>
                       </p>
@@ -248,24 +330,33 @@ export default function Monthly() {
         )}
 
         <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <p className="text-sm font-medium text-zinc-700">
+          <p className="text-sm font-medium text-[var(--text-soft)]">
             Total filtrado: {formatCurrency(totalAbatement)}
           </p>
           <div className="flex flex-col gap-3 md:items-end">
             {selectedImport ? (
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-[var(--muted)]">
                 Visualizando {formatMonthYear(selectedImport.referenceMonth)} a
                 partir do arquivo{" "}
                 <span className="font-medium">{selectedImport.fileName}</span>.
               </p>
             ) : null}
-            <Button
-              variant="subtle"
-              onClick={handleExport}
-              disabled={isExporting || !hasSelectedReferenceMonth}
-            >
-              {isExporting ? "Exportando..." : "Exportar CSV"}
-            </Button>
+            <div className="flex flex-wrap gap-3 md:justify-end">
+              <Button
+                variant="subtle"
+                onClick={handleClearRefinements}
+                disabled={!hasSelectedReferenceMonth}
+              >
+                Limpar refinamentos
+              </Button>
+              <Button
+                variant="subtle"
+                onClick={handleExport}
+                disabled={isExporting || !hasSelectedReferenceMonth}
+              >
+                {isExporting ? "Exportando..." : "Exportar CSV"}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -277,12 +368,14 @@ export default function Monthly() {
             onChange={handleFilterChange}
           />
 
-          <TextInput
-            type="text"
-            name="donorName"
-            placeholder="Filtrar por nome do doador"
-            value={filters.donorName}
+          <SelectInput
+            name="donorId"
+            value={filters.donorId}
             onChange={handleFilterChange}
+            options={donorOptions}
+            placeholder="Todos os doadores"
+            searchable
+            searchPlaceholder="Buscar doador..."
             disabled={!hasSelectedReferenceMonth}
           />
 
@@ -290,30 +383,32 @@ export default function Monthly() {
             name="abatementStatus"
             value={filters.abatementStatus}
             onChange={handleFilterChange}
+            options={abatementStatusOptions}
+            placeholder="Todos os status"
             disabled={!hasSelectedReferenceMonth}
-          >
-            <option value="all">Todos os status</option>
-            <option value="pending">Pendentes</option>
-            <option value="applied">Realizados</option>
-          </SelectInput>
+          />
         </div>
 
         <div className="mb-5 grid gap-3 md:grid-cols-2">
-          <TextInput
-            type="text"
+          <SelectInput
             name="cpf"
-            placeholder="Filtrar por CPF"
             value={filters.cpf}
             onChange={handleFilterChange}
+            options={cpfOptions}
+            placeholder="Todos os CPFs"
+            searchable
+            searchPlaceholder="Buscar CPF..."
             disabled={!hasSelectedReferenceMonth}
           />
 
-          <TextInput
-            type="text"
+          <SelectInput
             name="demand"
-            placeholder="Filtrar por demanda"
             value={filters.demand}
             onChange={handleFilterChange}
+            options={demandOptions}
+            placeholder="Todas as demandas"
+            searchable
+            searchPlaceholder="Buscar demanda..."
             disabled={!hasSelectedReferenceMonth}
           />
         </div>
@@ -340,50 +435,50 @@ export default function Monthly() {
               return (
                 <div
                   key={summary.id}
-                  className={`grid gap-3 rounded-lg border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
+                  className={`grid gap-3 rounded-[22px] border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
                     hasStartDateConflict
-                      ? "border-amber-300 bg-amber-50/60"
-                      : "border-zinc-200"
+                      ? "border-[color:var(--accent-2-soft)] bg-[color:var(--accent-2-soft)]"
+                      : "border-[var(--line)] bg-[var(--surface-elevated)]"
                   }`}
                 >
                   <div>
-                    <p className="font-medium text-zinc-900">
+                    <p className="font-medium text-[var(--text-main)]">
                       {summary.donorName}
                     </p>
-                    <p className="text-sm text-zinc-600">
+                    <p className="text-sm text-[var(--muted)]">
                       CPF: {summary.cpf}
                     </p>
-                    <p className="text-sm text-zinc-600">
+                    <p className="text-sm text-[var(--muted)]">
                       Demanda: {summary.demand || "Nao informada"}
                     </p>
                     {hasStartDateConflict ? (
-                      <p className="mt-2 text-sm text-amber-700">
+                      <p className="mt-2 text-sm text-[var(--warning)]">
                         Atencao: este CPF apareceu em {formatMonthYear(summary.referenceMonth)}, mas o inicio das doacoes no cadastro esta em {formatMonthYear(summary.donationStartDate)}.
                       </p>
                     ) : null}
                   </div>
 
                   <div>
-                    <p className="text-sm text-zinc-500">Mês</p>
+                    <p className="text-sm text-[var(--muted)]">Mês</p>
                     <p className="font-medium">
                       {formatMonthYear(summary.referenceMonth)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-zinc-500">Notas</p>
+                    <p className="text-sm text-[var(--muted)]">Notas</p>
                     <p className="font-medium">{summary.notesCount}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-zinc-500">Valor por nota</p>
+                    <p className="text-sm text-[var(--muted)]">Valor por nota</p>
                     <p className="font-medium">
                       {formatCurrency(summary.valuePerNote)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-zinc-500">Abatimento</p>
+                    <p className="text-sm text-[var(--muted)]">Abatimento</p>
                     <p className="font-medium">
                       {formatCurrency(summary.abatementAmount)}
                     </p>
@@ -392,16 +487,15 @@ export default function Monthly() {
                   <div className="flex flex-col gap-2">
                     <SelectInput
                       value={summary.abatementStatus}
+                      name={`abatement-status-${summary.id}`}
                       disabled={updatingSummaryId === summary.id}
+                      options={rowStatusOptions}
                       onChange={(event) =>
                         handleStatusChange(summary.id, event.target.value)
                       }
-                    >
-                      <option value="pending">Pendente</option>
-                      <option value="applied">Realizado</option>
-                    </SelectInput>
+                    />
 
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-[var(--muted)]">
                       {summary.abatementMarkedAt
                         ? `Marcado em ${summary.abatementMarkedAt}`
                         : "Ainda nao marcado"}

@@ -1,28 +1,40 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  ConnectedIcon,
+  DisconnectedIcon,
+  SparkIcon,
+  WarningIcon,
+} from "./icons";
 
 const TONE_STYLES = {
   error: {
-    container: "border-red-200 bg-red-50 text-red-700 shadow-red-100/70",
-    bar: "bg-red-500",
-    button: "text-red-500 hover:bg-red-100",
+    container:
+      "border-[color:var(--line)] bg-[color:var(--danger-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+    bar: "bg-[color:var(--danger)]",
+    button: "text-[color:var(--danger)] hover:bg-black/10",
+    icon: WarningIcon,
   },
   success: {
     container:
-      "border-emerald-200 bg-emerald-50 text-emerald-700 shadow-emerald-100/70",
-    bar: "bg-emerald-500",
-    button: "text-emerald-500 hover:bg-emerald-100",
+      "border-[color:var(--line)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+    bar: "bg-[color:var(--success)]",
+    button: "text-[color:var(--success)] hover:bg-black/10",
+    icon: ConnectedIcon,
   },
   info: {
-    container: "border-zinc-200 bg-white text-zinc-700 shadow-zinc-200/80",
-    bar: "bg-zinc-500",
-    button: "text-zinc-500 hover:bg-zinc-100",
+    container:
+      "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+    bar: "bg-[color:var(--accent)]",
+    button: "text-[var(--muted-strong)] hover:bg-black/10",
+    icon: SparkIcon,
   },
   warning: {
     container:
-      "border-amber-200 bg-amber-50 text-amber-800 shadow-amber-100/70",
-    bar: "bg-amber-500",
-    button: "text-amber-600 hover:bg-amber-100",
+      "border-[color:var(--line)] bg-[color:var(--accent-2-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+    bar: "bg-[color:var(--warning)]",
+    button: "text-[color:var(--warning)] hover:bg-black/10",
+    icon: DisconnectedIcon,
   },
 };
 
@@ -46,13 +58,19 @@ function getToastViewport() {
 
 function AlertBox({ message, tone, className }) {
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
+  const ToneIcon = toneStyles.icon;
 
   return (
     <div
       role="alert"
-      className={`mb-4 rounded-lg border px-4 py-3 text-sm ${toneStyles.container} ${className}`.trim()}
+      className={`mb-4 rounded-[22px] border px-4 py-4 text-sm ${toneStyles.container} ${className}`.trim()}
     >
-      {message}
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black/10">
+          <ToneIcon className="h-4.5 w-4.5" />
+        </div>
+        <p className="min-w-0 flex-1 leading-6">{message}</p>
+      </div>
     </div>
   );
 }
@@ -66,6 +84,7 @@ function ToastMessage({
   const [isVisible, setIsVisible] = useState(true);
   const [progress, setProgress] = useState(100);
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
+  const ToneIcon = toneStyles.icon;
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -99,15 +118,18 @@ function ToastMessage({
   return createPortal(
     <div
       role="alert"
-      className={`pointer-events-auto overflow-hidden rounded-xl border shadow-lg backdrop-blur-sm ${toneStyles.container} ${className}`.trim()}
+      className={`pointer-events-auto overflow-hidden rounded-[24px] border shadow-xl backdrop-blur-xl ${toneStyles.container} ${className}`.trim()}
     >
       <div className="flex items-start gap-3 px-4 py-3">
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black/10">
+          <ToneIcon className="h-4.5 w-4.5" />
+        </div>
         <p className="min-w-0 flex-1 text-sm leading-6">{message}</p>
         <button
           type="button"
           aria-label="Fechar toast"
           onClick={() => setIsVisible(false)}
-          className={`rounded-md px-2 py-1 text-sm transition ${toneStyles.button}`.trim()}
+          className={`rounded-xl px-2.5 py-1.5 text-sm transition ${toneStyles.button}`.trim()}
         >
           X
         </button>
