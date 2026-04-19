@@ -5,6 +5,7 @@ import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import Modal from "../components/ui/Modal";
+import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
@@ -15,6 +16,7 @@ import {
   updateDemand,
 } from "../services/demandService";
 import { getErrorMessage } from "../utils/error";
+import { usePagination } from "../hooks/usePagination";
 
 const INITIAL_DEMAND_FILTERS = {
   name: "",
@@ -34,6 +36,9 @@ export default function Demands() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const demandsPagination = usePagination(demands, {
+    initialPageSize: 25,
+  });
 
   const loadDemands = useCallback(async (currentFilters = filters) => {
     try {
@@ -228,7 +233,19 @@ export default function Demands() {
         />
       ) : !isLoading ? (
         <ul className="space-y-2">
-          {demands.map((demand) => (
+          <li>
+            <PaginationControls
+              endItem={demandsPagination.endItem}
+              onPageChange={demandsPagination.setPage}
+              onPageSizeChange={demandsPagination.handlePageSizeChange}
+              page={demandsPagination.page}
+              pageSize={demandsPagination.pageSize}
+              totalItems={demandsPagination.totalItems}
+              totalPages={demandsPagination.totalPages}
+            />
+          </li>
+
+          {demandsPagination.visibleItems.map((demand) => (
             <li
               key={demand.id}
               className="flex flex-col gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
@@ -250,6 +267,18 @@ export default function Demands() {
               </div>
             </li>
           ))}
+
+          <li>
+            <PaginationControls
+              endItem={demandsPagination.endItem}
+              onPageChange={demandsPagination.setPage}
+              onPageSizeChange={demandsPagination.handlePageSizeChange}
+              page={demandsPagination.page}
+              pageSize={demandsPagination.pageSize}
+              totalItems={demandsPagination.totalItems}
+              totalPages={demandsPagination.totalPages}
+            />
+          </li>
         </ul>
       ) : null}
 

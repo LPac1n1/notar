@@ -1,4 +1,5 @@
 import { Children, useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -71,6 +72,13 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeModal, setActiveModal] = useState("");
+  const navigate = useNavigate();
+
+  const openDonorProfile = (donorId) => {
+    if (donorId) {
+      navigate(`/doadores?perfil=${encodeURIComponent(donorId)}`);
+    }
+  };
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -111,18 +119,24 @@ export default function Dashboard() {
     donorWithoutDemandCount: 0,
     donorWithoutStartDateCount: 0,
     importsWithoutMatchesCount: 0,
+    emptyImportCount: 0,
+    importsWithManyUnregisteredCount: 0,
     unregisteredCpfSamples: [],
     donationStartConflictSamples: [],
     donorWithoutDemandSamples: [],
     donorWithoutStartDateSamples: [],
     importsWithoutMatchesSamples: [],
+    emptyImportSamples: [],
+    importsWithManyUnregisteredSamples: [],
   };
   const totalInconsistencyCount =
     inconsistencies.unregisteredCpfCount +
     inconsistencies.donationStartConflictCount +
     inconsistencies.donorWithoutDemandCount +
     inconsistencies.donorWithoutStartDateCount +
-    inconsistencies.importsWithoutMatchesCount;
+    inconsistencies.importsWithoutMatchesCount +
+    inconsistencies.emptyImportCount +
+    inconsistencies.importsWithManyUnregisteredCount;
   const hasAnyData =
     totals.donorCount > 0 ||
     totals.demandCount > 0 ||
@@ -156,7 +170,13 @@ export default function Dashboard() {
                 key={donor.donorId}
                 className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{donor.donorName}</p>
+                <button
+                  type="button"
+                  onClick={() => openDonorProfile(donor.donorId)}
+                  className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                >
+                  {donor.donorName}
+                </button>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {formatCpf(donor.cpf)} • Demanda: {donor.demand || "Nao informada"}
                 </p>
@@ -325,7 +345,13 @@ export default function Dashboard() {
                 key={item.donorId}
                 className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{item.donorName}</p>
+                <button
+                  type="button"
+                  onClick={() => openDonorProfile(item.donorId)}
+                  className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                >
+                  {item.donorName}
+                </button>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {formatCpf(item.cpf)} • {item.demand}
                 </p>
@@ -416,7 +442,7 @@ export default function Dashboard() {
       return (
         <Modal
           title="Doações antes do início cadastrado"
-          description="Casos em que o CPF apareceu antes do mês de início informado no cadastro."
+          description="Casos em que um CPF vinculado apareceu antes do mês de início informado."
           icon={(
             <ModalIcon>
               <circle cx="12" cy="12" r="9" />
@@ -432,9 +458,16 @@ export default function Dashboard() {
                 key={`${item.cpf}-${item.referenceMonth}`}
                 className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{item.donorName}</p>
+                <p className="font-medium text-[var(--text-main)]">{item.sourceName}</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(item.cpf)}
+                  {formatCpf(item.cpf)} • Abate para{" "}
+                  <button
+                    type="button"
+                    onClick={() => openDonorProfile(item.donorId)}
+                    className="font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                  >
+                    {item.donorName}
+                  </button>
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Apareceu em {formatMonthYear(item.referenceMonth)}, mas o início é {formatMonthYear(item.donationStartDate)}.
@@ -468,7 +501,13 @@ export default function Dashboard() {
                 key={item.donorId}
                 className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{item.donorName}</p>
+                <button
+                  type="button"
+                  onClick={() => openDonorProfile(item.donorId)}
+                  className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                >
+                  {item.donorName}
+                </button>
                 <p className="mt-1 text-sm text-[var(--muted)]">{formatCpf(item.cpf)}</p>
               </div>
             ))}
@@ -481,7 +520,7 @@ export default function Dashboard() {
       return (
         <Modal
           title="Doadores sem início das doações"
-          description="Cadastros ativos que ainda não têm mês de início informado."
+          description="CPFs vinculados que ainda não têm mês de início informado."
           icon={(
             <ModalIcon>
               <rect x="4" y="5" width="16" height="15" rx="2" />
@@ -495,12 +534,23 @@ export default function Dashboard() {
           <DetailList emptyMessage="Nenhum doador sem início encontrado.">
             {inconsistencies.donorWithoutStartDateSamples.map((item) => (
               <div
-                key={item.donorId}
+                key={item.sourceId}
                 className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{item.donorName}</p>
+                <p className="font-medium text-[var(--text-main)]">{item.sourceName}</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(item.cpf)} • Demanda: {item.demand || "Nao informada"}
+                  {formatCpf(item.cpf)} • {item.sourceType === "holder" ? "Titular" : "Auxiliar"}
+                </p>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Abate para{" "}
+                  <button
+                    type="button"
+                    onClick={() => openDonorProfile(item.donorId)}
+                    className="font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                  >
+                    {item.donorName}
+                  </button>
+                  {" "}• Demanda: {item.demand || "Nao informada"}
                 </p>
               </div>
             ))}
@@ -536,6 +586,82 @@ export default function Dashboard() {
                 <p className="mt-1 break-all text-sm text-[var(--muted)]">{item.fileName}</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {formatInteger(item.matchedRows)} linha(s) compatíveis • {formatInteger(item.matchedDonors)} doador(es)
+                </p>
+              </div>
+            ))}
+          </DetailList>
+        </Modal>
+      );
+    }
+
+    if (activeModal === "inconsistency-empty-imports") {
+      return (
+        <Modal
+          title="Importações vazias"
+          description="Planilhas processadas sem nenhuma linha consolidada. Vale conferir se o arquivo, aba ou coluna de CPF estavam corretos."
+          icon={(
+            <ModalIcon>
+              <path d="M12 3v12" />
+              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+              <path d="M5 19h14" />
+              <path d="M8 7h8" />
+            </ModalIcon>
+          )}
+          onClose={() => setActiveModal("")}
+        >
+          <DetailList emptyMessage="Nenhuma importação vazia encontrada.">
+            {inconsistencies.emptyImportSamples.map((item) => (
+              <div
+                key={item.importId}
+                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+              >
+                <p className="font-medium text-[var(--text-main)]">
+                  {formatMonthYear(item.referenceMonth)}
+                </p>
+                <p className="mt-1 break-all text-sm text-[var(--muted)]">
+                  {item.fileName}
+                </p>
+                <p className="mt-1 text-sm text-[var(--warning)]">
+                  Nenhuma linha válida foi consolidada.
+                </p>
+              </div>
+            ))}
+          </DetailList>
+        </Modal>
+      );
+    }
+
+    if (activeModal === "inconsistency-many-unregistered") {
+      return (
+        <Modal
+          title="Muitos CPFs não vinculados"
+          description="Importações com volume alto de CPFs sem vínculo. Isso pode indicar uma planilha nova, cadastros faltando ou coluna errada."
+          icon={(
+            <ModalIcon>
+              <circle cx="10" cy="9" r="3" />
+              <path d="M4.5 19a5.5 5.5 0 0 1 11 0" />
+              <path d="M18 8v6" />
+              <path d="M21 11h-6" />
+            </ModalIcon>
+          )}
+          onClose={() => setActiveModal("")}
+          size="lg"
+        >
+          <DetailList emptyMessage="Nenhuma importação com muitos CPFs não vinculados encontrada.">
+            {inconsistencies.importsWithManyUnregisteredSamples.map((item) => (
+              <div
+                key={item.importId}
+                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+              >
+                <p className="font-medium text-[var(--text-main)]">
+                  {formatMonthYear(item.referenceMonth)}
+                </p>
+                <p className="mt-1 break-all text-sm text-[var(--muted)]">
+                  {item.fileName}
+                </p>
+                <p className="mt-1 text-sm text-[var(--warning)]">
+                  {formatInteger(item.unregisteredCpfCount)} de{" "}
+                  {formatInteger(item.cpfCount)} CPF(s) ainda não estão vinculados.
                 </p>
               </div>
             ))}
@@ -612,7 +738,7 @@ export default function Dashboard() {
                 Nenhum ponto importante de revisão foi encontrado com os dados atuais.
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
                 <MetricCard
                   label="CPFs não cadastrados"
                   value={formatInteger(inconsistencies.unregisteredCpfCount)}
@@ -650,6 +776,20 @@ export default function Dashboard() {
                   onClick={() =>
                     setActiveModal("inconsistency-imports-without-matches")
                   }
+                />
+                <MetricCard
+                  label="Importações vazias"
+                  value={formatInteger(inconsistencies.emptyImportCount)}
+                  helper="Planilhas processadas sem linhas válidas consolidadas."
+                  onClick={() => setActiveModal("inconsistency-empty-imports")}
+                />
+                <MetricCard
+                  label="Muitos não vinculados"
+                  value={formatInteger(
+                    inconsistencies.importsWithManyUnregisteredCount,
+                  )}
+                  helper="Importações com proporção alta de CPFs sem vínculo."
+                  onClick={() => setActiveModal("inconsistency-many-unregistered")}
                 />
               </div>
             )}
@@ -738,7 +878,13 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-[var(--text-main)]">
-                          {donor.donorName}
+                          <button
+                            type="button"
+                            onClick={() => openDonorProfile(donor.donorId)}
+                            className="text-left underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                          >
+                            {donor.donorName}
+                          </button>
                         </p>
                         <p className="text-sm text-[var(--muted)]">
                           Demanda: {donor.demand}

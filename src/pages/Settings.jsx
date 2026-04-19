@@ -20,7 +20,8 @@ import { getErrorMessage } from "../utils/error";
 function formatBackupStats(stats = {}) {
   return [
     `${stats.demands ?? 0} demanda(s)`,
-    `${stats.donors ?? 0} doador(es)`,
+    `${stats.donors ?? 0} titular(es)`,
+    `${stats.donorCpfLinks ?? 0} CPF(s) vinculado(s)`,
     `${stats.imports ?? 0} importacao(oes)`,
     `${stats.importCpfSummary ?? 0} CPF(s) consolidados`,
     `${stats.monthlyDonorSummary ?? 0} resumo(s) mensal(is)`,

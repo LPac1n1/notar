@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
@@ -22,6 +24,7 @@ import {
 } from "../utils/date";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
+import { usePagination } from "../hooks/usePagination";
 
 const INITIAL_MONTHLY_FILTERS = {
   referenceMonth: "",
@@ -42,6 +45,7 @@ export default function Monthly() {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const navigate = useNavigate();
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
 
   const donorOptions = useMemo(
@@ -55,12 +59,19 @@ export default function Monthly() {
   );
 
   const cpfOptions = useMemo(
-    () =>
-      buildSelectOptions(summaries, {
-        getValue: (summary) => summary.cpf,
-        getLabel: (summary) => formatCpf(summary.cpf),
+    () => {
+      const sourceCpfItems = summaries.flatMap((summary) =>
+        (summary.sourceCpfs?.length ? summary.sourceCpfs : [summary.cpf]).map(
+          (cpfValue) => ({ cpf: cpfValue }),
+        ),
+      );
+
+      return buildSelectOptions(sourceCpfItems, {
+        getValue: (item) => item.cpf,
+        getLabel: (item) => formatCpf(item.cpf),
         emptyLabel: "Todos os CPFs",
-      }),
+      });
+    },
     [summaries],
   );
 
@@ -77,16 +88,16 @@ export default function Monthly() {
   const abatementStatusOptions = useMemo(
     () => [
       { value: "all", label: "Todos os status" },
-      { value: "pending", label: "Pendentes" },
-      { value: "applied", label: "Realizados" },
+      { value: "pending", label: "Pendentes", tone: "warning" },
+      { value: "applied", label: "Realizados", tone: "success" },
     ],
     [],
   );
 
   const rowStatusOptions = useMemo(
     () => [
-      { value: "pending", label: "Pendente" },
-      { value: "applied", label: "Realizado" },
+      { value: "pending", label: "Pendente", tone: "warning" },
+      { value: "applied", label: "Realizado", tone: "success" },
     ],
     [],
   );
@@ -97,11 +108,6 @@ export default function Monthly() {
       setError("");
       const importRows = await listImports({ status: "processed" });
       setAvailableImports(importRows);
-
-      if (!filters.referenceMonth) {
-        setSummaries([]);
-        return;
-      }
 
       const monthlyRows = await listMonthlySummaries(filters);
       setSummaries(monthlyRows);
@@ -158,8 +164,9 @@ export default function Monthly() {
 
   const handleExport = async () => {
     if (!hasSelectedReferenceMonth) {
-      setError("Selecione um mes antes de exportar o resumo mensal.");
-      return;
+      setSuccessMessage(
+        "Exportando a visão geral. Se quiser um mês específico, selecione um mês antes.",
+      );
     }
 
     try {
@@ -198,6 +205,9 @@ export default function Monthly() {
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
   );
+  const monthlyPagination = usePagination(summaries, {
+    initialPageSize: 25,
+  });
 
   if (isLoading && !availableImports.length && !error) {
     return (
@@ -232,7 +242,7 @@ export default function Monthly() {
 
       <SectionCard
         title="Resumo mensal"
-        description="Selecione primeiro o mes e o ano de referencia. Depois disso, use os demais filtros para refinar o resumo."
+        description="Use o mês para focar em uma importação específica ou deixe em branco para visualizar a tabela geral de todos os meses."
         className="mt-8"
       >
         {availableImports.length === 0 ? (
@@ -281,7 +291,7 @@ export default function Monthly() {
                     }}
                     className={`rounded-[22px] border p-4 text-left transition ${
                       isSelected
-                        ? "border-[var(--line-strong)] bg-[color:var(--accent-soft)]"
+                        ? "border-[var(--accent)] bg-[var(--surface-elevated)]"
                         : "border-[var(--line)] bg-[var(--surface-strong)] hover:border-[var(--line-strong)]"
                     }`}
                   >
@@ -297,7 +307,7 @@ export default function Monthly() {
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-medium ${
                           isSelected
-                            ? "bg-[color:var(--accent)] text-[#08100d]"
+                            ? "bg-[color:var(--accent-soft)] text-[var(--accent)]"
                             : "bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
                         }`}
                       >
@@ -345,14 +355,13 @@ export default function Monthly() {
               <Button
                 variant="subtle"
                 onClick={handleClearRefinements}
-                disabled={!hasSelectedReferenceMonth}
               >
                 Limpar refinamentos
               </Button>
               <Button
                 variant="subtle"
                 onClick={handleExport}
-                disabled={isExporting || !hasSelectedReferenceMonth}
+                disabled={isExporting}
               >
                 {isExporting ? "Exportando..." : "Exportar CSV"}
               </Button>
@@ -376,7 +385,6 @@ export default function Monthly() {
             placeholder="Todos os doadores"
             searchable
             searchPlaceholder="Buscar doador..."
-            disabled={!hasSelectedReferenceMonth}
           />
 
           <SelectInput
@@ -385,7 +393,6 @@ export default function Monthly() {
             onChange={handleFilterChange}
             options={abatementStatusOptions}
             placeholder="Todos os status"
-            disabled={!hasSelectedReferenceMonth}
           />
         </div>
 
@@ -398,7 +405,6 @@ export default function Monthly() {
             placeholder="Todos os CPFs"
             searchable
             searchPlaceholder="Buscar CPF..."
-            disabled={!hasSelectedReferenceMonth}
           />
 
           <SelectInput
@@ -409,24 +415,29 @@ export default function Monthly() {
             placeholder="Todas as demandas"
             searchable
             searchPlaceholder="Buscar demanda..."
-            disabled={!hasSelectedReferenceMonth}
           />
         </div>
 
-        {!hasSelectedReferenceMonth ? (
-          <EmptyState
-            title="Selecione um mês para começar"
-            description="O resumo mensal só é exibido depois que você escolhe o mês e o ano de referência."
-          />
-        ) : summaries.length === 0 ? (
+        {summaries.length === 0 ? (
           <EmptyState
             title="Nenhum resumo mensal disponível"
-            description="Depois que houver importações processadas com valor por nota definido e doadores compatíveis, os abatimentos mensais aparecerão aqui."
+            description="Depois que houver importações processadas com valor por nota definido e titulares compatíveis, os abatimentos mensais aparecerão aqui."
           />
         ) : (
           <div className="space-y-3">
-            {summaries.map((summary) => {
+            <PaginationControls
+              endItem={monthlyPagination.endItem}
+              onPageChange={monthlyPagination.setPage}
+              onPageSizeChange={monthlyPagination.handlePageSizeChange}
+              page={monthlyPagination.page}
+              pageSize={monthlyPagination.pageSize}
+              totalItems={monthlyPagination.totalItems}
+              totalPages={monthlyPagination.totalPages}
+            />
+
+            {monthlyPagination.visibleItems.map((summary) => {
               const hasStartDateConflict =
+                summary.sourceStartConflictCount > 0 ||
                 hasDonationStartConflict(
                   summary.donationStartDate,
                   summary.referenceMonth,
@@ -437,23 +448,46 @@ export default function Monthly() {
                   key={summary.id}
                   className={`grid gap-3 rounded-[22px] border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
                     hasStartDateConflict
-                      ? "border-[color:var(--accent-2-soft)] bg-[color:var(--accent-2-soft)]"
+                      ? "border-[color:var(--warning)]/45 bg-[var(--surface-elevated)]"
                       : "border-[var(--line)] bg-[var(--surface-elevated)]"
                   }`}
                 >
                   <div>
-                    <p className="font-medium text-[var(--text-main)]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(`/doadores?perfil=${encodeURIComponent(summary.donorId)}`)
+                      }
+                      className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                    >
                       {summary.donorName}
-                    </p>
+                    </button>
                     <p className="text-sm text-[var(--muted)]">
-                      CPF: {summary.cpf}
+                      CPF do titular: {summary.cpf}
                     </p>
                     <p className="text-sm text-[var(--muted)]">
                       Demanda: {summary.demand || "Nao informada"}
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {summary.sources.map((source) => (
+                        <span
+                          key={`${summary.id}-${source.cpf}`}
+                          className={`rounded-full border px-2 py-1 text-xs ${
+                            source.type === "auxiliary"
+                              ? "border-[color:var(--accent-2-soft)] bg-[color:var(--accent-2-soft)] text-[var(--warning)]"
+                              : "border-[var(--line)] bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
+                          }`}
+                          title={`${source.name} • ${formatCpf(source.cpf)} • ${source.notesCount} nota(s)`}
+                        >
+                          {source.type === "auxiliary"
+                            ? `Auxiliar: ${source.name}`
+                            : "Titular"}
+                        </span>
+                      ))}
+                    </div>
                     {hasStartDateConflict ? (
                       <p className="mt-2 text-sm text-[var(--warning)]">
-                        Atencao: este CPF apareceu em {formatMonthYear(summary.referenceMonth)}, mas o inicio das doacoes no cadastro esta em {formatMonthYear(summary.donationStartDate)}.
+                        Atencao: {summary.sourceStartConflictCount || 1} CPF(s) vinculado(s) apareceram antes do início de doação informado.
                       </p>
                     ) : null}
                   </div>
@@ -468,6 +502,9 @@ export default function Monthly() {
                   <div>
                     <p className="text-sm text-[var(--muted)]">Notas</p>
                     <p className="font-medium">{summary.notesCount}</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {summary.sourceCpfCount} CPF(s)
+                    </p>
                   </div>
 
                   <div>
@@ -479,7 +516,13 @@ export default function Monthly() {
 
                   <div>
                     <p className="text-sm text-[var(--muted)]">Abatimento</p>
-                    <p className="font-medium">
+                    <p
+                      className={`font-semibold ${
+                        summary.abatementStatus === "applied"
+                          ? "text-[var(--success)]"
+                          : "text-[var(--warning)]"
+                      }`}
+                    >
                       {formatCurrency(summary.abatementAmount)}
                     </p>
                   </div>
@@ -490,6 +533,7 @@ export default function Monthly() {
                       name={`abatement-status-${summary.id}`}
                       disabled={updatingSummaryId === summary.id}
                       options={rowStatusOptions}
+                      tone={summary.abatementStatus === "applied" ? "success" : "warning"}
                       onChange={(event) =>
                         handleStatusChange(summary.id, event.target.value)
                       }
@@ -504,6 +548,16 @@ export default function Monthly() {
                 </div>
               );
             })}
+
+            <PaginationControls
+              endItem={monthlyPagination.endItem}
+              onPageChange={monthlyPagination.setPage}
+              onPageSizeChange={monthlyPagination.handlePageSizeChange}
+              page={monthlyPagination.page}
+              pageSize={monthlyPagination.pageSize}
+              totalItems={monthlyPagination.totalItems}
+              totalPages={monthlyPagination.totalPages}
+            />
           </div>
         )}
       </SectionCard>

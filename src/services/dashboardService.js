@@ -206,23 +206,51 @@ export async function getDashboardOverview() {
        FROM import_cpf_summary
        WHERE is_registered_donor = FALSE) AS unregistered_cpf_count,
       (SELECT count(*)
-       FROM monthly_donor_summary
-       INNER JOIN donors
-         ON donors.id = monthly_donor_summary.donor_id
-       WHERE donors.donation_start_date IS NOT NULL
-         AND monthly_donor_summary.reference_month < donors.donation_start_date) AS donation_start_conflict_count,
+       FROM import_cpf_summary
+       INNER JOIN donor_cpf_links
+         ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+       WHERE donor_cpf_links.donation_start_date IS NOT NULL
+         AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date) AS donation_start_conflict_count,
       (SELECT count(*)
        FROM donors
        WHERE is_active = TRUE
          AND coalesce(trim(demand), '') = '') AS donor_without_demand_count,
       (SELECT count(*)
-       FROM donors
-       WHERE is_active = TRUE
-         AND donation_start_date IS NULL) AS donor_without_start_date_count,
+       FROM donor_cpf_links
+       INNER JOIN donors
+         ON donors.id = donor_cpf_links.donor_id
+       WHERE donor_cpf_links.is_active = TRUE
+         AND donors.is_active = TRUE
+         AND donor_cpf_links.donation_start_date IS NULL) AS donor_without_start_date_count,
       (SELECT count(*)
        FROM imports
        WHERE status = 'processed'
          AND coalesce(matched_donors, 0) = 0) AS imports_without_matches_count
+      ,
+      (SELECT count(*)
+       FROM imports
+       WHERE status = 'processed'
+         AND coalesce(total_rows, 0) = 0) AS empty_import_count,
+      (SELECT count(*)
+       FROM (
+         SELECT
+           imports.id,
+           count(DISTINCT import_cpf_summary.cpf) AS cpf_count,
+           count(DISTINCT CASE
+             WHEN import_cpf_summary.is_registered_donor = FALSE
+             THEN import_cpf_summary.cpf
+           END) AS unregistered_cpf_count
+         FROM imports
+         LEFT JOIN import_cpf_summary
+           ON import_cpf_summary.import_id = imports.id
+         WHERE imports.status = 'processed'
+         GROUP BY imports.id
+       ) AS import_review
+       WHERE cpf_count > 0
+         AND (
+           unregistered_cpf_count >= 50
+           OR cast(unregistered_cpf_count AS DOUBLE) / cpf_count >= 0.5
+         )) AS imports_with_many_unregistered_count
   `);
 
   const unregisteredCpfRows = await query(`
@@ -239,16 +267,20 @@ export async function getDashboardOverview() {
 
   const donationStartConflictRows = await query(`
     SELECT
-      monthly_donor_summary.donor_name,
-      monthly_donor_summary.cpf,
-      strftime(monthly_donor_summary.reference_month, '%Y-%m-01') AS reference_month,
-      strftime(donors.donation_start_date, '%Y-%m-01') AS donation_start_date
-    FROM monthly_donor_summary
+      donor_cpf_links.name AS source_name,
+      donor_cpf_links.cpf,
+      donors.id AS donor_id,
+      donors.name AS donor_name,
+      strftime(import_cpf_summary.reference_month, '%Y-%m-01') AS reference_month,
+      strftime(donor_cpf_links.donation_start_date, '%Y-%m-01') AS donation_start_date
+    FROM import_cpf_summary
+    INNER JOIN donor_cpf_links
+      ON donor_cpf_links.id = import_cpf_summary.matched_source_id
     INNER JOIN donors
-      ON donors.id = monthly_donor_summary.donor_id
-    WHERE donors.donation_start_date IS NOT NULL
-      AND monthly_donor_summary.reference_month < donors.donation_start_date
-    ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
+      ON donors.id = donor_cpf_links.donor_id
+    WHERE donor_cpf_links.donation_start_date IS NOT NULL
+      AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
+    ORDER BY import_cpf_summary.reference_month DESC, donor_cpf_links.name ASC
     LIMIT 5
   `);
 
@@ -266,14 +298,20 @@ export async function getDashboardOverview() {
 
   const donorWithoutStartDateRows = await query(`
     SELECT
-      id,
-      name,
-      cpf,
-      demand
-    FROM donors
-    WHERE is_active = TRUE
-      AND donation_start_date IS NULL
-    ORDER BY name ASC
+      donor_cpf_links.id,
+      donor_cpf_links.name,
+      donor_cpf_links.cpf,
+      donor_cpf_links.link_type,
+      donors.id AS donor_id,
+      donors.name AS donor_name,
+      donors.demand
+    FROM donor_cpf_links
+    INNER JOIN donors
+      ON donors.id = donor_cpf_links.donor_id
+    WHERE donor_cpf_links.is_active = TRUE
+      AND donors.is_active = TRUE
+      AND donor_cpf_links.donation_start_date IS NULL
+    ORDER BY donor_cpf_links.name ASC
     LIMIT 5
   `);
 
@@ -288,6 +326,46 @@ export async function getDashboardOverview() {
     WHERE status = 'processed'
       AND coalesce(matched_donors, 0) = 0
     ORDER BY reference_month DESC, imported_at DESC
+    LIMIT 5
+  `);
+
+  const emptyImportRows = await query(`
+    SELECT
+      id,
+      strftime(reference_month, '%Y-%m-01') AS reference_month,
+      file_name,
+      total_rows
+    FROM imports
+    WHERE status = 'processed'
+      AND coalesce(total_rows, 0) = 0
+    ORDER BY reference_month DESC, imported_at DESC
+    LIMIT 5
+  `);
+
+  const importsWithManyUnregisteredRows = await query(`
+    SELECT *
+    FROM (
+      SELECT
+        imports.id,
+        strftime(imports.reference_month, '%Y-%m-01') AS reference_month,
+        imports.file_name,
+        count(DISTINCT import_cpf_summary.cpf) AS cpf_count,
+        count(DISTINCT CASE
+          WHEN import_cpf_summary.is_registered_donor = FALSE
+          THEN import_cpf_summary.cpf
+        END) AS unregistered_cpf_count
+      FROM imports
+      LEFT JOIN import_cpf_summary
+        ON import_cpf_summary.import_id = imports.id
+      WHERE imports.status = 'processed'
+      GROUP BY imports.id, imports.reference_month, imports.file_name
+    ) AS import_review
+    WHERE cpf_count > 0
+      AND (
+        unregistered_cpf_count >= 50
+        OR cast(unregistered_cpf_count AS DOUBLE) / cpf_count >= 0.5
+      )
+    ORDER BY reference_month DESC, unregistered_cpf_count DESC
     LIMIT 5
   `);
 
@@ -349,6 +427,12 @@ export async function getDashboardOverview() {
       importsWithoutMatchesCount: toNumber(
         inconsistencyCounts.imports_without_matches_count,
       ),
+      emptyImportCount: toNumber(
+        inconsistencyCounts.empty_import_count,
+      ),
+      importsWithManyUnregisteredCount: toNumber(
+        inconsistencyCounts.imports_with_many_unregistered_count,
+      ),
       unregisteredCpfSamples: unregisteredCpfRows.map((row) => ({
         cpf: row.cpf,
         latestReferenceMonth: row.latest_reference_month,
@@ -356,6 +440,8 @@ export async function getDashboardOverview() {
         monthCount: toNumber(row.month_count),
       })),
       donationStartConflictSamples: donationStartConflictRows.map((row) => ({
+        sourceName: row.source_name,
+        donorId: row.donor_id,
         donorName: row.donor_name,
         cpf: row.cpf,
         referenceMonth: row.reference_month,
@@ -367,8 +453,11 @@ export async function getDashboardOverview() {
         cpf: row.cpf,
       })),
       donorWithoutStartDateSamples: donorWithoutStartDateRows.map((row) => ({
-        donorId: row.id,
-        donorName: row.name,
+        sourceId: row.id,
+        sourceName: row.name,
+        sourceType: row.link_type,
+        donorId: row.donor_id,
+        donorName: row.donor_name,
         cpf: row.cpf,
         demand: row.demand ?? "",
       })),
@@ -378,6 +467,19 @@ export async function getDashboardOverview() {
         fileName: row.file_name,
         matchedRows: toNumber(row.matched_rows),
         matchedDonors: toNumber(row.matched_donors),
+      })),
+      emptyImportSamples: emptyImportRows.map((row) => ({
+        importId: row.id,
+        referenceMonth: row.reference_month,
+        fileName: row.file_name,
+        totalRows: toNumber(row.total_rows),
+      })),
+      importsWithManyUnregisteredSamples: importsWithManyUnregisteredRows.map((row) => ({
+        importId: row.id,
+        referenceMonth: row.reference_month,
+        fileName: row.file_name,
+        cpfCount: toNumber(row.cpf_count),
+        unregisteredCpfCount: toNumber(row.unregistered_cpf_count),
       })),
     },
   };

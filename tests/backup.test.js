@@ -14,6 +14,7 @@ test("normalizeSnapshotPayload accepts wrapped backup payloads", () => {
     data: {
       demands: [{ id: "1" }],
       donors: [],
+      donorCpfLinks: [],
       imports: [],
       importCpfSummary: [],
       monthlyDonorSummary: [],
@@ -45,6 +46,7 @@ test("snapshot helpers detect data and count rows correctly", () => {
   assert.deepEqual(buildSnapshotStats(snapshot), {
     demands: 2,
     donors: 1,
+    donorCpfLinks: 0,
     imports: 0,
     importCpfSummary: 0,
     monthlyDonorSummary: 0,

@@ -8,6 +8,40 @@ const SIZE_CLASSES = {
   xl: "max-w-5xl",
 };
 
+let openModalCount = 0;
+let previousBodyOverflow = "";
+let previousDocumentOverflow = "";
+
+function lockPageScroll() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  if (openModalCount === 0) {
+    previousBodyOverflow = document.body.style.overflow;
+    previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+  }
+
+  openModalCount += 1;
+}
+
+function unlockPageScroll() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  openModalCount = Math.max(0, openModalCount - 1);
+
+  if (openModalCount === 0) {
+    document.body.style.overflow = previousBodyOverflow;
+    document.documentElement.style.overflow = previousDocumentOverflow;
+    previousBodyOverflow = "";
+    previousDocumentOverflow = "";
+  }
+}
+
 function DefaultModalIcon() {
   return (
     <svg
@@ -41,8 +75,7 @@ export default function Modal({
   const canClose = typeof onClose === "function";
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    lockPageScroll();
 
     const handleEscape = (event) => {
       if (event.key === "Escape" && canClose) {
@@ -53,7 +86,7 @@ export default function Modal({
     document.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockPageScroll();
       document.removeEventListener("keydown", handleEscape);
     };
   }, [canClose, onClose]);

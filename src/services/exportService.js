@@ -76,11 +76,12 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
   const cpfSummary = await listImportCpfSummary(filters);
   const rows = cpfSummary.map((item) => ({
     cpf: item.cpf,
+    sourceName: item.sourceName || "",
     donorName: item.donorName || "",
     demand: item.demand || "",
     notesCount: item.notesCount,
     monthCount: item.monthCount,
-    registrationStatus: item.isRegisteredDonor ? "Cadastrado" : "Nao cadastrado",
+    registrationStatus: item.isRegisteredDonor ? "Vinculado" : "Nao vinculado",
     appearanceMonths: item.appearances
       .map((appearance) => appearance.referenceMonth)
       .join(", "),
@@ -92,8 +93,9 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
   const csvContent = buildCsvContent(
     [
       { key: "cpf", label: "CPF" },
-      { key: "donorName", label: "Doador" },
-      { key: "demand", label: "Demanda" },
+      { key: "sourceName", label: "Doador do CPF" },
+      { key: "donorName", label: "Titular beneficiado" },
+      { key: "demand", label: "Demanda do titular" },
       { key: "notesCount", label: "Total de notas" },
       { key: "monthCount", label: "Quantidade de meses" },
       { key: "registrationStatus", label: "Status de cadastro" },

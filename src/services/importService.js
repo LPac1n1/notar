@@ -196,7 +196,7 @@ export async function listImportCpfSummary({
   const conditions = [];
 
   if (importId) {
-    conditions.push(`import_id = '${escapeSqlString(importId)}'`);
+    conditions.push(`import_cpf_summary.import_id = '${escapeSqlString(importId)}'`);
   }
 
   if (referenceMonth) {
@@ -245,15 +245,20 @@ export async function listImportCpfSummary({
       import_cpf_summary.cpf,
       import_cpf_summary.notes_count,
       import_cpf_summary.matched_donor_id,
+      import_cpf_summary.matched_source_id,
       import_cpf_summary.is_registered_donor,
       imports.file_name,
       donors.name AS donor_name,
-      donors.demand AS demand
+      donors.demand AS demand,
+      donor_cpf_links.name AS source_name,
+      donor_cpf_links.link_type AS source_type
     FROM import_cpf_summary
     INNER JOIN imports
       ON imports.id = import_cpf_summary.import_id
     LEFT JOIN donors
       ON donors.id = import_cpf_summary.matched_donor_id
+    LEFT JOIN donor_cpf_links
+      ON donor_cpf_links.id = import_cpf_summary.matched_source_id
     ${whereClause}
     ORDER BY import_cpf_summary.cpf ASC, import_cpf_summary.reference_month DESC
   `);
@@ -270,8 +275,11 @@ export async function listImportCpfSummary({
         cpf: row.cpf,
         totalNotesCount: 0,
         matchedDonorId: row.matched_donor_id ?? "",
+        matchedSourceId: row.matched_source_id ?? "",
         isRegisteredDonor: Boolean(row.is_registered_donor),
         donorName: row.donor_name ?? "",
+        sourceName: row.source_name ?? "",
+        sourceType: row.source_type ?? "",
         demand: row.demand ?? "",
         appearancesByMonth: new Map(),
       });
@@ -282,8 +290,11 @@ export async function listImportCpfSummary({
 
     if (row.is_registered_donor) {
       currentSummary.matchedDonorId = row.matched_donor_id ?? "";
+      currentSummary.matchedSourceId = row.matched_source_id ?? "";
       currentSummary.isRegisteredDonor = true;
       currentSummary.donorName = row.donor_name ?? "";
+      currentSummary.sourceName = row.source_name ?? "";
+      currentSummary.sourceType = row.source_type ?? "";
       currentSummary.demand = row.demand ?? "";
     }
 
@@ -321,8 +332,11 @@ export async function listImportCpfSummary({
         cpf: item.cpf,
         notesCount: item.totalNotesCount,
         matchedDonorId: item.matchedDonorId,
+        matchedSourceId: item.matchedSourceId,
         isRegisteredDonor: item.isRegisteredDonor,
         donorName: item.donorName,
+        sourceName: item.sourceName,
+        sourceType: item.sourceType,
         demand: item.demand,
         monthCount: appearances.length,
         appearances,
@@ -588,16 +602,25 @@ export async function reconcileImport(importId) {
     await execute(`
       UPDATE import_cpf_summary
       SET
+        matched_source_id = (
+          SELECT donor_cpf_links.id
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+            AND donor_cpf_links.is_active = TRUE
+          LIMIT 1
+        ),
         matched_donor_id = (
-          SELECT donors.id
-          FROM donors
-          WHERE donors.cpf = import_cpf_summary.cpf
+          SELECT donor_cpf_links.donor_id
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+            AND donor_cpf_links.is_active = TRUE
           LIMIT 1
         ),
         is_registered_donor = EXISTS (
           SELECT 1
-          FROM donors
-          WHERE donors.cpf = import_cpf_summary.cpf
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+            AND donor_cpf_links.is_active = TRUE
         ),
         updated_at = CURRENT_TIMESTAMP
       WHERE import_id = '${escapeSqlString(importId)}'
@@ -612,16 +635,26 @@ export async function reconcileImport(importId) {
       SELECT
         import_cpf_summary.import_id,
         strftime(import_cpf_summary.reference_month, '%Y-%m-01') AS reference_month,
-        import_cpf_summary.cpf,
-        import_cpf_summary.notes_count,
         donors.id AS donor_id,
+        donors.cpf AS donor_cpf,
         donors.name AS donor_name,
-        donors.demand AS demand
+        donors.demand AS demand,
+        sum(import_cpf_summary.notes_count) AS notes_count
       FROM import_cpf_summary
+      INNER JOIN donor_cpf_links
+        ON donor_cpf_links.id = import_cpf_summary.matched_source_id
       INNER JOIN donors
-        ON donors.id = import_cpf_summary.matched_donor_id
+        ON donors.id = donor_cpf_links.donor_id
       WHERE import_cpf_summary.import_id = '${escapeSqlString(importId)}'
         AND donors.is_active = TRUE
+        AND donor_cpf_links.is_active = TRUE
+      GROUP BY
+        import_cpf_summary.import_id,
+        import_cpf_summary.reference_month,
+        donors.id,
+        donors.cpf,
+        donors.name,
+        donors.demand
     `);
 
     for (const row of matchedRows) {
@@ -653,7 +686,7 @@ export async function reconcileImport(importId) {
           '${escapeSqlString(row.import_id)}',
           '${escapeSqlString(row.donor_id)}',
           '${escapeSqlString(row.reference_month)}',
-          '${escapeSqlString(row.cpf)}',
+          '${escapeSqlString(row.donor_cpf)}',
           '${escapeSqlString(row.donor_name)}',
           '${escapeSqlString(row.demand ?? "")}',
           ${notesCount},

@@ -16,6 +16,7 @@ function normalizeOptions(options) {
     value: String(option.value ?? ""),
     label: String(option.label ?? option.value ?? ""),
     disabled: Boolean(option.disabled),
+    tone: option.tone ?? "",
   }));
 }
 
@@ -26,6 +27,7 @@ function normalizeChildrenOptions(children) {
       value: String(child.props.value ?? ""),
       label: String(child.props.children ?? child.props.value ?? ""),
       disabled: Boolean(child.props.disabled),
+      tone: child.props["data-tone"] ?? "",
     }));
 }
 
@@ -57,6 +59,7 @@ export default function SelectInput({
   placeholder = "Selecione uma opção",
   searchPlaceholder = "Digite para buscar...",
   searchable = false,
+  tone = "default",
   value = "",
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -79,6 +82,7 @@ export default function SelectInput({
   const selectedOption = normalizedOptions.find(
     (option) => option.value === String(value ?? ""),
   );
+  const activeTone = selectedOption?.tone || tone;
   const isMenuOpen = isOpen && !disabled;
   const filteredOptions = useMemo(() => {
     if (!searchable) {
@@ -193,6 +197,26 @@ export default function SelectInput({
     closeMenu();
   };
 
+  const toneTextClassName = {
+    default: "",
+    danger: "text-[var(--danger)]",
+    success: "text-[var(--success)]",
+    warning: "text-[var(--warning)]",
+  }[activeTone] ?? "";
+
+  const toneDotClassName = {
+    danger: "bg-[color:var(--danger)]",
+    success: "bg-[color:var(--success)]",
+    warning: "bg-[color:var(--warning)]",
+  }[activeTone] ?? "";
+
+  const toneClassName = {
+    default: "",
+    danger: "border-[color:var(--danger)] shadow-[inset_0_0_0_1px_rgba(239,139,136,0.22)]",
+    success: "border-[color:var(--success)] shadow-[inset_0_0_0_1px_rgba(118,199,163,0.22)]",
+    warning: "border-[color:var(--warning)] shadow-[inset_0_0_0_1px_rgba(227,186,114,0.22)]",
+  }[activeTone] ?? "";
+
   return (
     <div
       ref={containerRef}
@@ -204,7 +228,7 @@ export default function SelectInput({
         type="button"
         disabled={disabled}
         onClick={toggleMenu}
-        className={`flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[color:var(--surface-elevated)] px-4 py-3 text-left outline-none transition-all duration-200 focus:border-[var(--line-strong)] focus:bg-[color:var(--surface-muted)] focus:shadow-[0_10px_24px_-18px_rgba(0,0,0,0.48)] ${
+        className={`flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[color:var(--surface-elevated)] px-4 py-3 text-left outline-none transition-all duration-200 focus:border-[var(--line-strong)] focus:bg-[color:var(--surface-muted)] focus:shadow-[0_10px_24px_-18px_rgba(0,0,0,0.48)] ${toneClassName} ${
           disabled
             ? "cursor-not-allowed bg-[color:var(--surface-muted)]/70 text-[var(--muted)]/70"
             : "text-[var(--text-main)] hover:border-[var(--line-strong)] hover:bg-[color:var(--surface-muted)]"
@@ -213,12 +237,21 @@ export default function SelectInput({
         aria-haspopup="listbox"
         aria-controls={listboxId}
       >
-        <span
-          className={`min-w-0 truncate ${
-            selectedOption ? "text-[var(--text-main)]" : "text-[var(--muted)]"
-          }`}
-        >
-          {selectedOption?.label || placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          {toneDotClassName ? (
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${toneDotClassName}`}
+            />
+          ) : null}
+          <span
+            className={`min-w-0 truncate ${
+              selectedOption
+                ? `${toneTextClassName || "text-[var(--text-main)]"} font-medium`
+                : "text-[var(--muted)]"
+            }`}
+          >
+            {selectedOption?.label || placeholder}
+          </span>
         </span>
         <span
           className={`shrink-0 text-xs text-[var(--muted)] transition ${
@@ -265,6 +298,16 @@ export default function SelectInput({
             >
               {filteredOptions.map((option) => {
                 const isSelected = option.value === String(value ?? "");
+                const optionToneTextClassName = {
+                  danger: "text-[var(--danger)]",
+                  success: "text-[var(--success)]",
+                  warning: "text-[var(--warning)]",
+                }[option.tone] ?? "";
+                const optionToneDotClassName = {
+                  danger: "bg-[color:var(--danger)]",
+                  success: "bg-[color:var(--success)]",
+                  warning: "bg-[color:var(--warning)]",
+                }[option.tone] ?? "";
 
                 return (
                   <li key={`${name || "select"}-${option.value || "empty"}`}>
@@ -276,11 +319,18 @@ export default function SelectInput({
                         option.disabled
                           ? "cursor-not-allowed text-[var(--muted)]/60"
                           : isSelected
-                            ? "bg-[color:var(--accent-soft)] text-[var(--text-main)] shadow-[0_8px_20px_-16px_rgba(0,0,0,0.4)]"
-                            : "text-[var(--text-soft)] hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)]"
+                            ? `${option.tone === "warning" ? "bg-[color:var(--accent-2-soft)] text-[var(--warning)]" : option.tone === "success" ? "bg-[color:var(--accent-soft)] text-[var(--success)]" : "bg-[color:var(--accent-soft)] text-[var(--text-main)]"} shadow-[0_8px_20px_-16px_rgba(0,0,0,0.4)]`
+                            : `${optionToneTextClassName || "text-[var(--text-soft)]"} hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)]`
                       }`}
                     >
-                      <span className="min-w-0 truncate">{option.label}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        {optionToneDotClassName ? (
+                          <span
+                            className={`h-2 w-2 shrink-0 rounded-full ${optionToneDotClassName}`}
+                          />
+                        ) : null}
+                        <span className="min-w-0 truncate">{option.label}</span>
+                      </span>
                       {isSelected ? <span className="shrink-0">✓</span> : null}
                     </button>
                   </li>

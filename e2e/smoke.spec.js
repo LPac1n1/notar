@@ -33,6 +33,23 @@ test("main flow smoke test", async ({ page }) => {
   await page.getByRole("button", { name: "Adicionar doador" }).click();
   await expect(page.getByText("Maria Silva")).toBeVisible();
 
+  await page.getByRole("button", { name: "Perfil" }).click();
+  await page.getByPlaceholder("Nome do auxiliar").fill("Joao Auxiliar");
+  await page.getByPlaceholder("CPF do auxiliar").fill("98765432100");
+  await page.locator('input[name="donationStartDate"]').last().fill("2026-01");
+  await page.getByRole("button", { name: "Adicionar auxiliar" }).click();
+  await expect(page.getByText("Joao Auxiliar", { exact: true })).toBeVisible();
+  await page
+    .getByRole("dialog", { name: "Perfil de Maria Silva" })
+    .getByRole("button", { name: "Fechar" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => document.body.style.overflow))
+    .not.toBe("hidden");
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.style.overflow))
+    .not.toBe("hidden");
+
   await page.getByRole("link", { name: "Importações" }).click();
   const importSection = page
     .getByRole("heading", { name: "Nova importação" })
@@ -46,7 +63,8 @@ test("main flow smoke test", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("button", { name: "Processar importação" }).click();
   await expect(page.getByText("nfp-sample.csv")).toBeVisible();
-  await expect(page.getByText("CPF ainda nao cadastrado")).toBeVisible();
+  await expect(page.getByText("Joao Auxiliar")).toBeVisible();
+  await expect(page.getByText("Abate para: Maria Silva").first()).toBeVisible();
 
   await page.getByRole("link", { name: "Gestão Mensal" }).click();
   const monthlySection = page
@@ -54,9 +72,9 @@ test("main flow smoke test", async ({ page }) => {
     .locator("xpath=ancestor::section[1]");
   await monthlySection.locator('input[name="referenceMonth"]').fill("2026-03");
   await expect(page.getByText("Maria Silva")).toBeVisible();
-  await expect(page.getByText(/^R\$\s*1,00$/, { exact: true })).toBeVisible();
+  await expect(page.getByText(/^R\$\s*1,50$/, { exact: true })).toBeVisible();
   await selectOption(page, monthlySection, "demand", "Demanda Teste");
   await expect(page.getByText("Maria Silva")).toBeVisible();
   await page.getByRole("button", { name: /Março de 2026/i }).click();
-  await expect(page.getByText("Selecione um mês para começar")).toBeVisible();
+  await expect(page.getByText("Maria Silva")).toBeVisible();
 });

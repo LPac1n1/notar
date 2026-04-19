@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import Modal from "../components/ui/Modal";
+import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
@@ -26,6 +28,7 @@ import { getErrorMessage } from "../utils/error";
 import { formatCurrency } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
 import { buildSelectOptions } from "../utils/select";
+import { usePagination } from "../hooks/usePagination";
 
 const INITIAL_IMPORT_FILTERS = {
   importId: "",
@@ -70,6 +73,19 @@ export default function Imports() {
   const [deletingImportId, setDeletingImportId] = useState("");
   const [importPendingRemoval, setImportPendingRemoval] = useState(null);
   const [selectedCpfSummaryDetails, setSelectedCpfSummaryDetails] = useState(null);
+  const navigate = useNavigate();
+  const importsPagination = usePagination(imports, {
+    initialPageSize: 10,
+  });
+  const cpfSummaryPagination = usePagination(cpfSummary, {
+    initialPageSize: 25,
+  });
+
+  const openDonorProfile = (donorId) => {
+    if (donorId) {
+      navigate(`/doadores?perfil=${encodeURIComponent(donorId)}`);
+    }
+  };
 
   const previewColumnOptions = useMemo(
     () =>
@@ -118,8 +134,9 @@ export default function Imports() {
   const importStatusOptions = useMemo(
     () => [
       { value: "", label: "Todos os status" },
-      { value: "processed", label: "Processadas" },
-      { value: "pending", label: "Pendentes" },
+      { value: "processed", label: "Processadas", tone: "success" },
+      { value: "pending", label: "Pendentes", tone: "warning" },
+      { value: "error", label: "Com erro", tone: "danger" },
     ],
     [],
   );
@@ -127,8 +144,8 @@ export default function Imports() {
   const registrationFilterOptions = useMemo(
     () => [
       { value: "all", label: "Todos" },
-      { value: "registered", label: "Somente cadastrados" },
-      { value: "unregistered", label: "Somente não cadastrados" },
+      { value: "registered", label: "Somente vinculados", tone: "success" },
+      { value: "unregistered", label: "Somente não vinculados", tone: "danger" },
     ],
     [],
   );
@@ -576,7 +593,17 @@ export default function Imports() {
           />
         ) : (
           <div className="space-y-3">
-            {imports.map((item) => (
+            <PaginationControls
+              endItem={importsPagination.endItem}
+              onPageChange={importsPagination.setPage}
+              onPageSizeChange={importsPagination.handlePageSizeChange}
+              page={importsPagination.page}
+              pageSize={importsPagination.pageSize}
+              totalItems={importsPagination.totalItems}
+              totalPages={importsPagination.totalPages}
+            />
+
+            {importsPagination.visibleItems.map((item) => (
               <div
                 key={item.id}
                 className="grid gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-6"
@@ -589,6 +616,21 @@ export default function Imports() {
                   >
                     {item.fileName}
                   </p>
+                  <span
+                    className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${
+                      item.status === "processed"
+                        ? "border-[color:var(--success)]/50 bg-[color:var(--accent-soft)] text-[var(--success)]"
+                        : item.status === "error"
+                          ? "border-[color:var(--danger)]/50 bg-[color:var(--danger-soft)] text-[var(--danger)]"
+                          : "border-[color:var(--warning)]/50 bg-[color:var(--accent-2-soft)] text-[var(--warning)]"
+                    }`}
+                  >
+                    {item.status === "processed"
+                      ? "Processada"
+                      : item.status === "error"
+                        ? "Com erro"
+                        : "Pendente"}
+                  </span>
                 </div>
                 <div>
                   <p className="text-sm text-[var(--muted)]">Mês</p>
@@ -627,6 +669,16 @@ export default function Imports() {
                 </div>
               </div>
             ))}
+
+            <PaginationControls
+              endItem={importsPagination.endItem}
+              onPageChange={importsPagination.setPage}
+              onPageSizeChange={importsPagination.handlePageSizeChange}
+              page={importsPagination.page}
+              pageSize={importsPagination.pageSize}
+              totalItems={importsPagination.totalItems}
+              totalPages={importsPagination.totalPages}
+            />
           </div>
         )}
       </SectionCard>
@@ -714,26 +766,56 @@ export default function Imports() {
           />
         ) : (
           <div className="space-y-3">
-            {cpfSummary.map((item) => (
+            <PaginationControls
+              endItem={cpfSummaryPagination.endItem}
+              onPageChange={cpfSummaryPagination.setPage}
+              onPageSizeChange={cpfSummaryPagination.handlePageSizeChange}
+              page={cpfSummaryPagination.page}
+              pageSize={cpfSummaryPagination.pageSize}
+              totalItems={cpfSummaryPagination.totalItems}
+              totalPages={cpfSummaryPagination.totalPages}
+            />
+
+            {cpfSummaryPagination.visibleItems.map((item) => (
               <div
                 key={item.id}
-                className={`grid gap-3 rounded-[22px] border p-4 md:grid-cols-[1fr_120px_160px_1fr] ${
-                  item.isRegisteredDonor
-                    ? "border-[var(--line)] bg-[var(--surface-elevated)]"
-                    : "border-[color:var(--danger-soft)] bg-[color:var(--danger-soft)]"
-                }`}
+                className="grid gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_120px_160px_1fr]"
               >
                 <div>
                   <p className="font-medium">{formatCpf(item.cpf)}</p>
+                  {item.isRegisteredDonor ? (
+                    <button
+                      type="button"
+                      onClick={() => openDonorProfile(item.matchedDonorId)}
+                      className="text-left text-sm text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                    >
+                      {item.sourceName || "CPF vinculado"}
+                    </button>
+                  ) : (
+                    <p className="text-sm text-[var(--muted)]">
+                      CPF ainda nao vinculado
+                    </p>
+                  )}
                   <p className="text-sm text-[var(--muted)]">
-                    {item.donorName || "CPF ainda nao cadastrado"}
+                    Abate para:{" "}
+                    {item.isRegisteredDonor ? (
+                      <button
+                        type="button"
+                        onClick={() => openDonorProfile(item.matchedDonorId)}
+                        className="font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                      >
+                        {item.donorName}
+                      </button>
+                    ) : (
+                      "Nao informado"
+                    )}
                   </p>
                   <p className="text-sm text-[var(--muted)]">
-                    Demanda: {item.demand || "Nao informada"}
+                    Demanda do titular: {item.demand || "Nao informada"}
                   </p>
                   {!item.isRegisteredDonor ? (
                     <p className="mt-2 text-sm text-[var(--danger)]">
-                      Cadastre este CPF como doador para que ele entre
+                      Vincule este CPF a um titular para que ele entre
                       automaticamente na gestão mensal.
                     </p>
                   ) : null}
@@ -744,15 +826,20 @@ export default function Imports() {
                 </div>
                 <div>
                   <p className="text-sm text-[var(--muted)]">Status</p>
-                  <p
-                    className={`font-medium ${
+                  <span
+                    className={`mt-1 inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${
                       item.isRegisteredDonor
-                        ? "text-[var(--success)]"
-                        : "text-[var(--danger)]"
+                        ? "border-[color:var(--success)]/50 bg-[color:var(--accent-soft)] text-[var(--success)]"
+                        : "border-[color:var(--danger)]/50 bg-[color:var(--danger-soft)] text-[var(--danger)]"
                     }`}
                   >
-                    {item.isRegisteredDonor ? "Cadastrado" : "Nao cadastrado"}
-                  </p>
+                    {item.isRegisteredDonor ? "Vinculado" : "Nao vinculado"}
+                  </span>
+                  {item.sourceType ? (
+                    <p className="text-xs text-[var(--muted)]">
+                      {item.sourceType === "holder" ? "Titular" : "Auxiliar"}
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <p className="text-sm text-[var(--muted)]">Meses</p>
@@ -770,6 +857,16 @@ export default function Imports() {
                 </div>
               </div>
             ))}
+
+            <PaginationControls
+              endItem={cpfSummaryPagination.endItem}
+              onPageChange={cpfSummaryPagination.setPage}
+              onPageSizeChange={cpfSummaryPagination.handlePageSizeChange}
+              page={cpfSummaryPagination.page}
+              pageSize={cpfSummaryPagination.pageSize}
+              totalItems={cpfSummaryPagination.totalItems}
+              totalPages={cpfSummaryPagination.totalPages}
+            />
           </div>
         )}
       </SectionCard>
@@ -777,7 +874,7 @@ export default function Imports() {
       {selectedCpfSummaryDetails ? (
         <Modal
           title="Meses e arquivos do CPF"
-          description={`${formatCpf(selectedCpfSummaryDetails.cpf)} • ${selectedCpfSummaryDetails.donorName || "CPF ainda nao cadastrado"}`}
+          description={`${formatCpf(selectedCpfSummaryDetails.cpf)} • ${selectedCpfSummaryDetails.sourceName || "CPF ainda nao vinculado"}`}
           onClose={() => setSelectedCpfSummaryDetails(null)}
           size="lg"
         >
@@ -802,6 +899,34 @@ export default function Imports() {
                 </p>
               </div>
             </div>
+
+            {selectedCpfSummaryDetails.isRegisteredDonor ? (
+              <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
+                <p>
+                  Este CPF está vinculado a{" "}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openDonorProfile(selectedCpfSummaryDetails.matchedDonorId)
+                    }
+                    className="font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                  >
+                    {selectedCpfSummaryDetails.sourceName}
+                  </button>
+                  {" "}e o abatimento é direcionado para o titular{" "}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openDonorProfile(selectedCpfSummaryDetails.matchedDonorId)
+                    }
+                    className="font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                  >
+                    {selectedCpfSummaryDetails.donorName}
+                  </button>
+                  .
+                </p>
+              </div>
+            ) : null}
 
             <div className="space-y-3">
               {selectedCpfSummaryDetails.appearances.map((appearance) => (
