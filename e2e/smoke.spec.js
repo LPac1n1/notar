@@ -36,7 +36,7 @@ test("main flow smoke test", async ({ page }) => {
   await page.getByRole("button", { name: "Adicionar doador" }).click();
   donorDialog = page.getByRole("dialog", { name: "Adicionar doador" });
   await selectOption(page, donorDialog, "donorType", "Auxiliar");
-  await selectOption(page, donorDialog, "holderDonorId", "MARIA SILVA");
+  await selectOption(page, donorDialog, "holderPersonId", /MARIA SILVA/);
   await donorDialog.locator('input[name="name"]').fill("Joao Auxiliar");
   await donorDialog.getByPlaceholder("CPF", { exact: true }).fill("98765432100");
   await donorDialog.locator('input[name="donationStartDate"]').fill("01/2026");
@@ -60,7 +60,7 @@ test("main flow smoke test", async ({ page }) => {
   await page.getByRole("button", { name: "Processar importação" }).click();
   await expect(page.getByText("nfp-sample.csv")).toBeVisible();
   await expect(page.getByRole("button", { name: "JOAO AUXILIAR" }).first()).toBeVisible();
-  await expect(page.getByText("Doador vinculado:").first()).toBeVisible();
+  await expect(page.getByText("Vinculado a: MARIA SILVA").first()).toBeVisible();
 
   await page.getByRole("link", { name: "Gestão Mensal" }).click();
   const monthlySection = page
@@ -94,7 +94,12 @@ test("old auxiliary donor model is migrated from backup", async ({ page }) => {
   await page.getByRole("link", { name: "Doadores" }).click();
   await expect(page.getByRole("button", { name: "MARIA SILVA" })).toBeVisible();
   await expect(page.getByRole("button", { name: "JOAO AUXILIAR" })).toBeVisible();
-  await expect(page.getByText("Vinculado informativamente a: MARIA SILVA")).toBeVisible();
+  const auxiliaryCard = page
+    .locator("li")
+    .filter({ has: page.getByRole("button", { name: "JOAO AUXILIAR" }) })
+    .first();
+  await expect(auxiliaryCard.getByText("Vinculado a")).toBeVisible();
+  await expect(auxiliaryCard.getByText("MARIA SILVA")).toBeVisible();
 
   await page.getByRole("link", { name: "Gestão Mensal" }).click();
   const monthlySection = page

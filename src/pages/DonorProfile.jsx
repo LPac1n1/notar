@@ -7,6 +7,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import StatusBadge from "../components/ui/StatusBadge";
+import { BackIcon } from "../components/ui/icons";
 import { getDonorProfile } from "../services/donorService";
 import { formatMonthYear } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
@@ -84,7 +85,11 @@ export default function DonorProfile() {
       <FeedbackMessage message={error} tone="error" />
 
       <div className="mb-6 flex flex-wrap gap-3">
-        <Button variant="subtle" onClick={() => navigate("/doadores")}>
+        <Button
+          variant="subtle"
+          onClick={() => navigate("/doadores")}
+          leftIcon={<BackIcon className="h-4 w-4" />}
+        >
           Voltar para doadores
         </Button>
       </div>
@@ -115,28 +120,51 @@ export default function DonorProfile() {
       </div>
 
       {donor.donorType === "auxiliary" ? (
-        <SectionCard title="Vínculo informativo" className="mb-6">
+        <SectionCard title="Vinculado a" className="mb-6">
           {donor.holderDonorId ? (
             <button
               type="button"
               onClick={() => navigate(`/doadores/${donor.holderDonorId}`)}
-              className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-elevated)] p-4 text-left text-[var(--text-main)] transition-colors hover:border-[var(--accent)]"
+              className="grid w-full gap-3 rounded-md border border-[var(--line-strong)] bg-[var(--surface-elevated)] p-4 text-left text-[var(--text-main)] transition-colors hover:border-[var(--accent)] md:grid-cols-[1fr_auto]"
             >
-              <p className="text-sm text-[var(--muted)]">Titular vinculado</p>
-              <p className="mt-1 font-semibold">{donor.holderName}</p>
-              <p className="text-sm text-[var(--muted)]">{donor.holderCpf}</p>
+              <div>
+                <p className="text-sm text-[var(--muted)]">Titular</p>
+                <p className="mt-1 font-semibold">{donor.holderName}</p>
+                <p className="text-sm text-[var(--muted)]">{donor.holderCpf}</p>
+              </div>
+              <div className="flex items-start md:justify-end">
+                <StatusBadge status="holder" />
+              </div>
             </button>
+          ) : donor.holderName ? (
+            <div className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_auto]">
+              <div>
+                <p className="text-sm text-[var(--muted)]">Pessoa vinculada</p>
+                <p className="mt-1 font-semibold text-[var(--text-main)]">
+                  {donor.holderName}
+                </p>
+                {donor.holderCpf ? (
+                  <p className="text-sm text-[var(--muted)]">{donor.holderCpf}</p>
+                ) : null}
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  Esta pessoa foi cadastrada apenas para referência e ainda não
+                  possui papel de doador ativo.
+                </p>
+              </div>
+              <div className="flex items-start md:justify-end">
+                <StatusBadge label="Pessoa de referência" tone="neutral" />
+              </div>
+            </div>
           ) : (
             <EmptyState
-              title="Sem titular vinculado"
-              description="Este auxiliar está cadastrado sem vínculo informativo com um titular."
+              title="Sem pessoa vinculada"
+              description="Este auxiliar está cadastrado sem vínculo informativo com outra pessoa."
             />
           )}
         </SectionCard>
       ) : (
         <SectionCard
           title="Auxiliares vinculados"
-          description="Estes auxiliares são apenas vínculos informativos. Cada um tem abatimento próprio."
           className="mb-6"
         >
           {profile.auxiliaryDonors.length === 0 ? (
@@ -151,7 +179,7 @@ export default function DonorProfile() {
                   key={auxiliary.id}
                   type="button"
                   onClick={() => navigate(`/doadores/${auxiliary.id}`)}
-                  className="flex w-full flex-col gap-1 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-left transition-colors hover:border-[var(--accent)] md:flex-row md:items-center md:justify-between"
+                  className="grid w-full gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-left transition-colors hover:border-[var(--accent)] md:grid-cols-[1fr_auto]"
                 >
                   <div>
                     <p className="font-semibold text-[var(--text-main)]">

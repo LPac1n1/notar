@@ -5,6 +5,8 @@ import {
   ImportIcon,
   MonthlyIcon,
   SettingsIcon,
+  TrashIcon,
+  UserIcon,
 } from "../ui/icons";
 
 export const NAV_ITEMS = [
@@ -28,6 +30,12 @@ export const NAV_ITEMS = [
     icon: DonorIcon,
   },
   {
+    to: "/pessoas",
+    label: "Pessoas",
+    description: "Referências, vínculos e papéis no sistema",
+    icon: UserIcon,
+  },
+  {
     to: "/mensal",
     label: "Gestão Mensal",
     description: "Apuração, abatimentos e pendências",
@@ -38,6 +46,12 @@ export const NAV_ITEMS = [
     label: "Importações",
     description: "Planilhas, conciliação e histórico",
     icon: ImportIcon,
+  },
+  {
+    to: "/lixeira",
+    label: "Lixeira",
+    description: "Itens removidos e restauração",
+    icon: TrashIcon,
   },
   {
     to: "/configuracoes",
@@ -54,4 +68,3 @@ export function getNavigationItem(pathname) {
 
   return NAV_ITEMS.find((item) => item.to !== "/" && pathname.startsWith(item.to)) ?? NAV_ITEMS[0];
 }
-

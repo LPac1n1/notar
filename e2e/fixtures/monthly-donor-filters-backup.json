@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "exportedAt": "2026-04-23T18:00:00.000Z",
+  "data": {
+    "demands": [
+      {
+        "id": "demanda-teste",
+        "name": "DEMANDA TESTE",
+        "is_active": true,
+        "created_at": "2026-01-01 00:00:00",
+        "updated_at": "2026-01-01 00:00:00"
+      }
+    ],
+    "donors": [
+      {
+        "id": "holder-1",
+        "name": "MARIA SILVA",
+        "cpf": "123.456.789-09",
+        "demand": "DEMANDA TESTE",
+        "donation_start_date": "2026-01-01",
+        "is_active": true,
+        "created_at": "2026-01-01 00:00:00",
+        "updated_at": "2026-01-01 00:00:00"
+      },
+      {
+        "id": "holder-2",
+        "name": "CARLOS SOUZA",
+        "cpf": "987.654.321-00",
+        "demand": "DEMANDA TESTE",
+        "donation_start_date": "2026-01-01",
+        "is_active": true,
+        "created_at": "2026-01-01 00:00:00",
+        "updated_at": "2026-01-01 00:00:00"
+      }
+    ],
+    "donorCpfLinks": [
+      {
+        "id": "holder-1-titular",
+        "donor_id": "holder-1",
+        "name": "MARIA SILVA",
+        "cpf": "123.456.789-09",
+        "donation_start_date": "2026-01-01",
+        "link_type": "holder",
+        "is_active": true,
+        "created_at": "2026-01-01 00:00:00",
+        "updated_at": "2026-01-01 00:00:00"
+      },
+      {
+        "id": "holder-2-titular",
+        "donor_id": "holder-2",
+        "name": "CARLOS SOUZA",
+        "cpf": "987.654.321-00",
+        "donation_start_date": "2026-01-01",
+        "link_type": "holder",
+        "is_active": true,
+        "created_at": "2026-01-01 00:00:00",
+        "updated_at": "2026-01-01 00:00:00"
+      }
+    ],
+    "imports": [
+      {
+        "id": "import-1",
+        "reference_month": "2026-03-01",
+        "file_name": "doadores-mensal.csv",
+        "value_per_note": 0.5,
+        "total_rows": 2,
+        "matched_rows": 2,
+        "matched_donors": 1,
+        "status": "processed",
+        "notes": "",
+        "imported_at": "2026-03-10 10:00:00",
+        "updated_at": "2026-03-10 10:00:00"
+      }
+    ],
+    "importCpfSummary": [
+      {
+        "id": "summary-holder-1",
+        "import_id": "import-1",
+        "reference_month": "2026-03-01",
+        "cpf": "12345678909",
+        "notes_count": 2,
+        "matched_donor_id": "holder-1",
+        "matched_source_id": "holder-1-titular",
+        "is_registered_donor": true,
+        "created_at": "2026-03-10 10:00:00",
+        "updated_at": "2026-03-10 10:00:00"
+      }
+    ],
+    "monthlyDonorSummary": [
+      {
+        "id": "monthly-holder-1",
+        "import_id": "import-1",
+        "donor_id": "holder-1",
+        "reference_month": "2026-03-01",
+        "cpf": "12345678909",
+        "donor_name": "MARIA SILVA",
+        "demand": "DEMANDA TESTE",
+        "notes_count": 2,
+        "value_per_note": 0.5,
+        "abatement_amount": 1.0,
+        "abatement_status": "pending",
+        "abatement_marked_at": null,
+        "created_at": "2026-03-10 10:00:00",
+        "updated_at": "2026-03-10 10:00:00"
+      }
+    ],
+    "trashItems": []
+  }
+}

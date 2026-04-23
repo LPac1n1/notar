@@ -1,4 +1,5 @@
 import { Children, useCallback, useEffect, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -6,6 +7,14 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
+import {
+  DemandIcon,
+  DonorIcon,
+  ImportIcon,
+  MonthlyIcon,
+  SearchIcon,
+  WarningIcon,
+} from "../components/ui/icons";
 import { getDashboardOverview } from "../services/dashboardService";
 import { formatCpf } from "../utils/cpf";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
@@ -46,23 +55,6 @@ function DetailList({ children, emptyMessage = "Nenhum detalhe disponível." }) 
     <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
       {emptyMessage}
     </div>
-  );
-}
-
-function ModalIcon({ children }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {children}
-    </svg>
   );
 }
 
@@ -113,29 +105,20 @@ export default function Dashboard() {
   };
   const latestMonth = dashboard?.latestMonth ?? null;
   const inconsistencies = dashboard?.inconsistencies ?? {
-    unregisteredCpfCount: 0,
     donationStartConflictCount: 0,
     donorWithoutDemandCount: 0,
     donorWithoutStartDateCount: 0,
-    importsWithoutMatchesCount: 0,
     emptyImportCount: 0,
-    importsWithManyUnregisteredCount: 0,
-    unregisteredCpfSamples: [],
     donationStartConflictSamples: [],
     donorWithoutDemandSamples: [],
     donorWithoutStartDateSamples: [],
-    importsWithoutMatchesSamples: [],
     emptyImportSamples: [],
-    importsWithManyUnregisteredSamples: [],
   };
   const totalInconsistencyCount =
-    inconsistencies.unregisteredCpfCount +
     inconsistencies.donationStartConflictCount +
     inconsistencies.donorWithoutDemandCount +
     inconsistencies.donorWithoutStartDateCount +
-    inconsistencies.importsWithoutMatchesCount +
-    inconsistencies.emptyImportCount +
-    inconsistencies.importsWithManyUnregisteredCount;
+    inconsistencies.emptyImportCount;
   const hasAnyData =
     totals.donorCount > 0 ||
     totals.demandCount > 0 ||
@@ -152,14 +135,7 @@ export default function Dashboard() {
         <Modal
           title="Doadores ativos"
           description={`${formatInteger(totals.donorCount)} doador(es) ativo(s) no sistema.`}
-          icon={(
-            <ModalIcon>
-              <path d="M16 21v-1.5A3.5 3.5 0 0 0 12.5 16H7.5A3.5 3.5 0 0 0 4 19.5V21" />
-              <circle cx="10" cy="8" r="3" />
-              <path d="M19 8v6" />
-              <path d="M22 11h-6" />
-            </ModalIcon>
-          )}
+          icon={<DonorIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
           size="lg"
         >
@@ -194,13 +170,7 @@ export default function Dashboard() {
         <Modal
           title="Demandas ativas"
           description={`${formatInteger(totals.demandCount)} demanda(s) ativa(s) no sistema.`}
-          icon={(
-            <ModalIcon>
-              <path d="M4 6.5h16" />
-              <path d="M4 12h16" />
-              <path d="M4 17.5h10" />
-            </ModalIcon>
-          )}
+          icon={<DemandIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
           size="sm"
         >
@@ -226,13 +196,7 @@ export default function Dashboard() {
         <Modal
           title="Importações processadas"
           description={`${formatInteger(totals.importCount)} importação(ões) no total, com ${formatInteger(totals.processedImportCount)} processada(s).`}
-          icon={(
-            <ModalIcon>
-              <path d="M12 3v12" />
-              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
-              <path d="M5 19h14" />
-            </ModalIcon>
-          )}
+          icon={<ImportIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
           size="lg"
         >
@@ -249,7 +213,7 @@ export default function Dashboard() {
                   {item.fileName}
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatInteger(item.matchedRows)} linha(s) compatíveis • {formatInteger(item.matchedDonors)} doador(es)
+                  {formatInteger(item.matchedRows)} linha(s) compatíveis • {formatInteger(item.matchedDonors)} doador(es) que doaram
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Valor por nota: {formatCurrency(item.valuePerNote)}
@@ -266,14 +230,7 @@ export default function Dashboard() {
         <Modal
           title={`Último mês importado: ${formatMonthYear(latestMonth.referenceMonth)}`}
           description="Resumo consolidado do mês mais recente processado."
-          icon={(
-            <ModalIcon>
-              <rect x="4" y="5" width="16" height="15" rx="2" />
-              <path d="M8 3v4" />
-              <path d="M16 3v4" />
-              <path d="M4 10h16" />
-            </ModalIcon>
-          )}
+          icon={<MonthlyIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
           size="xl"
         >
@@ -329,12 +286,7 @@ export default function Dashboard() {
         <Modal
           title="Abatimentos pendentes"
           description={`Itens pendentes em ${formatMonthYear(latestMonth.referenceMonth)}.`}
-          icon={(
-            <ModalIcon>
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7.5v5l3 1.5" />
-            </ModalIcon>
-          )}
+          icon={<WarningIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
           size="lg"
         >
@@ -369,14 +321,7 @@ export default function Dashboard() {
         <Modal
           title="CPFs não cadastrados no último mês"
           description={`CPFs encontrados em ${formatMonthYear(latestMonth.referenceMonth)} sem doador correspondente.`}
-          icon={(
-            <ModalIcon>
-              <circle cx="10" cy="9" r="3" />
-              <path d="M4.5 19a5.5 5.5 0 0 1 11 0" />
-              <path d="M18 8v6" />
-              <path d="M21 11h-6" />
-            </ModalIcon>
-          )}
+          icon={<SearchIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
           size="xl"
         >
@@ -399,56 +344,12 @@ export default function Dashboard() {
       );
     }
 
-    if (activeModal === "inconsistency-unregistered") {
-      return (
-        <Modal
-          title="CPFs não cadastrados"
-          description="CPFs encontrados em importações, mas ainda sem doador cadastrado."
-          icon={(
-            <ModalIcon>
-              <circle cx="10" cy="9" r="3" />
-              <path d="M4.5 19a5.5 5.5 0 0 1 11 0" />
-              <path d="M18 8v6" />
-              <path d="M21 11h-6" />
-            </ModalIcon>
-          )}
-          onClose={() => setActiveModal("")}
-          size="xl"
-        >
-          <DetailList emptyMessage="Nenhum CPF não cadastrado encontrado.">
-            <div className="grid gap-3 md:grid-cols-2">
-              {inconsistencies.unregisteredCpfSamples.map((item) => (
-                <div
-                  key={`${item.cpf}-${item.latestReferenceMonth}`}
-                  className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-                >
-                  <p className="font-medium text-[var(--text-main)]">{formatCpf(item.cpf)}</p>
-                  <p className="mt-1 text-sm text-[var(--muted)]">
-                    {formatInteger(item.totalNotes)} nota(s) em {formatInteger(item.monthCount)} mês(es)
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted)]">
-                    Último registro em {formatMonthYear(item.latestReferenceMonth)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </DetailList>
-        </Modal>
-      );
-    }
-
     if (activeModal === "inconsistency-before-start") {
       return (
         <Modal
           title="Doações antes do início cadastrado"
           description="Casos em que um CPF vinculado apareceu antes do mês de início informado."
-          icon={(
-            <ModalIcon>
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 8v4.5" />
-              <path d="M12 16h.01" />
-            </ModalIcon>
-          )}
+          icon={<WarningIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
         >
           <DetailList emptyMessage="Nenhuma inconsistência desse tipo encontrada.">
@@ -483,15 +384,7 @@ export default function Dashboard() {
         <Modal
           title="Doadores sem demanda"
           description="Cadastros ativos que ainda não têm demanda vinculada."
-          icon={(
-            <ModalIcon>
-              <path d="M4 7.5h16" />
-              <path d="M4 12h9" />
-              <path d="M4 16.5h7" />
-              <path d="M18 10v6" />
-              <path d="M21 13h-6" />
-            </ModalIcon>
-          )}
+          icon={<DemandIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
         >
           <DetailList emptyMessage="Nenhum doador sem demanda encontrado.">
@@ -520,14 +413,7 @@ export default function Dashboard() {
         <Modal
           title="Doadores sem início das doações"
           description="CPFs vinculados que ainda não têm mês de início informado."
-          icon={(
-            <ModalIcon>
-              <rect x="4" y="5" width="16" height="15" rx="2" />
-              <path d="M8 3v4" />
-              <path d="M16 3v4" />
-              <path d="M12 12h.01" />
-            </ModalIcon>
-          )}
+          icon={<MonthlyIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
         >
           <DetailList emptyMessage="Nenhum doador sem início encontrado.">
@@ -558,54 +444,12 @@ export default function Dashboard() {
       );
     }
 
-    if (activeModal === "inconsistency-imports-without-matches") {
-      return (
-        <Modal
-          title="Importações sem doadores conciliados"
-          description="Planilhas processadas que não encontraram nenhum doador ativo compatível."
-          icon={(
-            <ModalIcon>
-              <path d="M12 3v12" />
-              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
-              <path d="M5 19h14" />
-              <path d="M17 8l4 4" />
-            </ModalIcon>
-          )}
-          onClose={() => setActiveModal("")}
-        >
-          <DetailList emptyMessage="Nenhuma importação sem conciliação encontrada.">
-            {inconsistencies.importsWithoutMatchesSamples.map((item) => (
-              <div
-                key={item.importId}
-                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-              >
-                <p className="font-medium text-[var(--text-main)]">
-                  {formatMonthYear(item.referenceMonth)}
-                </p>
-                <p className="mt-1 break-all text-sm text-[var(--muted)]">{item.fileName}</p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatInteger(item.matchedRows)} linha(s) compatíveis • {formatInteger(item.matchedDonors)} doador(es)
-                </p>
-              </div>
-            ))}
-          </DetailList>
-        </Modal>
-      );
-    }
-
     if (activeModal === "inconsistency-empty-imports") {
       return (
         <Modal
           title="Importações vazias"
           description="Planilhas processadas sem nenhuma linha consolidada. Vale conferir se o arquivo, aba ou coluna de CPF estavam corretos."
-          icon={(
-            <ModalIcon>
-              <path d="M12 3v12" />
-              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
-              <path d="M5 19h14" />
-              <path d="M8 7h8" />
-            </ModalIcon>
-          )}
+          icon={<ImportIcon className="h-5 w-5" />}
           onClose={() => setActiveModal("")}
         >
           <DetailList emptyMessage="Nenhuma importação vazia encontrada.">
@@ -630,45 +474,6 @@ export default function Dashboard() {
       );
     }
 
-    if (activeModal === "inconsistency-many-unregistered") {
-      return (
-        <Modal
-          title="Muitos CPFs não vinculados"
-          description="Importações com volume alto de CPFs sem vínculo. Isso pode indicar uma planilha nova, cadastros faltando ou coluna errada."
-          icon={(
-            <ModalIcon>
-              <circle cx="10" cy="9" r="3" />
-              <path d="M4.5 19a5.5 5.5 0 0 1 11 0" />
-              <path d="M18 8v6" />
-              <path d="M21 11h-6" />
-            </ModalIcon>
-          )}
-          onClose={() => setActiveModal("")}
-          size="lg"
-        >
-          <DetailList emptyMessage="Nenhuma importação com muitos CPFs não vinculados encontrada.">
-            {inconsistencies.importsWithManyUnregisteredSamples.map((item) => (
-              <div
-                key={item.importId}
-                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-              >
-                <p className="font-medium text-[var(--text-main)]">
-                  {formatMonthYear(item.referenceMonth)}
-                </p>
-                <p className="mt-1 break-all text-sm text-[var(--muted)]">
-                  {item.fileName}
-                </p>
-                <p className="mt-1 text-sm text-[var(--warning)]">
-                  {formatInteger(item.unregisteredCpfCount)} de{" "}
-                  {formatInteger(item.cpfCount)} CPF(s) ainda não estão vinculados.
-                </p>
-              </div>
-            ))}
-          </DetailList>
-        </Modal>
-      );
-    }
-
     return null;
   };
 
@@ -676,7 +481,7 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Indicadores e pontos de revisão."
+        subtitle="Visão geral do sistema."
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
@@ -693,13 +498,13 @@ export default function Dashboard() {
         <MetricCard
           label="Doadores ativos"
           value={formatInteger(totals.donorCount)}
-          helper="Pessoas cadastradas para participar dos abatimentos."
+          helper="Cadastros ativos no sistema."
           onClick={() => setActiveModal("active-donors")}
         />
         <MetricCard
           label="Demandas ativas"
           value={formatInteger(totals.demandCount)}
-          helper="Grupos atualmente disponíveis no sistema."
+          helper="Demandas com cadastro ativo."
           onClick={() => setActiveModal("active-demands")}
         />
         <MetricCard
@@ -714,7 +519,7 @@ export default function Dashboard() {
           helper={
             latestMonth
               ? `${formatInteger(latestMonth.donorCount)} doador(es) conciliados.`
-              : "Nenhuma planilha processada ainda."
+              : "Aguardando primeira planilha."
           }
           onClick={latestMonth ? () => setActiveModal("latest-month") : undefined}
         />
@@ -736,13 +541,7 @@ export default function Dashboard() {
                 Nenhum ponto importante de revisão foi encontrado com os dados atuais.
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
-                <MetricCard
-                  label="CPFs não cadastrados"
-                  value={formatInteger(inconsistencies.unregisteredCpfCount)}
-                  helper="CPFs encontrados em importações, mas ainda sem doador cadastrado."
-                  onClick={() => setActiveModal("inconsistency-unregistered")}
-                />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                   label="Antes do início"
                   value={formatInteger(
@@ -766,28 +565,10 @@ export default function Dashboard() {
                   onClick={() => setActiveModal("inconsistency-without-start")}
                 />
                 <MetricCard
-                  label="Importações sem conciliação"
-                  value={formatInteger(
-                    inconsistencies.importsWithoutMatchesCount,
-                  )}
-                  helper="Planilhas processadas que não encontraram nenhum doador."
-                  onClick={() =>
-                    setActiveModal("inconsistency-imports-without-matches")
-                  }
-                />
-                <MetricCard
                   label="Importações vazias"
                   value={formatInteger(inconsistencies.emptyImportCount)}
                   helper="Planilhas processadas sem linhas válidas consolidadas."
                   onClick={() => setActiveModal("inconsistency-empty-imports")}
-                />
-                <MetricCard
-                  label="Muitos não vinculados"
-                  value={formatInteger(
-                    inconsistencies.importsWithManyUnregisteredCount,
-                  )}
-                  helper="Importações com proporção alta de CPFs sem vínculo."
-                  onClick={() => setActiveModal("inconsistency-many-unregistered")}
                 />
               </div>
             )}
@@ -911,7 +692,6 @@ export default function Dashboard() {
 
             <SectionCard
               title="Demandas no último mês"
-              description="Distribuição dos abatimentos por demanda no mês mais recente."
             >
               {dashboard?.demandBreakdown?.length ? (
                 <div className="space-y-3">
@@ -936,10 +716,10 @@ export default function Dashboard() {
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-                        <span className="rounded-md border border-[var(--line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--warning)]">
+                        <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-2 py-1 text-[var(--warning)]">
                           {formatInteger(item.pendingCount)} pendente(s)
                         </span>
-                        <span className="rounded-md border border-[var(--line)] bg-[color:var(--accent-soft)] px-2 py-1 text-[var(--success)]">
+                        <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--success)]">
                           {formatInteger(item.appliedCount)} realizado(s)
                         </span>
                       </div>
@@ -999,7 +779,9 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {renderDashboardModal()}
+      <AnimatePresence mode="wait">
+        {renderDashboardModal()}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
-import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
+import {
+  BackupExportIcon,
+  BackupImportIcon,
+  FolderOpenIcon,
+  StorageIcon,
+} from "../components/ui/icons";
 import {
   createDatabaseFile,
   disconnectDatabaseFile,
@@ -15,11 +21,6 @@ import {
   importDatabaseBackup,
   openDatabaseFile,
 } from "../services/db";
-import {
-  deleteTrashItemPermanently,
-  listTrashItems,
-  restoreTrashItem,
-} from "../services/trashService";
 import { getErrorMessage } from "../utils/error";
 
 function formatBackupStats(stats = {}) {
@@ -42,9 +43,7 @@ export default function Settings() {
   const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [backupInputKey, setBackupInputKey] = useState(0);
   const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
-  const [trashItems, setTrashItems] = useState([]);
-  const [trashItemPendingPermanentDelete, setTrashItemPendingPermanentDelete] =
-    useState(null);
+  const isLoadingStorage = storageInfo === null && !error;
 
   useEffect(() => {
     let isMounted = true;
@@ -52,14 +51,10 @@ export default function Settings() {
     const loadSettings = async () => {
       try {
         setError("");
-        const [info, trashRows] = await Promise.all([
-          getDatabaseStorageInfo(),
-          listTrashItems(),
-        ]);
+        const info = await getDatabaseStorageInfo();
 
         if (isMounted) {
           setStorageInfo(info);
-          setTrashItems(trashRows);
         }
       } catch (storageError) {
         console.error(
@@ -85,11 +80,6 @@ export default function Settings() {
   const refreshStorageInfo = async () => {
     const info = await getDatabaseStorageInfo();
     setStorageInfo(info);
-  };
-
-  const refreshTrashItems = async () => {
-    const trashRows = await listTrashItems();
-    setTrashItems(trashRows);
   };
 
   const handleCreateFile = async () => {
@@ -222,7 +212,6 @@ export default function Settings() {
 
       const result = await importDatabaseBackup(selectedBackupFile);
       setStorageInfo(result.storageInfo);
-      await refreshTrashItems();
       resetBackupFileSelection();
       setIsImportBackupConfirmOpen(false);
       setSuccessMessage(
@@ -240,69 +229,11 @@ export default function Settings() {
     }
   };
 
-  const handleRestoreTrashItem = async (item) => {
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      await restoreTrashItem(item.id);
-      await refreshTrashItems();
-      setSuccessMessage(`${item.label} foi restaurado com sucesso.`);
-    } catch (trashError) {
-      setError(
-        getErrorMessage(trashError, "Nao foi possivel restaurar o item."),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePermanentDeleteTrashItem = async () => {
-    if (!trashItemPendingPermanentDelete) {
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      await deleteTrashItemPermanently(trashItemPendingPermanentDelete.id);
-      await refreshTrashItems();
-      setTrashItemPendingPermanentDelete(null);
-      setSuccessMessage("Item removido permanentemente da lixeira.");
-    } catch (trashError) {
-      setError(
-        getErrorMessage(
-          trashError,
-          "Nao foi possivel excluir o item permanentemente.",
-        ),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (storageInfo === null && !error) {
-    return (
-      <div>
-        <PageHeader
-          title="Configurações"
-          subtitle="Arquivo de dados, backup e lixeira."
-          className="mb-6"
-        />
-        <LoadingScreen
-          title="Verificando o armazenamento"
-          description="Carregando opções de armazenamento."
-        />
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
         title="Configurações"
-        subtitle="Arquivo de dados, backup e lixeira."
+        subtitle="Arquivo de dados e backup."
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
@@ -312,7 +243,13 @@ export default function Settings() {
         title="Armazenamento local"
         className="mb-6"
       >
-        {storageInfo ? (
+        {isLoadingStorage ? (
+          <LoadingScreen
+            compact
+            title="Verificando o armazenamento"
+            description="Carregando opções de armazenamento."
+          />
+        ) : storageInfo ? (
           <div className="space-y-3">
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
               <p className="text-sm text-[var(--muted)]">Status</p>
@@ -345,7 +282,11 @@ export default function Settings() {
             />
 
             <div className="flex flex-col gap-3 pt-2 md:flex-row">
-              <Button onClick={handleCreateFile} disabled={isSubmitting}>
+              <Button
+                onClick={handleCreateFile}
+                disabled={isSubmitting}
+                leftIcon={<StorageIcon className="h-4 w-4" />}
+              >
                 Criar arquivo de dados
               </Button>
 
@@ -353,6 +294,7 @@ export default function Settings() {
                 variant="subtle"
                 onClick={handleOpenFile}
                 disabled={isSubmitting}
+                leftIcon={<FolderOpenIcon className="h-4 w-4" />}
               >
                 Abrir arquivo existente
               </Button>
@@ -380,7 +322,11 @@ export default function Settings() {
       >
         <div className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <Button onClick={handleExportBackup} disabled={isSubmitting}>
+            <Button
+              onClick={handleExportBackup}
+              disabled={isSubmitting}
+              leftIcon={<BackupExportIcon className="h-4 w-4" />}
+            >
               Salvar backup
             </Button>
             <p className="text-sm text-[var(--muted)]">
@@ -411,6 +357,7 @@ export default function Settings() {
                 variant="subtle"
                 onClick={() => setIsImportBackupConfirmOpen(true)}
                 disabled={isSubmitting || !selectedBackupFile}
+                leftIcon={<BackupImportIcon className="h-4 w-4" />}
               >
                 Importar backup
               </Button>
@@ -428,74 +375,19 @@ export default function Settings() {
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Lixeira"
-        description="Itens removidos que ainda podem ser restaurados."
-        className="mb-6"
-      >
-        {trashItems.length === 0 ? (
-          <EmptyState
-            title="Lixeira vazia"
-            description="Quando você remover doadores, demandas ou importações, eles aparecerão aqui."
+      <AnimatePresence>
+        {isImportBackupConfirmOpen ? (
+          <ConfirmModal
+            title="Restaurar backup"
+            description="Importar um backup vai substituir os dados atuais do sistema. Deseja continuar?"
+            confirmLabel="Restaurar backup"
+            isLoading={isSubmitting}
+            onCancel={() => setIsImportBackupConfirmOpen(false)}
+            onConfirm={handleImportBackup}
+            tone="danger"
           />
-        ) : (
-          <div className="space-y-3">
-            {trashItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <p className="font-semibold text-[var(--text-main)]">{item.label}</p>
-                  <p className="text-sm text-[var(--muted)]">
-                    Tipo: {item.entityType} • Removido em {item.deletedAt}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="subtle"
-                    onClick={() => handleRestoreTrashItem(item)}
-                    disabled={isSubmitting}
-                  >
-                    Restaurar
-                  </Button>
-                  <Button
-                    variant="danger"
-                    onClick={() => setTrashItemPendingPermanentDelete(item)}
-                    disabled={isSubmitting}
-                  >
-                    Excluir permanentemente
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      {isImportBackupConfirmOpen ? (
-        <ConfirmModal
-          title="Restaurar backup"
-          description="Importar um backup vai substituir os dados atuais do sistema. Deseja continuar?"
-          confirmLabel="Restaurar backup"
-          isLoading={isSubmitting}
-          onCancel={() => setIsImportBackupConfirmOpen(false)}
-          onConfirm={handleImportBackup}
-          tone="danger"
-        />
-      ) : null}
-
-      {trashItemPendingPermanentDelete ? (
-        <ConfirmModal
-          title="Excluir permanentemente"
-          description={`Esta ação remove ${trashItemPendingPermanentDelete.label} da lixeira e não poderá ser desfeita.`}
-          confirmLabel="Excluir permanentemente"
-          isLoading={isSubmitting}
-          onCancel={() => setTrashItemPendingPermanentDelete(null)}
-          onConfirm={handlePermanentDeleteTrashItem}
-          tone="danger"
-        />
-      ) : null}
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

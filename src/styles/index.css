@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #09070d;
+  --app-bg: #0f1319;
   --surface: #12151c;
   --surface-strong: #151920;
   --surface-muted: #23262e;
@@ -40,6 +40,7 @@ body,
 
 html {
   background: var(--app-bg);
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -68,103 +69,8 @@ textarea {
   -webkit-user-select: text;
 }
 
-@keyframes modal-overlay-fade {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes modal-panel-enter {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.modal-backdrop {
-  animation: modal-overlay-fade 0.18s ease-out;
-}
-
-.modal-panel {
-  animation: modal-panel-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-  transform-origin: top center;
-}
-
-.page-shell-enter {
-  animation: page-shell-enter 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.notar-shimmer {
-  position: relative;
-  overflow: hidden;
-}
-
-.notar-shimmer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.75) 50%,
-    transparent 100%
-  );
-  animation: notar-shimmer 1.45s ease-in-out infinite;
-}
-
-.notar-loading-ring {
-  animation: notar-loading-ring 2.1s linear infinite;
-}
-
-.notar-loading-ring-delayed {
-  animation-duration: 2.8s;
-  animation-direction: reverse;
-}
-
-@keyframes page-shell-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes notar-shimmer {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes notar-loading-ring {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .modal-backdrop,
-  .modal-panel,
-  .page-shell-enter,
-  .notar-loading-ring,
-  .notar-shimmer::after {
-    animation: none;
+  html {
+    scroll-behavior: auto;
   }
 }

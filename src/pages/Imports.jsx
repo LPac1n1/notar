@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -13,6 +14,11 @@ import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
 import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
+import {
+  DownloadIcon,
+  PlusIcon,
+  TrashIcon,
+} from "../components/ui/icons";
 import { releaseRegisteredFile } from "../services/db";
 import {
   exportImportCpfSummaryCsv,
@@ -444,129 +450,134 @@ export default function Imports() {
       <FeedbackMessage message={successMessage} tone="success" />
 
       <div className="mb-6">
-        <Button onClick={() => setIsImportModalOpen(true)}>
+        <Button
+          onClick={() => setIsImportModalOpen(true)}
+          leftIcon={<PlusIcon className="h-4 w-4" />}
+        >
           Nova importação
         </Button>
       </div>
 
-      {isImportModalOpen ? (
-        <Modal
-          title="Nova importação"
-          description="CSV, TXT ou XLSX da Nota Fiscal Paulista."
-          onClose={handleCloseImportModal}
-          size="xl"
-        >
-        <div className="mb-5 grid gap-3 md:grid-cols-4">
-          <TextInput
-            key={fileInputKey}
-            type="file"
-            accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={handlePreviewImport}
-          />
-
-          <MonthInput
-            name="referenceMonth"
-            value={uploadForm.referenceMonth}
-            onChange={handleUploadChange}
-          />
-
-          <TextInput
-            type="number"
-            name="valuePerNote"
-            min="0.01"
-            step="0.01"
-            placeholder="Valor por nota (R$)"
-            value={uploadForm.valuePerNote}
-            onChange={handleUploadChange}
-          />
-
-          <SelectInput
-            name="cpfColumn"
-            value={uploadForm.cpfColumn}
-            onChange={handleUploadChange}
-            options={previewColumnOptions}
-            placeholder="Selecione a coluna de CPF"
-            searchable={previewColumnOptions.length > 8}
-            searchPlaceholder="Buscar coluna..."
-            disabled={!previewData}
-          />
-        </div>
-
-        <Button
-          onClick={handleProcessImport}
-          disabled={isImporting || !previewData || !uploadForm.valuePerNote}
-        >
-          {isImporting ? "Processando..." : "Processar importação"}
-        </Button>
-
-        {previewData ? (
-          <div className="mt-6">
-            <h3 className="mb-3 font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
-              Pré-visualização
-            </h3>
-            <p className="mb-3 break-all text-sm text-[var(--muted)]">
-              Arquivo: {previewData.originalFileName}
-            </p>
-            {previewData.sourceType === "excel" ? (
-              <FeedbackMessage
-                tone="info"
-                message={
-                  previewData.worksheetCount > 1
-                    ? `Aba utilizada: ${previewData.worksheetName}. Por enquanto, o sistema usa apenas a primeira aba com dados do arquivo Excel.`
-                    : `Aba utilizada: ${previewData.worksheetName}.`
-                }
-                persistent
+      <AnimatePresence>
+        {isImportModalOpen ? (
+          <Modal
+            title="Nova importação"
+            description="CSV, TXT ou XLSX da Nota Fiscal Paulista."
+            onClose={handleCloseImportModal}
+            size="xl"
+          >
+            <div className="mb-5 grid gap-3 md:grid-cols-4">
+              <TextInput
+                key={fileInputKey}
+                type="file"
+                accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handlePreviewImport}
               />
-            ) : null}
-            {previewData.previewRows.length === 0 ? (
-              <EmptyState
-                title="Planilha sem linhas visíveis"
-                description="Confira se o arquivo possui cabeçalho e dados para importar."
+
+              <MonthInput
+                name="referenceMonth"
+                value={uploadForm.referenceMonth}
+                onChange={handleUploadChange}
               />
-            ) : (
-              <div className="overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface-elevated)]">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[color:var(--surface-muted)]">
-                    <tr>
-                      {previewData.columns.map((column) => (
-                        <th
-                          key={column}
-                          className="border-b border-[var(--line)] px-3 py-2 text-left font-medium text-[var(--text-soft)]"
-                        >
-                          {column}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewData.previewRows.map((row, index) => (
-                      <tr key={index} className="border-b border-[rgba(255,255,255,0.05)]">
-                        {previewData.columns.map((column) => (
-                          <td
-                            key={`${index}-${column}`}
-                            className="px-3 py-2 text-[var(--text-soft)]"
-                          >
-                            {String(row[column] ?? "")}
-                          </td>
+
+              <TextInput
+                type="number"
+                name="valuePerNote"
+                min="0.01"
+                step="0.01"
+                placeholder="Valor por nota (R$)"
+                value={uploadForm.valuePerNote}
+                onChange={handleUploadChange}
+              />
+
+              <SelectInput
+                name="cpfColumn"
+                value={uploadForm.cpfColumn}
+                onChange={handleUploadChange}
+                options={previewColumnOptions}
+                placeholder="Selecione a coluna de CPF"
+                searchable={previewColumnOptions.length > 8}
+                searchPlaceholder="Buscar coluna..."
+                disabled={!previewData}
+              />
+            </div>
+
+            <Button
+              onClick={handleProcessImport}
+              disabled={isImporting || !previewData || !uploadForm.valuePerNote}
+            >
+              {isImporting ? "Processando..." : "Processar importação"}
+            </Button>
+
+            {previewData ? (
+              <div className="mt-6">
+                <h3 className="mb-3 font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
+                  Pré-visualização
+                </h3>
+                <p className="mb-3 break-all text-sm text-[var(--muted)]">
+                  Arquivo: {previewData.originalFileName}
+                </p>
+                {previewData.sourceType === "excel" ? (
+                  <FeedbackMessage
+                    tone="info"
+                    message={
+                      previewData.worksheetCount > 1
+                        ? `Aba utilizada: ${previewData.worksheetName}.`
+                        : `Aba utilizada: ${previewData.worksheetName}.`
+                    }
+                    persistent
+                  />
+                ) : null}
+                {previewData.previewRows.length === 0 ? (
+                  <EmptyState
+                    title="Planilha sem linhas visíveis"
+                    description="Confira se o arquivo possui cabeçalho e dados para importar."
+                  />
+                ) : (
+                  <div className="overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface-elevated)]">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-[color:var(--surface-muted)]">
+                        <tr>
+                          {previewData.columns.map((column) => (
+                            <th
+                              key={column}
+                              className="border-b border-[var(--line)] px-3 py-2 text-left font-medium text-[var(--text-soft)]"
+                            >
+                              {column}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewData.previewRows.map((row, index) => (
+                          <tr key={index} className="border-b border-[rgba(255,255,255,0.05)]">
+                            {previewData.columns.map((column) => (
+                              <td
+                                key={`${index}-${column}`}
+                                className="px-3 py-2 text-[var(--text-soft)]"
+                              >
+                                {String(row[column] ?? "")}
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ) : isPreviewLoading ? (
-          <div className="mt-6">
-            <LoadingScreen
-              compact
-              title="Lendo a planilha"
-              description="Analisando colunas, detectando CPF e montando a pré-visualização."
-            />
-          </div>
+            ) : isPreviewLoading ? (
+              <div className="mt-6">
+                <LoadingScreen
+                  compact
+                  title="Lendo a planilha"
+                  description="Analisando colunas e montando a pré-visualização."
+                />
+              </div>
+            ) : null}
+          </Modal>
         ) : null}
-        </Modal>
-      ) : null}
+      </AnimatePresence>
 
       <SectionCard title="Histórico de importações" className="mb-8">
         <div className="mb-4 flex flex-wrap gap-3">
@@ -574,6 +585,7 @@ export default function Imports() {
             variant="subtle"
             onClick={handleExportImports}
             disabled={isExportingImports}
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
           >
             {isExportingImports ? "Exportando..." : "Exportar histórico CSV"}
           </Button>
@@ -678,7 +690,7 @@ export default function Imports() {
                   <p className="font-medium">{item.matchedRows}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[var(--muted)]">Doadores encontrados</p>
+                  <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
                   <p className="font-medium">{item.matchedDonors}</p>
                 </div>
                 <div className="md:col-span-6">
@@ -686,6 +698,7 @@ export default function Imports() {
                     variant="danger"
                     onClick={() => setImportPendingRemoval(item)}
                     disabled={deletingImportId === item.id}
+                    leftIcon={<TrashIcon className="h-4 w-4" />}
                   >
                     {deletingImportId === item.id
                       ? "Excluindo..."
@@ -714,6 +727,7 @@ export default function Imports() {
             variant="subtle"
             onClick={handleExportCpfSummary}
             disabled={isExportingCpfSummary}
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
           >
             {isExportingCpfSummary ? "Exportando..." : "Exportar CSV"}
           </Button>
@@ -820,39 +834,34 @@ export default function Imports() {
                       CPF ainda nao vinculado
                     </p>
                   )}
-                  <p className="text-sm text-[var(--muted)]">
-                    Doador vinculado:{" "}
-                    {item.isRegisteredDonor ? (
+                  {item.isRegisteredDonor ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => openDonorProfile(item.matchedDonorId)}
-                        className="font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                        className="text-sm font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
                       >
                         {item.donorName}
                       </button>
-                    ) : (
-                      "Nao informado"
-                    )}
-                  </p>
-                  {item.isRegisteredDonor ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <StatusBadge status={item.donorType} />
                       {item.donorType === "auxiliary" && item.holderName ? (
-                        <span className="text-xs font-medium text-[var(--text-soft)]">
-                          Titular informativo: {item.holderName}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
+                            Vinculado a: {item.holderName}
+                          </span>
+                          {!item.holderIsActiveDonor ? (
+                            <StatusBadge
+                              label="Pessoa de referência"
+                              tone="neutral"
+                            />
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
                   <p className="text-sm text-[var(--muted)]">
                     Demanda: {item.demand || "Nao informada"}
                   </p>
-                  {!item.isRegisteredDonor ? (
-                    <p className="mt-2 text-sm text-[var(--danger)]">
-                      Vincule este CPF a um titular para que ele entre
-                      automaticamente na gestão mensal.
-                    </p>
-                  ) : null}
                 </div>
                 <div>
                   <p className="text-sm text-[var(--muted)]">Total de notas</p>
@@ -905,88 +914,91 @@ export default function Imports() {
         )}
       </SectionCard>
 
-      {selectedCpfSummaryDetails ? (
-        <Modal
-          title="Meses e arquivos do CPF"
-          description={`${formatCpf(selectedCpfSummaryDetails.cpf)} • ${selectedCpfSummaryDetails.sourceName || "CPF ainda nao vinculado"}`}
-          onClose={() => setSelectedCpfSummaryDetails(null)}
-          size="lg"
-        >
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                <p className="text-sm text-[var(--muted)]">Total de notas</p>
-                <p className="mt-1 font-semibold text-[var(--text-main)]">
-                  {selectedCpfSummaryDetails.notesCount}
-                </p>
-              </div>
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                <p className="text-sm text-[var(--muted)]">Meses encontrados</p>
-                <p className="mt-1 font-semibold text-[var(--text-main)]">
-                  {selectedCpfSummaryDetails.monthCount}
-                </p>
-              </div>
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                <p className="text-sm text-[var(--muted)]">Demanda</p>
-                <p className="mt-1 font-semibold text-[var(--text-main)]">
-                  {selectedCpfSummaryDetails.demand || "Nao informada"}
-                </p>
-              </div>
-            </div>
-
-            {selectedCpfSummaryDetails.isRegisteredDonor ? (
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
-                <p>
-                  Este CPF está vinculado ao doador{" "}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openDonorProfile(selectedCpfSummaryDetails.matchedDonorId)
-                    }
-                    className="font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                  >
-                    {selectedCpfSummaryDetails.sourceName}
-                  </button>
-                  . O abatimento deste CPF fica separado neste próprio cadastro
-                  {selectedCpfSummaryDetails.holderName
-                    ? `, com vínculo informativo ao titular ${selectedCpfSummaryDetails.holderName}.`
-                    : "."}
-                </p>
-              </div>
-            ) : null}
-
-            <div className="space-y-3">
-              {selectedCpfSummaryDetails.appearances.map((appearance) => (
-                <div
-                  key={`${selectedCpfSummaryDetails.id}-${appearance.referenceMonth}`}
-                  className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-                >
-                  <p className="font-medium text-[var(--text-main)]">
-                    {formatMonthYear(appearance.referenceMonth)}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted)]">
-                    Notas no mês: {appearance.notesCount}
-                  </p>
-                  <p className="mt-2 break-all text-sm text-[var(--muted)]">
-                    Arquivo(s): {appearance.fileNames.join(", ")}
+      <AnimatePresence>
+        {selectedCpfSummaryDetails ? (
+          <Modal
+            title="Meses e arquivos do CPF"
+            description={`${formatCpf(selectedCpfSummaryDetails.cpf)} • ${selectedCpfSummaryDetails.sourceName || "CPF ainda nao vinculado"}`}
+            onClose={() => setSelectedCpfSummaryDetails(null)}
+            size="lg"
+          >
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                  <p className="text-sm text-[var(--muted)]">Total de notas</p>
+                  <p className="mt-1 font-semibold text-[var(--text-main)]">
+                    {selectedCpfSummaryDetails.notesCount}
                   </p>
                 </div>
-              ))}
-            </div>
-          </div>
-        </Modal>
-      ) : null}
+                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                  <p className="text-sm text-[var(--muted)]">Meses encontrados</p>
+                  <p className="mt-1 font-semibold text-[var(--text-main)]">
+                    {selectedCpfSummaryDetails.monthCount}
+                  </p>
+                </div>
+                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                  <p className="text-sm text-[var(--muted)]">Demanda</p>
+                  <p className="mt-1 font-semibold text-[var(--text-main)]">
+                    {selectedCpfSummaryDetails.demand || "Nao informada"}
+                  </p>
+                </div>
+              </div>
 
-      {importPendingRemoval ? (
-        <ConfirmModal
-          title="Excluir importação"
-          description={`Tem certeza de que deseja excluir a importação ${importPendingRemoval.fileName}? Ela ficará disponível na lixeira para restauração.`}
-          confirmLabel="Excluir importação"
-          isLoading={deletingImportId === importPendingRemoval.id}
-          onCancel={() => setImportPendingRemoval(null)}
-          onConfirm={handleDeleteImport}
-        />
-      ) : null}
+              {selectedCpfSummaryDetails.isRegisteredDonor ? (
+                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
+                  <p>
+                    Este CPF está vinculado ao doador{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openDonorProfile(selectedCpfSummaryDetails.matchedDonorId)
+                      }
+                      className="font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                    >
+                      {selectedCpfSummaryDetails.sourceName}
+                    </button>
+                    {selectedCpfSummaryDetails.holderName
+                      ? `, vinculado a ${selectedCpfSummaryDetails.holderName}${selectedCpfSummaryDetails.holderIsActiveDonor ? "." : " (pessoa de referência)."}`
+                      : "."}
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="space-y-3">
+                {selectedCpfSummaryDetails.appearances.map((appearance) => (
+                  <div
+                    key={`${selectedCpfSummaryDetails.id}-${appearance.referenceMonth}`}
+                    className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                  >
+                    <p className="font-medium text-[var(--text-main)]">
+                      {formatMonthYear(appearance.referenceMonth)}
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--muted)]">
+                      Notas no mês: {appearance.notesCount}
+                    </p>
+                    <p className="mt-2 break-all text-sm text-[var(--muted)]">
+                      Arquivo(s): {appearance.fileNames.join(", ")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Modal>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {importPendingRemoval ? (
+          <ConfirmModal
+            title="Excluir importação"
+            description={`Tem certeza de que deseja excluir a importação ${importPendingRemoval.fileName}? Ela ficará disponível na lixeira para restauração.`}
+            confirmLabel="Excluir importação"
+            isLoading={deletingImportId === importPendingRemoval.id}
+            onCancel={() => setImportPendingRemoval(null)}
+            onConfirm={handleDeleteImport}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

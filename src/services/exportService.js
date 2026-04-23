@@ -26,7 +26,7 @@ export async function exportDonorsCsv(filters = {}) {
       { key: "donorTypeLabel", label: "Tipo" },
       { key: "cpf", label: "CPF" },
       { key: "demand", label: "Demanda" },
-      { key: "holderName", label: "Titular vinculado" },
+      { key: "holderName", label: "Pessoa vinculada" },
       { key: "donationStartDate", label: "Inicio das doacoes" },
       { key: "isActive", label: "Ativo" },
     ],
@@ -47,6 +47,7 @@ export async function exportMonthlySummariesCsv(filters = {}) {
     [
       { key: "referenceMonth", label: "Mes de referencia" },
       { key: "donorName", label: "Doador" },
+      { key: "donationActivity", label: "Situação no mês" },
       { key: "cpf", label: "CPF" },
       { key: "demand", label: "Demanda" },
       { key: "notesCount", label: "Quantidade de notas" },
@@ -57,8 +58,15 @@ export async function exportMonthlySummariesCsv(filters = {}) {
     ],
     summaries.map((summary) => ({
       ...summary,
+      donationActivity: summary.hasDonationsInMonth
+        ? "Doou no mes"
+        : "Nao doou no mes",
       abatementStatus:
-        summary.abatementStatus === "applied" ? "Realizado" : "Pendente",
+        !summary.hasDonationsInMonth
+          ? "Sem doacoes no mes"
+          : summary.abatementStatus === "applied"
+            ? "Realizado"
+            : "Pendente",
     })),
   );
 
@@ -100,7 +108,7 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
       { key: "sourceName", label: "Doador do CPF" },
       { key: "donorName", label: "Doador vinculado" },
       { key: "donorType", label: "Tipo do doador" },
-      { key: "holderName", label: "Titular informativo" },
+      { key: "holderName", label: "Pessoa vinculada" },
       { key: "demand", label: "Demanda" },
       { key: "notesCount", label: "Total de notas" },
       { key: "monthCount", label: "Quantidade de meses" },
@@ -125,7 +133,7 @@ export async function exportImportsCsv(filters = {}) {
       { key: "valuePerNote", label: "Valor por nota" },
       { key: "totalRows", label: "Total de linhas" },
       { key: "matchedRows", label: "Linhas compativeis" },
-      { key: "matchedDonors", label: "Doadores encontrados" },
+      { key: "matchedDonors", label: "Doadores que doaram encontrados" },
       { key: "status", label: "Status" },
       { key: "importedAt", label: "Importado em" },
     ],

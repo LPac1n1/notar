@@ -9,7 +9,8 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { SearchIcon } from "./icons";
+import { AnimatePresence, motion as Motion } from "framer-motion";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 function normalizeOptions(options) {
   return options.map((option) => ({
@@ -254,91 +255,101 @@ export default function SelectInput({
           </span>
         </span>
         <span
-          className={`shrink-0 text-xs text-[var(--muted)] transition ${
+          className={`shrink-0 text-[var(--muted)] transition ${
             isMenuOpen ? "rotate-180" : ""
           }`}
         >
-          ▼
+          <ChevronDownIcon className="h-4 w-4" />
         </span>
       </button>
 
-      {isMenuOpen && typeof document !== "undefined"
+      {typeof document !== "undefined"
         ? createPortal(
-        <div
-          ref={menuRef}
-          style={menuStyle ?? undefined}
-          className="fixed z-[140] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_36px_-26px_rgba(0,0,0,0.58)]"
-        >
-          {searchable ? (
-            <div className="border-b border-[var(--line)] bg-[var(--surface-elevated)] p-2.5">
-              <div className="flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
-                <SearchIcon className="h-4 w-4 text-[var(--muted)]" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="w-full bg-transparent text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--muted)]"
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {filteredOptions.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-[var(--muted)]">
-              {emptyStateLabel}
-            </p>
-          ) : (
-            <ul
-              id={listboxId}
-              className="overflow-y-auto p-2"
-              style={{ maxHeight: menuStyle?.maxHeight ?? 260 }}
-              role="listbox"
+        <AnimatePresence>
+          {isMenuOpen ? (
+            <Motion.div
+              ref={menuRef}
+              style={menuStyle ?? undefined}
+              className="fixed z-[140] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_36px_-26px_rgba(0,0,0,0.58)]"
+              initial={{ opacity: 0, y: 8, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.99 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
             >
-              {filteredOptions.map((option) => {
-                const isSelected = option.value === String(value ?? "");
-                const optionToneTextClassName = {
-                  danger: "text-[var(--danger)]",
-                  success: "text-[var(--success)]",
-                  warning: "text-[var(--warning)]",
-                }[option.tone] ?? "";
-                const optionToneDotClassName = {
-                  danger: "bg-[color:var(--danger)]",
-                  success: "bg-[color:var(--success)]",
-                  warning: "bg-[color:var(--warning)]",
-                }[option.tone] ?? "";
+              {searchable ? (
+                <div className="border-b border-[var(--line)] bg-[var(--surface-elevated)] p-2.5">
+                  <div className="flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
+                    <SearchIcon className="h-4 w-4 text-[var(--muted)]" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder={searchPlaceholder}
+                      className="w-full bg-transparent text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--muted)]"
+                    />
+                  </div>
+                </div>
+              ) : null}
 
-                return (
-                  <li key={`${name || "select"}-${option.value || "empty"}`}>
-                    <button
-                      type="button"
-                      disabled={option.disabled}
-                      onClick={() => handleSelect(option.value)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
-                        option.disabled
-                          ? "cursor-not-allowed text-[var(--muted)]/60"
-                          : isSelected
-                            ? `${option.tone === "warning" ? "bg-[color:var(--accent-soft)] text-[var(--warning)]" : option.tone === "success" ? "bg-[color:var(--accent-2-soft)] text-[var(--success)]" : "bg-[var(--surface-muted)] text-[var(--text-main)]"}`
-                            : `${optionToneTextClassName || "text-[var(--text-soft)]"} hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)]`
-                      }`}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        {optionToneDotClassName ? (
-                          <span
-                            className={`h-2 w-2 shrink-0 rounded-full ${optionToneDotClassName}`}
-                          />
-                        ) : null}
-                        <span className="min-w-0 truncate">{option.label}</span>
-                      </span>
-                      {isSelected ? <span className="shrink-0">✓</span> : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>,
+              {filteredOptions.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-[var(--muted)]">
+                  {emptyStateLabel}
+                </p>
+              ) : (
+                <ul
+                  id={listboxId}
+                  className="overflow-y-auto p-2"
+                  style={{ maxHeight: menuStyle?.maxHeight ?? 260 }}
+                  role="listbox"
+                >
+                  {filteredOptions.map((option) => {
+                    const isSelected = option.value === String(value ?? "");
+                    const optionToneTextClassName = {
+                      danger: "text-[var(--danger)]",
+                      success: "text-[var(--success)]",
+                      warning: "text-[var(--warning)]",
+                    }[option.tone] ?? "";
+                    const optionToneDotClassName = {
+                      danger: "bg-[color:var(--danger)]",
+                      success: "bg-[color:var(--success)]",
+                      warning: "bg-[color:var(--warning)]",
+                    }[option.tone] ?? "";
+
+                    return (
+                      <li key={`${name || "select"}-${option.value || "empty"}`}>
+                        <button
+                          type="button"
+                          disabled={option.disabled}
+                          onClick={() => handleSelect(option.value)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
+                            option.disabled
+                              ? "cursor-not-allowed text-[var(--muted)]/60"
+                              : isSelected
+                                ? `${option.tone === "warning" ? "bg-[color:var(--accent-soft)] text-[var(--warning)]" : option.tone === "success" ? "bg-[color:var(--accent-2-soft)] text-[var(--success)]" : "bg-[var(--surface-muted)] text-[var(--text-main)]"}`
+                                : `${optionToneTextClassName || "text-[var(--text-soft)]"} hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)]`
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            {optionToneDotClassName ? (
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${optionToneDotClassName}`}
+                              />
+                            ) : null}
+                            <span className="min-w-0 truncate">{option.label}</span>
+                          </span>
+                          {isSelected ? (
+                            <CheckIcon className="h-4 w-4 shrink-0" />
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Motion.div>
+          ) : null}
+        </AnimatePresence>,
         document.body,
       ) : null}
     </div>

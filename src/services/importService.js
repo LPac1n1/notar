@@ -274,7 +274,10 @@ export async function listImportCpfSummary({
       donors.demand AS demand,
       donors.donor_type AS donor_type,
       donors.holder_donor_id,
-      holder_donors.name AS holder_name,
+      donors.holder_person_id,
+      coalesce(holder_people.name, holder_donors.name) AS holder_name,
+      coalesce(holder_people.cpf, holder_donors.cpf) AS holder_cpf,
+      holder_active_donors.id AS active_holder_donor_id,
       donor_cpf_links.name AS source_name,
       donor_cpf_links.link_type AS source_type
     FROM import_cpf_summary
@@ -284,6 +287,12 @@ export async function listImportCpfSummary({
       ON donors.id = import_cpf_summary.matched_donor_id
     LEFT JOIN donors AS holder_donors
       ON holder_donors.id = donors.holder_donor_id
+    LEFT JOIN people AS holder_people
+      ON holder_people.id = donors.holder_person_id
+    LEFT JOIN donors AS holder_active_donors
+      ON holder_active_donors.person_id = donors.holder_person_id
+      AND holder_active_donors.donor_type = 'holder'
+      AND holder_active_donors.is_active = TRUE
     LEFT JOIN donor_cpf_links
       ON donor_cpf_links.id = import_cpf_summary.matched_source_id
     ${whereClause}
@@ -308,8 +317,11 @@ export async function listImportCpfSummary({
         sourceName: row.source_name ?? "",
         sourceType: row.source_type ?? "",
         donorType: row.donor_type ?? "",
-        holderDonorId: row.holder_donor_id ?? "",
+        holderDonorId: row.active_holder_donor_id ?? row.holder_donor_id ?? "",
+        holderPersonId: row.holder_person_id ?? "",
         holderName: row.holder_name ?? "",
+        holderCpf: row.holder_cpf ?? "",
+        holderIsActiveDonor: Boolean(row.active_holder_donor_id),
         demand: row.demand ?? "",
         appearancesByMonth: new Map(),
       });
@@ -326,8 +338,12 @@ export async function listImportCpfSummary({
       currentSummary.sourceName = row.source_name ?? "";
       currentSummary.sourceType = row.source_type ?? "";
       currentSummary.donorType = row.donor_type ?? "";
-      currentSummary.holderDonorId = row.holder_donor_id ?? "";
+      currentSummary.holderDonorId =
+        row.active_holder_donor_id ?? row.holder_donor_id ?? "";
+      currentSummary.holderPersonId = row.holder_person_id ?? "";
       currentSummary.holderName = row.holder_name ?? "";
+      currentSummary.holderCpf = row.holder_cpf ?? "";
+      currentSummary.holderIsActiveDonor = Boolean(row.active_holder_donor_id);
       currentSummary.demand = row.demand ?? "";
     }
 
@@ -372,7 +388,10 @@ export async function listImportCpfSummary({
         sourceType: item.sourceType,
         donorType: item.donorType,
         holderDonorId: item.holderDonorId,
+        holderPersonId: item.holderPersonId,
         holderName: item.holderName,
+        holderCpf: item.holderCpf,
+        holderIsActiveDonor: item.holderIsActiveDonor,
         demand: item.demand,
         monthCount: appearances.length,
         appearances,

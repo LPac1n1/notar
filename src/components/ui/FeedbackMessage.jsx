@@ -1,40 +1,46 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import {
+  CloseIcon,
   ConnectedIcon,
   DisconnectedIcon,
-  SparkIcon,
+  InfoIcon,
   WarningIcon,
 } from "./icons";
 
 const TONE_STYLES = {
   error: {
     container:
-      "border-[color:var(--line)] bg-[color:var(--danger-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[color:var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
     bar: "bg-[color:var(--danger)]",
     button: "text-[color:var(--danger)] hover:bg-black/10",
     icon: WarningIcon,
+    iconWrap: "bg-[rgba(255,91,91,0.12)] text-[var(--danger)]",
   },
   success: {
     container:
-      "border-[color:var(--line)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[color:var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
     bar: "bg-[color:var(--success)]",
     button: "text-[color:var(--success)] hover:bg-black/10",
     icon: ConnectedIcon,
+    iconWrap: "bg-[rgba(26,230,128,0.12)] text-[var(--success)]",
   },
   info: {
     container:
       "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
     bar: "bg-[color:var(--accent)]",
     button: "text-[var(--muted-strong)] hover:bg-black/10",
-    icon: SparkIcon,
+    icon: InfoIcon,
+    iconWrap: "bg-[rgba(255,210,77,0.1)] text-[var(--accent)]",
   },
   warning: {
     container:
-      "border-[color:var(--line)] bg-[color:var(--accent-2-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[color:var(--warning-line)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
     bar: "bg-[color:var(--warning)]",
     button: "text-[color:var(--warning)] hover:bg-black/10",
     icon: DisconnectedIcon,
+    iconWrap: "bg-[rgba(255,210,77,0.12)] text-[var(--warning)]",
   },
 };
 
@@ -61,17 +67,23 @@ function AlertBox({ message, tone, className }) {
   const ToneIcon = toneStyles.icon;
 
   return (
-    <div
+    <Motion.div
       role="alert"
-      className={`mb-4 rounded-md border px-4 py-4 text-sm ${toneStyles.container} ${className}`.trim()}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.18 }}
+      className={`mb-4 rounded-md border px-4 py-3 text-sm ${toneStyles.container} ${className}`.trim()}
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-black/10">
+      <div className="flex min-h-10 items-center gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${toneStyles.iconWrap}`}
+        >
           <ToneIcon className="h-4.5 w-4.5" />
         </div>
         <p className="min-w-0 flex-1 leading-6">{message}</p>
       </div>
-    </div>
+    </Motion.div>
   );
 }
 
@@ -82,25 +94,15 @@ function ToastMessage({
   duration = 4000,
 }) {
   const [isVisible, setIsVisible] = useState(true);
-  const [progress, setProgress] = useState(100);
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
   const ToneIcon = toneStyles.icon;
 
   useEffect(() => {
-    const startedAt = Date.now();
-    const intervalId = window.setInterval(() => {
-      const elapsed = Date.now() - startedAt;
-      const nextProgress = Math.max(0, 100 - (elapsed / duration) * 100);
-      setProgress(nextProgress);
-    }, 50);
-
     const timeoutId = window.setTimeout(() => {
-      setProgress(0);
       setIsVisible(false);
     }, duration);
 
     return () => {
-      window.clearInterval(intervalId);
       window.clearTimeout(timeoutId);
     };
   }, [duration]);
@@ -116,32 +118,45 @@ function ToastMessage({
   }
 
   return createPortal(
-    <div
-      role="alert"
-      className={`pointer-events-auto overflow-hidden rounded-md border shadow-xl backdrop-blur-xl ${toneStyles.container} ${className}`.trim()}
-    >
-      <div className="flex items-start gap-3 px-4 py-3">
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-black/10">
-          <ToneIcon className="h-4.5 w-4.5" />
-        </div>
-        <p className="min-w-0 flex-1 text-sm leading-6">{message}</p>
-        <button
-          type="button"
-          aria-label="Fechar toast"
-          onClick={() => setIsVisible(false)}
-          className={`rounded-md px-2.5 py-1.5 text-sm transition ${toneStyles.button}`.trim()}
+    <AnimatePresence>
+      {isVisible ? (
+        <Motion.div
+          role="alert"
+          initial={{ opacity: 0, x: 20, scale: 0.98 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          exit={{ opacity: 0, x: 16, scale: 0.98 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          className={`pointer-events-auto overflow-hidden rounded-md border shadow-xl backdrop-blur-xl ${toneStyles.container} ${className}`.trim()}
         >
-          X
-        </button>
-      </div>
+          <div className="flex min-h-14 items-center gap-3 px-4 py-3">
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${toneStyles.iconWrap}`}
+            >
+              <ToneIcon className="h-4.5 w-4.5" />
+            </div>
+            <p className="min-w-0 flex-1 text-sm leading-6">{message}</p>
+            <button
+              type="button"
+              aria-label="Fechar toast"
+              onClick={() => setIsVisible(false)}
+              className={`flex h-9 w-9 items-center justify-center rounded-md transition ${toneStyles.button}`.trim()}
+            >
+              <CloseIcon className="h-4 w-4" />
+            </button>
+          </div>
 
-      <div className="h-1 w-full bg-black/5">
-        <div
-          className={`h-full transition-[width] duration-75 ease-linear ${toneStyles.bar}`.trim()}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>,
+          <div className="h-1 w-full bg-black/5">
+            <Motion.div
+              className={`h-full ${toneStyles.bar}`.trim()}
+              initial={{ scaleX: 1 }}
+              animate={{ scaleX: 0 }}
+              transition={{ duration: duration / 1000, ease: "linear" }}
+              style={{ transformOrigin: "left center" }}
+            />
+          </div>
+        </Motion.div>
+      ) : null}
+    </AnimatePresence>,
     viewport,
   );
 }

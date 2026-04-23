@@ -10,6 +10,12 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
 import StatusBadge from "../components/ui/StatusBadge";
+import {
+  DonorIcon,
+  DownloadIcon,
+  MonthlyIcon,
+  WarningIcon,
+} from "../components/ui/icons";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { listImports } from "../services/importService";
 import {
@@ -17,7 +23,7 @@ import {
   updateAbatementStatus,
 } from "../services/monthlyService";
 import { getErrorMessage } from "../utils/error";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, formatInteger } from "../utils/format";
 import {
   formatDatePtBR,
   formatMonthYear,
@@ -32,8 +38,325 @@ const INITIAL_MONTHLY_FILTERS = {
   donorId: "",
   cpf: "",
   demand: "",
+  donationActivity: "all",
   abatementStatus: "all",
 };
+
+function StatusToggle({
+  disabled = false,
+  isLoading = false,
+  onChange,
+  value,
+}) {
+  const options = [
+    {
+      value: "pending",
+      label: "Pendente",
+      className:
+        "border-[var(--warning-line)] bg-[var(--accent-soft)] text-[var(--warning)]",
+    },
+    {
+      value: "applied",
+      label: "Realizado",
+      className:
+        "border-[var(--success-line)] bg-[var(--accent-2-soft)] text-[var(--success)]",
+    },
+  ];
+
+  return (
+    <div className="grid w-[220px] grid-cols-2 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-1">
+      {options.map((option) => {
+        const isActive = value === option.value;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled || isLoading}
+            onClick={() => onChange?.(option.value)}
+            className={`min-h-9 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              isActive
+                ? option.className
+                : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
+            } ${disabled || isLoading ? "cursor-not-allowed opacity-60" : ""}`.trim()}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function OverviewMetric({
+  icon: Icon,
+  label,
+  value,
+  helper = "",
+  tone = "default",
+}) {
+  const toneClassName = {
+    default:
+      "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--text-soft)]",
+    success:
+      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
+    warning:
+      "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
+  }[tone];
+
+  return (
+    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-[var(--muted)]">{label}</p>
+          <p className="mt-2 text-xl font-semibold text-[var(--text-main)]">
+            {value}
+          </p>
+          {helper ? (
+            <p className="mt-2 text-xs text-[var(--muted)]">{helper}</p>
+          ) : null}
+        </div>
+
+        {Icon ? (
+          <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ${toneClassName}`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function GroupSection({
+  icon,
+  title,
+  description,
+  countLabel,
+  tone = "default",
+  children,
+}) {
+  const toneClassName = {
+    default:
+      "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--text-soft)]",
+    success:
+      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
+    warning:
+      "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
+  }[tone];
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-3 border-b border-[var(--line)] pb-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-3">
+          {icon ? (
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ${toneClassName}`}
+            >
+              {icon}
+            </span>
+          ) : null}
+          <div>
+            <h4 className="font-semibold text-[var(--text-main)]">{title}</h4>
+            {description ? (
+              <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
+            ) : null}
+          </div>
+        </div>
+
+        {countLabel ? (
+          <span
+            className={`inline-flex w-fit items-center rounded-md border px-3 py-1.5 text-xs font-medium ${toneClassName}`}
+          >
+            {countLabel}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function MetricField({
+  label,
+  value,
+  helper = "",
+  valueClassName = "",
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm text-[var(--muted)]">{label}</p>
+      <p className={`mt-1 font-semibold text-[var(--text-main)] ${valueClassName}`.trim()}>
+        {value}
+      </p>
+      {helper ? (
+        <p className="mt-1 text-xs text-[var(--muted)]">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function MonthlySummaryRow({
+  summary,
+  isUpdating = false,
+  onNavigate,
+  onStatusChange,
+  showReferenceMonth = false,
+}) {
+  const hasStartDateConflict =
+    summary.hasDonationsInMonth &&
+    (summary.sourceStartConflictCount > 0 ||
+      hasDonationStartConflict(
+        summary.donationStartDate,
+        summary.referenceMonth,
+      ));
+
+  return (
+    <article
+      className={`rounded-md border p-4 ${
+        hasStartDateConflict
+          ? "border-[var(--warning-line)] bg-[var(--surface-elevated)]"
+          : !summary.hasDonationsInMonth
+            ? "border-[var(--line)] bg-[var(--surface-strong)]"
+            : "border-[var(--line)] bg-[var(--surface-elevated)]"
+      }`}
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] xl:items-start">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={() => onNavigate?.(summary.donorId)}
+            className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+          >
+            {summary.donorName}
+          </button>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            <StatusBadge status={summary.donorType} />
+            <StatusBadge
+              label={
+                summary.hasDonationsInMonth
+                  ? "Doou no mês"
+                  : "Não doou no mês"
+              }
+              tone={summary.hasDonationsInMonth ? "success" : "neutral"}
+            />
+          </div>
+
+          {summary.donorType === "auxiliary" && summary.holderName ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
+                Vinculado a: {summary.holderName}
+              </span>
+              {!summary.holderIsActiveDonor ? (
+                <StatusBadge label="Pessoa de referência" tone="neutral" />
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-[var(--muted)]">
+            <span>CPF: {formatCpf(summary.cpf)}</span>
+            <span>Demanda: {summary.demand || "Nao informada"}</span>
+          </div>
+
+          {summary.sources.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {summary.sources.map((source) => (
+                <span
+                  key={`${summary.id}-${source.cpf}`}
+                  className={`rounded-md border px-2 py-1 text-xs ${
+                    source.type === "auxiliary"
+                      ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
+                      : "border-[var(--line)] bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
+                  }`}
+                  title={`${source.name} • ${formatCpf(source.cpf)} • ${source.notesCount} nota(s)`}
+                >
+                  {source.type === "auxiliary"
+                    ? `Auxiliar: ${source.name}`
+                    : "CPF principal"}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {hasStartDateConflict ? (
+            <p className="mt-2 text-sm text-[var(--warning)]">
+              Atencao: {summary.sourceStartConflictCount || 1} CPF(s)
+              vinculado(s) apareceram antes do início de doação informado.
+            </p>
+          ) : null}
+        </div>
+
+        <div
+          className={`grid gap-x-5 gap-y-3 ${
+            showReferenceMonth ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"
+          }`}
+        >
+          {showReferenceMonth ? (
+            <MetricField
+              label="Mês"
+              value={formatMonthYear(summary.referenceMonth)}
+            />
+          ) : null}
+
+          <MetricField
+            label="Notas"
+            value={formatInteger(summary.notesCount)}
+            helper={
+              summary.hasDonationsInMonth
+                ? `${formatInteger(summary.sourceCpfCount)} CPF(s) com notas`
+                : `${formatInteger(summary.sourceCpfCount)} CPF(s) cadastrados`
+            }
+          />
+
+          <MetricField
+            label="Valor por nota"
+            value={formatCurrency(summary.valuePerNote)}
+          />
+
+          <MetricField
+            label="Abatimento"
+            value={formatCurrency(summary.abatementAmount)}
+            valueClassName={
+              summary.hasDonationsInMonth
+                ? summary.abatementStatus === "applied"
+                  ? "text-[var(--success)]"
+                  : "text-[var(--warning)]"
+                : "text-[var(--text-soft)]"
+            }
+          />
+        </div>
+
+        <div className="flex w-full flex-col gap-2 xl:w-[220px] xl:items-end">
+          {summary.canUpdateAbatement ? (
+            <StatusToggle
+              value={summary.abatementStatus}
+              disabled={isUpdating}
+              isLoading={isUpdating}
+              onChange={(nextStatus) =>
+                onStatusChange?.(summary.id, nextStatus)
+              }
+            />
+          ) : (
+            <div className="flex min-h-10 w-full items-center rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-3 text-sm font-medium text-[var(--muted)] xl:w-[220px]">
+              Sem doações no mês
+            </div>
+          )}
+
+          <p className="text-xs text-[var(--muted)] xl:text-right">
+            {summary.abatementMarkedAt
+              ? `Marcado em ${summary.abatementMarkedAt}`
+              : summary.canUpdateAbatement
+                ? "Ainda nao marcado"
+                : "Nenhum abatimento gerado"}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
 
 export default function Monthly() {
   const [summaries, setSummaries] = useState([]);
@@ -48,6 +371,8 @@ export default function Monthly() {
   const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
+  const isNotDonatedFilterActive =
+    hasSelectedReferenceMonth && filters.donationActivity === "not-donated";
 
   const donorOptions = useMemo(
     () =>
@@ -95,10 +420,11 @@ export default function Monthly() {
     [],
   );
 
-  const rowStatusOptions = useMemo(
+  const donationActivityOptions = useMemo(
     () => [
-      { value: "pending", label: "Pendente", tone: "warning" },
-      { value: "applied", label: "Realizado", tone: "success" },
+      { value: "all", label: "Todos os doadores" },
+      { value: "donated", label: "Doaram no mês", tone: "success" },
+      { value: "not-donated", label: "Não doaram no mês", tone: "default" },
     ],
     [],
   );
@@ -136,6 +462,12 @@ export default function Monthly() {
             donorId: "",
             cpf: "",
             demand: "",
+            ...(!value ? { donationActivity: "all" } : {}),
+          }
+        : {}),
+      ...(name === "donationActivity" && value === "not-donated"
+        ? {
+            abatementStatus: "all",
           }
         : {}),
       [name]: value,
@@ -195,6 +527,7 @@ export default function Monthly() {
       donorId: "",
       cpf: "",
       demand: "",
+      donationActivity: "all",
       abatementStatus: "all",
     }));
   };
@@ -209,6 +542,71 @@ export default function Monthly() {
   const monthlyPagination = usePagination(summaries, {
     initialPageSize: 25,
   });
+  const donatedCount = summaries.filter((summary) => summary.hasDonationsInMonth)
+    .length;
+  const notDonatedCount = summaries.length - donatedCount;
+  const visibleDonatedSummaries = useMemo(
+    () =>
+      monthlyPagination.visibleItems.filter((summary) => summary.hasDonationsInMonth),
+    [monthlyPagination.visibleItems],
+  );
+  const visibleNotDonatedSummaries = useMemo(
+    () =>
+      monthlyPagination.visibleItems.filter(
+        (summary) => !summary.hasDonationsInMonth,
+      ),
+    [monthlyPagination.visibleItems],
+  );
+  const overviewMetrics = useMemo(() => {
+    const metrics = [
+      {
+        icon: DonorIcon,
+        label: hasSelectedReferenceMonth ? "Doadores filtrados" : "Registros filtrados",
+        value: formatInteger(summaries.length),
+        helper:
+          summaries.length > 0
+            ? `Mostrando ${formatInteger(monthlyPagination.startItem)}-${formatInteger(monthlyPagination.endItem)} nesta página`
+            : "Nenhum item com os filtros atuais.",
+      },
+      {
+        icon: MonthlyIcon,
+        label: "Total filtrado",
+        value: formatCurrency(totalAbatement),
+        helper: "Somatório dos abatimentos exibidos abaixo.",
+      },
+    ];
+
+    if (hasSelectedReferenceMonth) {
+      metrics.splice(
+        1,
+        0,
+        {
+          icon: MonthlyIcon,
+          label: "Doaram no mês",
+          value: formatInteger(donatedCount),
+          helper: "Doadores com notas conciliadas no período.",
+          tone: "success",
+        },
+        {
+          icon: WarningIcon,
+          label: "Não doaram no mês",
+          value: formatInteger(notDonatedCount),
+          helper: "Continuam visíveis para acompanhamento.",
+          tone: "warning",
+        },
+      );
+    }
+
+    return metrics;
+  }, [
+    donatedCount,
+    hasSelectedReferenceMonth,
+    monthlyPagination.endItem,
+    monthlyPagination.startItem,
+    notDonatedCount,
+    summaries.length,
+    totalAbatement,
+  ]);
 
   if (isLoading && !availableImports.length && !error) {
     return (
@@ -241,10 +639,12 @@ export default function Monthly() {
         className="mt-6"
       >
         {availableImports.length === 0 ? (
-          <EmptyState
-            title="Nenhuma importação processada ainda"
-            description="Depois que você importar uma planilha, os meses disponíveis para consulta aparecerão aqui."
-          />
+          <div className="mb-5">
+            <EmptyState
+              title="Nenhuma importação processada ainda"
+              description="Depois que você importar uma planilha, os meses disponíveis para consulta aparecerão aqui."
+            />
+          </div>
         ) : (
           <div className="mb-5 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
@@ -293,7 +693,7 @@ export default function Monthly() {
                           {formatMonthYear(item.referenceMonth)}
                         </p>
                         <p className="mt-1 text-sm text-[var(--muted)]">
-                          {item.matchedDonors} doador(es) encontrados
+                          {item.matchedDonors} doador(es) que doaram
                         </p>
                       </div>
                       <span
@@ -331,37 +731,46 @@ export default function Monthly() {
           </div>
         )}
 
-        <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <p className="text-sm font-medium text-[var(--text-soft)]">
-            Total filtrado: {formatCurrency(totalAbatement)}
-          </p>
-          <div className="flex flex-col gap-3 md:items-end">
-            {selectedImport ? (
-              <p className="text-sm text-[var(--muted)]">
-                Visualizando {formatMonthYear(selectedImport.referenceMonth)} a
-                partir do arquivo{" "}
-                <span className="font-medium">{selectedImport.fileName}</span>.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-3 md:justify-end">
-              <Button
-                variant="subtle"
-                onClick={handleClearRefinements}
-              >
-                Limpar refinamentos
-              </Button>
-              <Button
-                variant="subtle"
-                onClick={handleExport}
-                disabled={isExporting}
-              >
-                {isExporting ? "Exportando..." : "Exportar CSV"}
-              </Button>
-            </div>
+        <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div className={`grid gap-3 ${hasSelectedReferenceMonth ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-2"}`}>
+            {overviewMetrics.map((metric) => (
+              <OverviewMetric
+                key={metric.label}
+                icon={metric.icon}
+                label={metric.label}
+                value={metric.value}
+                helper={metric.helper}
+                tone={metric.tone}
+              />
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-3 xl:justify-end">
+            <Button
+              variant="subtle"
+              onClick={handleClearRefinements}
+            >
+              Limpar refinamentos
+            </Button>
+            <Button
+              variant="subtle"
+              onClick={handleExport}
+              disabled={isExporting}
+              leftIcon={<DownloadIcon className="h-4 w-4" />}
+            >
+              {isExporting ? "Exportando..." : "Exportar CSV"}
+            </Button>
           </div>
         </div>
 
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
+        {selectedImport ? (
+          <p className="mb-5 text-sm text-[var(--muted)]">
+            Visualizando {formatMonthYear(selectedImport.referenceMonth)} a partir
+            do arquivo <span className="font-medium">{selectedImport.fileName}</span>.
+          </p>
+        ) : null}
+
+        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <MonthInput
             name="referenceMonth"
             value={filters.referenceMonth}
@@ -379,11 +788,21 @@ export default function Monthly() {
           />
 
           <SelectInput
+            name="donationActivity"
+            value={filters.donationActivity}
+            onChange={handleFilterChange}
+            options={donationActivityOptions}
+            placeholder="Todos os doadores"
+            disabled={!hasSelectedReferenceMonth}
+          />
+
+          <SelectInput
             name="abatementStatus"
             value={filters.abatementStatus}
             onChange={handleFilterChange}
             options={abatementStatusOptions}
             placeholder="Todos os status"
+            disabled={isNotDonatedFilterActive}
           />
         </div>
 
@@ -411,11 +830,15 @@ export default function Monthly() {
 
         {summaries.length === 0 ? (
           <EmptyState
-            title="Nenhum resumo mensal disponível"
-            description="Depois que houver importações processadas com valor por nota definido e titulares compatíveis, os abatimentos mensais aparecerão aqui."
+            title="Nenhum doador encontrado"
+            description={
+              hasSelectedReferenceMonth
+                ? "Não há doadores para os filtros aplicados neste mês."
+                : "Selecione um mês para visualizar a gestão mensal com todos os doadores."
+            }
           />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-5">
             <PaginationControls
               endItem={monthlyPagination.endItem}
               onPageChange={monthlyPagination.setPage}
@@ -426,127 +849,51 @@ export default function Monthly() {
               totalPages={monthlyPagination.totalPages}
             />
 
-            {monthlyPagination.visibleItems.map((summary) => {
-              const hasStartDateConflict =
-                summary.sourceStartConflictCount > 0 ||
-                hasDonationStartConflict(
-                  summary.donationStartDate,
-                  summary.referenceMonth,
-                );
+            {visibleDonatedSummaries.length > 0 ? (
+              <GroupSection
+                icon={<MonthlyIcon className="h-4 w-4" />}
+                title="Com doação no mês"
+                description="Abatimentos gerados a partir das notas conciliadas no período."
+                countLabel={`${formatInteger(visibleDonatedSummaries.length)} nesta página`}
+                tone="success"
+              >
+                {visibleDonatedSummaries.map((summary) => (
+                  <MonthlySummaryRow
+                    key={summary.id}
+                    summary={summary}
+                    isUpdating={updatingSummaryId === summary.id}
+                    onNavigate={(donorId) =>
+                      navigate(`/doadores/${encodeURIComponent(donorId)}`)
+                    }
+                    onStatusChange={handleStatusChange}
+                    showReferenceMonth={!hasSelectedReferenceMonth}
+                  />
+                ))}
+              </GroupSection>
+            ) : null}
 
-              return (
-                <div
-                  key={summary.id}
-                  className={`grid gap-3 rounded-md border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
-                    hasStartDateConflict
-                      ? "border-[var(--warning-line)] bg-[var(--surface-elevated)]"
-                      : "border-[var(--line)] bg-[var(--surface-elevated)]"
-                  }`}
-                >
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(`/doadores/${encodeURIComponent(summary.donorId)}`)
-                      }
-                      className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                    >
-                      {summary.donorName}
-                    </button>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <StatusBadge status={summary.donorType} />
-                      {summary.donorType === "auxiliary" && summary.holderName ? (
-                        <span className="text-xs font-medium text-[var(--text-soft)]">
-                          Titular informativo: {summary.holderName}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="text-sm text-[var(--muted)]">
-                      CPF: {summary.cpf}
-                    </p>
-                    <p className="text-sm text-[var(--muted)]">
-                      Demanda: {summary.demand || "Nao informada"}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {summary.sources.map((source) => (
-                        <span
-                          key={`${summary.id}-${source.cpf}`}
-                          className={`rounded-md border px-2 py-1 text-xs ${
-                            source.type === "auxiliary"
-                              ? "border-[color:var(--accent-2-soft)] bg-[color:var(--accent-2-soft)] text-[var(--warning)]"
-                              : "border-[var(--line)] bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
-                          }`}
-                          title={`${source.name} • ${formatCpf(source.cpf)} • ${source.notesCount} nota(s)`}
-                        >
-                          {source.type === "auxiliary"
-                            ? `Auxiliar: ${source.name}`
-                            : "CPF principal"}
-                        </span>
-                      ))}
-                    </div>
-                    {hasStartDateConflict ? (
-                      <p className="mt-2 text-sm text-[var(--warning)]">
-                        Atencao: {summary.sourceStartConflictCount || 1} CPF(s) vinculado(s) apareceram antes do início de doação informado.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-[var(--muted)]">Mês</p>
-                    <p className="font-medium">
-                      {formatMonthYear(summary.referenceMonth)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-[var(--muted)]">Notas</p>
-                    <p className="font-medium">{summary.notesCount}</p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {summary.sourceCpfCount} CPF(s)
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-[var(--muted)]">Valor por nota</p>
-                    <p className="font-medium">
-                      {formatCurrency(summary.valuePerNote)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-[var(--muted)]">Abatimento</p>
-                    <p
-                      className={`font-semibold ${
-                        summary.abatementStatus === "applied"
-                          ? "text-[var(--success)]"
-                          : "text-[var(--warning)]"
-                      }`}
-                    >
-                      {formatCurrency(summary.abatementAmount)}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <SelectInput
-                      value={summary.abatementStatus}
-                      name={`abatement-status-${summary.id}`}
-                      disabled={updatingSummaryId === summary.id}
-                      options={rowStatusOptions}
-                      tone={summary.abatementStatus === "applied" ? "success" : "warning"}
-                      onChange={(event) =>
-                        handleStatusChange(summary.id, event.target.value)
-                      }
-                    />
-
-                    <p className="text-xs text-[var(--muted)]">
-                      {summary.abatementMarkedAt
-                        ? `Marcado em ${summary.abatementMarkedAt}`
-                        : "Ainda nao marcado"}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+            {visibleNotDonatedSummaries.length > 0 ? (
+              <GroupSection
+                icon={<WarningIcon className="h-4 w-4" />}
+                title="Sem doação no mês"
+                description="Doadores ativos que seguem visíveis para acompanhamento, mesmo sem notas no período."
+                countLabel={`${formatInteger(visibleNotDonatedSummaries.length)} nesta página`}
+                tone="warning"
+              >
+                {visibleNotDonatedSummaries.map((summary) => (
+                  <MonthlySummaryRow
+                    key={summary.id}
+                    summary={summary}
+                    isUpdating={updatingSummaryId === summary.id}
+                    onNavigate={(donorId) =>
+                      navigate(`/doadores/${encodeURIComponent(donorId)}`)
+                    }
+                    onStatusChange={handleStatusChange}
+                    showReferenceMonth={!hasSelectedReferenceMonth}
+                  />
+                ))}
+              </GroupSection>
+            ) : null}
 
             <PaginationControls
               endItem={monthlyPagination.endItem}

@@ -1,8 +1,14 @@
+import { motion as Motion } from "framer-motion";
 import { EmptyIcon } from "./icons";
 
 export default function EmptyState({ title, description }) {
   return (
-    <div className="rounded-md border border-dashed border-[var(--line-strong)] bg-[var(--surface-strong)] p-6 text-center">
+    <Motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className="rounded-md border border-dashed border-[var(--line-strong)] bg-[var(--surface-strong)] p-6 text-center"
+    >
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)]">
         <EmptyIcon className="h-6 w-6" />
       </div>
@@ -12,6 +18,6 @@ export default function EmptyState({ title, description }) {
       <p className="mx-auto max-w-xl text-sm leading-6 text-[var(--muted)]">
         {description}
       </p>
-    </div>
+    </Motion.div>
   );
 }

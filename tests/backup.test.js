@@ -13,6 +13,7 @@ test("normalizeSnapshotPayload accepts wrapped backup payloads", () => {
     exportedAt: "2026-04-14T10:00:00.000Z",
     data: {
       demands: [{ id: "1" }],
+      people: [],
       donors: [],
       donorCpfLinks: [],
       imports: [],
@@ -23,6 +24,7 @@ test("normalizeSnapshotPayload accepts wrapped backup payloads", () => {
   });
 
   assert.deepEqual(snapshot.demands, [{ id: "1" }]);
+  assert.deepEqual(snapshot.people, []);
   assert.deepEqual(snapshot.donors, []);
 });
 
@@ -46,6 +48,7 @@ test("snapshot helpers detect data and count rows correctly", () => {
   assert.equal(snapshotHasData(snapshot), true);
   assert.deepEqual(buildSnapshotStats(snapshot), {
     demands: 2,
+    people: 0,
     donors: 1,
     donorCpfLinks: 0,
     imports: 0,
@@ -64,5 +67,6 @@ test("createSnapshotPayload wraps normalized data", () => {
   assert.equal(payload.exportedAt, "2026-04-14T12:00:00.000Z");
   assert.deepEqual(payload.data.donors, [{ id: "10" }]);
   assert.deepEqual(payload.data.demands, []);
+  assert.deepEqual(payload.data.people, []);
   assert.deepEqual(payload.data.trashItems, []);
 });

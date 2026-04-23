@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
@@ -14,27 +15,43 @@ import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
 import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
+import {
+  DownloadIcon,
+  EditIcon,
+  PlusIcon,
+  TrashIcon,
+  UserIcon,
+} from "../components/ui/icons";
 import { listDemands } from "../services/demandService";
 import {
   createDonor,
   deleteDonor,
   listDonors,
-  listHolderDonors,
   updateDonor,
 } from "../services/donorService";
 import { exportDonorsCsv } from "../services/exportService";
+import {
+  createPerson,
+  listPeople,
+} from "../services/personService";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 
 const EMPTY_DONOR_FORM = {
+  personId: "",
   name: "",
   cpf: "",
   demand: "",
   donationStartDate: "",
   donorType: "holder",
-  holderDonorId: "",
+  holderPersonId: "",
+};
+
+const EMPTY_PERSON_FORM = {
+  name: "",
+  cpf: "",
 };
 
 const INITIAL_DONOR_FILTERS = {
@@ -57,18 +74,21 @@ const DONOR_FORM_TYPE_OPTIONS = [
 
 export default function Donors() {
   const [donors, setDonors] = useState([]);
-  const [holderDonors, setHolderDonors] = useState([]);
+  const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
   const [editForm, setEditForm] = useState({ ...EMPTY_DONOR_FORM });
+  const [personForm, setPersonForm] = useState({ ...EMPTY_PERSON_FORM });
   const [editingDonor, setEditingDonor] = useState(null);
   const [donorPendingRemoval, setDonorPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [personModalTarget, setPersonModalTarget] = useState("");
   const [filters, setFilters] = useState({ ...INITIAL_DONOR_FILTERS });
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSavingPerson, setIsSavingPerson] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
@@ -94,28 +114,73 @@ export default function Donors() {
     [demands],
   );
 
-  const holderOptions = useMemo(
-    () =>
-      buildSelectOptions(holderDonors, {
-        getValue: (donor) => donor.id,
-        getLabel: (donor) => donor.name,
-        emptyLabel: "Sem titular vinculado",
-      }),
-    [holderDonors],
+  const availableReferencePeople = useMemo(
+    () => people.filter((person) => !person.donorId),
+    [people],
   );
 
-  const loadDonors = useCallback(async (currentFilters = filters) => {
+  const donorPersonOptions = useMemo(
+    () =>
+      buildSelectOptions(availableReferencePeople, {
+        getValue: (person) => person.id,
+        getLabel: (person) => `${person.name} • ${person.roleLabel}`,
+        emptyLabel: "Nova pessoa",
+      }),
+    [availableReferencePeople],
+  );
+
+  const buildHolderOptions = useCallback(
+    (currentPersonId = "") =>
+      buildSelectOptions(
+        people.filter((person) => person.id !== currentPersonId),
+        {
+          getValue: (person) => person.id,
+          getLabel: (person) => `${person.name} • ${person.roleLabel}`,
+          emptyLabel: "Sem pessoa vinculada",
+        },
+      ),
+    [people],
+  );
+
+  const createHolderOptions = useMemo(
+    () => buildHolderOptions(createForm.personId),
+    [buildHolderOptions, createForm.personId],
+  );
+
+  const editHolderOptions = useMemo(
+    () => buildHolderOptions(editingDonor?.personId ?? ""),
+    [buildHolderOptions, editingDonor?.personId],
+  );
+
+  const selectedCreatePerson = useMemo(
+    () => people.find((person) => person.id === createForm.personId) ?? null,
+    [createForm.personId, people],
+  );
+
+  const selectedEditHolder = useMemo(
+    () => people.find((person) => person.id === editForm.holderPersonId) ?? null,
+    [editForm.holderPersonId, people],
+  );
+
+  const selectedCreateHolder = useMemo(
+    () => people.find((person) => person.id === createForm.holderPersonId) ?? null,
+    [createForm.holderPersonId, people],
+  );
+
+  const loadData = useCallback(async (currentFilters = filters) => {
     try {
       setError("");
-      const [donorRows, holderRows] = await Promise.all([
+      const [donorRows, personRows, demandRows] = await Promise.all([
         listDonors(currentFilters),
-        listHolderDonors(),
+        listPeople(),
+        listDemands(),
       ]);
       setDonors(donorRows);
-      setHolderDonors(holderRows);
+      setPeople(personRows);
+      setDemands(demandRows);
     } catch (err) {
       console.error(
-        "Erro ao carregar doadores:",
+        "Erro ao carregar dados de doadores:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError("Nao foi possivel carregar os doadores.");
@@ -124,32 +189,40 @@ export default function Donors() {
     }
   }, [filters]);
 
-  const loadDemands = useCallback(async () => {
-    try {
-      const demandRows = await listDemands();
-      setDemands(demandRows);
-    } catch (err) {
-      console.error(
-        "Erro ao carregar demandas:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-    }
-  }, []);
-
   useEffect(() => {
-    loadDonors();
-    loadDemands();
-  }, [loadDemands, loadDonors]);
+    loadData();
+  }, [loadData]);
 
-  const handleFormChange = (setter) => (event) => {
+  const handleFormChange = (setter, { isCreate = false } = {}) => (event) => {
     const { name, value } = event.target;
-    setter((current) => ({
-      ...current,
-      ...(name === "donorType" && value === "holder"
-        ? { holderDonorId: "" }
-        : {}),
-      [name]: name === "cpf" ? formatCpf(value) : value,
-    }));
+
+    setter((current) => {
+      if (name === "donorType") {
+        return {
+          ...current,
+          donorType: value,
+          ...(value === "holder"
+            ? { holderPersonId: "" }
+            : {}),
+        };
+      }
+
+      if (isCreate && name === "personId") {
+        const selectedPerson = people.find((person) => person.id === value);
+
+        return {
+          ...current,
+          personId: value,
+          name: selectedPerson?.name ?? "",
+          cpf: selectedPerson?.cpf ?? "",
+        };
+      }
+
+      return {
+        ...current,
+        [name]: name === "cpf" ? formatCpf(value) : value,
+      };
+    });
   };
 
   const handleFilterChange = async (event) => {
@@ -159,18 +232,21 @@ export default function Donors() {
       [name]: name === "cpf" ? formatCpf(value) : value,
     };
     setFilters(nextFilters);
-    await loadDonors(nextFilters);
+    await loadData(nextFilters);
   };
 
   const handleOpenCreateModal = () => {
     setError("");
     setSuccessMessage("");
     setCreateForm({ ...EMPTY_DONOR_FORM });
+    setPersonForm({ ...EMPTY_PERSON_FORM });
     setIsCreateModalOpen(true);
   };
 
   const handleCloseCreateModal = () => {
     setCreateForm({ ...EMPTY_DONOR_FORM });
+    setPersonForm({ ...EMPTY_PERSON_FORM });
+    setPersonModalTarget("");
     setIsCreateModalOpen(false);
   };
 
@@ -181,14 +257,15 @@ export default function Donors() {
       setIsSubmitting(true);
       await createDonor({
         id: nanoid(),
+        personId: createForm.personId,
         name: createForm.name,
         cpf: createForm.cpf,
         demand: createForm.demand,
         donationStartDate: createForm.donationStartDate,
         donorType: createForm.donorType,
-        holderDonorId: createForm.holderDonorId,
+        holderPersonId: createForm.holderPersonId,
       });
-      await loadDonors();
+      await loadData();
       handleCloseCreateModal();
       setSuccessMessage(
         "Doador cadastrado e reconciliado com as importacoes existentes.",
@@ -209,12 +286,13 @@ export default function Donors() {
     setSuccessMessage("");
     setEditingDonor(donor);
     setEditForm({
+      personId: donor.personId,
       name: donor.name,
       cpf: donor.cpf,
       demand: donor.demand,
       donationStartDate: donor.donationStartDateValue,
       donorType: donor.donorType,
-      holderDonorId: donor.holderDonorId,
+      holderPersonId: donor.holderPersonId,
     });
   };
 
@@ -239,9 +317,9 @@ export default function Donors() {
         demand: editForm.demand,
         donationStartDate: editForm.donationStartDate,
         donorType: editForm.donorType,
-        holderDonorId: editForm.holderDonorId,
+        holderPersonId: editForm.holderPersonId,
       });
-      await loadDonors();
+      await loadData();
       handleCloseEditModal();
       setSuccessMessage(
         "Doador atualizado e reconciliado com as importacoes existentes.",
@@ -267,7 +345,7 @@ export default function Donors() {
       setSuccessMessage("");
       setIsDeleting(true);
       await deleteDonor(donorPendingRemoval.id);
-      await loadDonors();
+      await loadData();
       setDonorPendingRemoval(null);
       setSuccessMessage("Doador enviado para a lixeira com sucesso.");
     } catch (err) {
@@ -302,69 +380,212 @@ export default function Donors() {
   const handleClearFilters = async () => {
     const clearedFilters = { ...INITIAL_DONOR_FILTERS };
     setFilters(clearedFilters);
-    await loadDonors(clearedFilters);
+    await loadData(clearedFilters);
   };
 
-  const renderDonorForm = (form, onChange) => (
-    <div className="grid gap-3 md:grid-cols-2">
-      <SelectInput
-        name="donorType"
-        value={form.donorType}
-        onChange={onChange}
-        options={DONOR_FORM_TYPE_OPTIONS}
-        placeholder="Tipo de doador"
-      />
-      {form.donorType === "auxiliary" ? (
-        <SelectInput
-          name="holderDonorId"
-          value={form.holderDonorId}
-          onChange={onChange}
-          options={holderOptions}
-          placeholder="Titular vinculado"
-          searchable
-          searchPlaceholder="Buscar titular..."
-        />
-      ) : (
-        <SelectInput
-          name="demand"
-          value={form.demand}
-          onChange={onChange}
-          options={donorFormDemandOptions}
-          placeholder="Selecione uma demanda"
-          searchable
-          searchPlaceholder="Buscar demanda..."
-        />
-      )}
-      <TextInput
-        name="name"
-        placeholder="Nome do doador"
-        value={form.name}
-        onChange={onChange}
-      />
-      <TextInput
-        name="cpf"
-        placeholder="CPF"
-        value={form.cpf}
-        onChange={onChange}
-      />
-      {form.donorType === "auxiliary" ? (
-        <SelectInput
-          name="demand"
-          value={form.demand}
-          onChange={onChange}
-          options={donorFormDemandOptions}
-          placeholder="Demanda própria ou herdada"
-          searchable
-          searchPlaceholder="Buscar demanda..."
-        />
-      ) : null}
-      <MonthInput
-        name="donationStartDate"
-        value={form.donationStartDate}
-        onChange={onChange}
-      />
+  const handleSaveInlinePerson = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsSavingPerson(true);
+      const createdPersonId = await createPerson({
+        id: nanoid(),
+        name: personForm.name,
+        cpf: personForm.cpf,
+      });
+      await loadData();
+      setPersonModalTarget("");
+      setPersonForm({ ...EMPTY_PERSON_FORM });
+
+      if (personModalTarget === "donor") {
+        const createdPerson = await listPeople({ cpf: personForm.cpf });
+        const personId = createdPerson[0]?.id ?? createdPersonId;
+        setCreateForm((current) => ({
+          ...current,
+          personId,
+          name: createdPerson[0]?.name ?? current.name,
+          cpf: createdPerson[0]?.cpf ?? current.cpf,
+        }));
+      }
+
+      if (personModalTarget === "holder") {
+        const createdPerson = await listPeople({ cpf: personForm.cpf });
+        const personId = createdPerson[0]?.id ?? createdPersonId;
+        setCreateForm((current) => ({
+          ...current,
+          holderPersonId: personId,
+        }));
+      }
+
+      setSuccessMessage("Pessoa cadastrada e pronta para uso.");
+    } catch (err) {
+      console.error(
+        "Erro ao cadastrar pessoa pelo modal do doador:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(getErrorMessage(err, "Nao foi possivel cadastrar a pessoa."));
+    } finally {
+      setIsSavingPerson(false);
+    }
+  };
+
+  const renderCreatePersonSummary = (person) => (
+    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-3 md:col-span-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+            Pessoa selecionada
+          </p>
+          <p className="mt-1 font-medium text-[var(--text-main)]">{person.name}</p>
+          <p className="text-sm text-[var(--muted)]">{person.cpf}</p>
+        </div>
+        <Button
+          type="button"
+          variant="subtle"
+          onClick={() =>
+            setCreateForm((current) => ({
+              ...current,
+              personId: "",
+              name: "",
+              cpf: "",
+            }))
+          }
+        >
+          Usar nova pessoa
+        </Button>
+      </div>
     </div>
   );
+
+  const renderDonorForm = ({
+    form,
+    onChange,
+    mode,
+  }) => {
+    const isCreate = mode === "create";
+    const selectedPerson = isCreate ? selectedCreatePerson : null;
+    const selectedHolder = isCreate ? selectedCreateHolder : selectedEditHolder;
+    const holderOptions = isCreate ? createHolderOptions : editHolderOptions;
+
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        <SelectInput
+          name="donorType"
+          value={form.donorType}
+          onChange={onChange}
+          options={DONOR_FORM_TYPE_OPTIONS}
+          placeholder="Tipo de doador"
+        />
+
+        {form.donorType === "auxiliary" ? (
+          <div className="space-y-2">
+            <SelectInput
+              name="holderPersonId"
+              value={form.holderPersonId}
+              onChange={onChange}
+              options={holderOptions}
+              placeholder="Vinculado a"
+              searchable
+              searchPlaceholder="Buscar pessoa..."
+            />
+            <Button
+              type="button"
+              variant="subtle"
+              onClick={() => {
+                setPersonForm({ ...EMPTY_PERSON_FORM });
+                setPersonModalTarget("holder");
+              }}
+            >
+              Nova pessoa para vínculo
+            </Button>
+            {selectedHolder && !selectedHolder.donorId ? (
+              <p className="text-xs text-[var(--muted)]">
+                Esta pessoa ainda não é um doador ativo.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <SelectInput
+            name="demand"
+            value={form.demand}
+            onChange={onChange}
+            options={donorFormDemandOptions}
+            placeholder="Selecione uma demanda"
+            searchable
+            searchPlaceholder="Buscar demanda..."
+          />
+        )}
+
+        {isCreate ? (
+          <div className="space-y-2 md:col-span-2">
+            <SelectInput
+              name="personId"
+              value={form.personId}
+              onChange={onChange}
+              options={donorPersonOptions}
+              placeholder="Usar pessoa já cadastrada"
+              searchable
+              searchPlaceholder="Buscar pessoa..."
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="subtle"
+                onClick={() => {
+                  setPersonForm({ ...EMPTY_PERSON_FORM });
+                  setPersonModalTarget("donor");
+                }}
+              >
+                Nova pessoa
+              </Button>
+              <Button
+                type="button"
+                variant="subtle"
+                onClick={() => navigate("/pessoas")}
+              >
+                Ver pessoas
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {selectedPerson ? renderCreatePersonSummary(selectedPerson) : (
+          <>
+            <TextInput
+              name="name"
+              placeholder="Nome do doador"
+              value={form.name}
+              onChange={onChange}
+            />
+            <TextInput
+              name="cpf"
+              placeholder="CPF"
+              value={form.cpf}
+              onChange={onChange}
+            />
+          </>
+        )}
+
+        {form.donorType === "auxiliary" ? (
+          <SelectInput
+            name="demand"
+            value={form.demand}
+            onChange={onChange}
+            options={donorFormDemandOptions}
+            placeholder="Demanda própria ou herdada"
+            searchable
+            searchPlaceholder="Buscar demanda..."
+          />
+        ) : null}
+
+        <MonthInput
+          name="donationStartDate"
+          value={form.donationStartDate}
+          onChange={onChange}
+        />
+      </div>
+    );
+  };
 
   if (isLoading && !donors.length && !error) {
     return (
@@ -391,8 +612,18 @@ export default function Donors() {
       />
 
       <div className="mb-6 flex flex-wrap gap-3">
-        <Button onClick={handleOpenCreateModal}>Adicionar doador</Button>
-        <Button variant="subtle" onClick={handleExport} disabled={isExporting}>
+        <Button
+          onClick={handleOpenCreateModal}
+          leftIcon={<PlusIcon className="h-4 w-4" />}
+        >
+          Adicionar doador
+        </Button>
+        <Button
+          variant="subtle"
+          onClick={handleExport}
+          disabled={isExporting}
+          leftIcon={<DownloadIcon className="h-4 w-4" />}
+        >
           {isExporting ? "Exportando..." : "Exportar CSV"}
         </Button>
       </div>
@@ -463,7 +694,7 @@ export default function Donors() {
               key={donor.id}
               className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
             >
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -482,19 +713,43 @@ export default function Donors() {
                   Início: {donor.donationStartDate || "Nao informado"}
                 </p>
                 {donor.donorType === "auxiliary" ? (
-                  <p className="text-sm text-[var(--text-soft)]">
-                    Vinculado informativamente a:{" "}
-                    {donor.holderName || "nenhum titular"}
-                  </p>
+                  <div className="mt-3 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                        Vinculado a
+                      </p>
+                      {!donor.holderIsActiveDonor && donor.holderName ? (
+                        <StatusBadge
+                          label="Pessoa de referência"
+                          tone="neutral"
+                        />
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-[var(--text-soft)]">
+                      {donor.holderName || "Nenhuma pessoa vinculada"}
+                    </p>
+                    {donor.holderCpf ? (
+                      <p className="text-xs text-[var(--muted)]">{donor.holderCpf}</p>
+                    ) : null}
+                  </div>
                 ) : donor.auxiliaryDonors.length > 0 ? (
-                  <p className="text-sm text-[var(--muted)]">
-                    Auxiliares:{" "}
-                    {donor.auxiliaryDonors
-                      .map((auxiliary) => `${auxiliary.name} (${auxiliary.cpf})`)
-                      .join(", ")}
-                  </p>
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                      Auxiliares vinculados
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {donor.auxiliaryDonors.map((auxiliary) => (
+                        <span
+                          key={`${donor.id}-${auxiliary.cpf}`}
+                          className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs text-[var(--text-soft)]"
+                        >
+                          {auxiliary.name} • {auxiliary.cpf}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
-                  <p className="text-sm text-[var(--text-main)]0">
+                  <p className="mt-3 text-sm text-[var(--muted)]">
                     Sem auxiliares vinculados
                   </p>
                 )}
@@ -503,15 +758,21 @@ export default function Donors() {
                 <Button
                   onClick={() => navigate(`/doadores/${donor.id}`)}
                   variant="subtle"
+                  leftIcon={<UserIcon className="h-4 w-4" />}
                 >
                   Perfil
                 </Button>
-                <Button onClick={() => handleOpenEditModal(donor)} variant="subtle">
+                <Button
+                  onClick={() => handleOpenEditModal(donor)}
+                  variant="subtle"
+                  leftIcon={<EditIcon className="h-4 w-4" />}
+                >
                   Editar
                 </Button>
                 <Button
                   onClick={() => setDonorPendingRemoval(donor)}
                   variant="danger"
+                  leftIcon={<TrashIcon className="h-4 w-4" />}
                 >
                   Remover
                 </Button>
@@ -533,42 +794,97 @@ export default function Donors() {
         </ul>
       ) : null}
 
-      {isCreateModalOpen ? (
-        <FormModal
-          title="Adicionar doador"
-          description="Titulares e auxiliares aparecem separados nos abatimentos."
-          confirmLabel="Adicionar doador"
-          isLoading={isSubmitting}
-          onClose={handleCloseCreateModal}
-          onSubmit={handleAdd}
-        >
-          {renderDonorForm(createForm, handleFormChange(setCreateForm))}
-        </FormModal>
-      ) : null}
+      <AnimatePresence>
+        {isCreateModalOpen ? (
+          <FormModal
+            title="Adicionar doador"
+            description="Use uma pessoa existente ou crie uma nova antes de aplicar o papel de doador."
+            confirmLabel="Adicionar doador"
+            isLoading={isSubmitting}
+            onClose={handleCloseCreateModal}
+            onSubmit={handleAdd}
+          >
+            {renderDonorForm({
+              form: createForm,
+              onChange: handleFormChange(setCreateForm, { isCreate: true }),
+              mode: "create",
+            })}
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
 
-      {editingDonor ? (
-        <FormModal
-          title="Editar doador"
-          description="Atualize os dados do cadastro. O nome será salvo em CAIXA ALTA."
-          confirmLabel="Salvar alterações"
-          isLoading={isSubmitting}
-          onClose={handleCloseEditModal}
-          onSubmit={handleSaveEdit}
-        >
-          {renderDonorForm(editForm, handleFormChange(setEditForm))}
-        </FormModal>
-      ) : null}
+      <AnimatePresence>
+        {editingDonor ? (
+          <FormModal
+            title="Editar doador"
+            description="Atualize os dados do doador e o vínculo com a pessoa relacionada."
+            confirmLabel="Salvar alterações"
+            isLoading={isSubmitting}
+            onClose={handleCloseEditModal}
+            onSubmit={handleSaveEdit}
+          >
+            {renderDonorForm({
+              form: editForm,
+              onChange: handleFormChange(setEditForm),
+              mode: "edit",
+            })}
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
 
-      {donorPendingRemoval ? (
-        <ConfirmModal
-          title="Remover doador"
-          description={`Tem certeza de que deseja remover ${donorPendingRemoval.name}? As importações ligadas ao CPF serão recalculadas.`}
-          confirmLabel="Remover doador"
-          isLoading={isDeleting}
-          onCancel={() => setDonorPendingRemoval(null)}
-          onConfirm={handleConfirmRemove}
-        />
-      ) : null}
+      <AnimatePresence>
+        {personModalTarget ? (
+          <FormModal
+            title="Adicionar pessoa"
+            description="Cadastre a pessoa para usar como referência ou para promover a doador."
+            confirmLabel="Salvar pessoa"
+            isLoading={isSavingPerson}
+            onClose={() => {
+              setPersonModalTarget("");
+              setPersonForm({ ...EMPTY_PERSON_FORM });
+            }}
+            onSubmit={handleSaveInlinePerson}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <TextInput
+                name="name"
+                placeholder="Nome da pessoa"
+                value={personForm.name}
+                onChange={(event) =>
+                  setPersonForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+              />
+              <TextInput
+                name="cpf"
+                placeholder="CPF"
+                value={personForm.cpf}
+                onChange={(event) =>
+                  setPersonForm((current) => ({
+                    ...current,
+                    cpf: formatCpf(event.target.value),
+                  }))
+                }
+              />
+            </div>
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {donorPendingRemoval ? (
+          <ConfirmModal
+            title="Remover doador"
+            description={`Tem certeza de que deseja remover ${donorPendingRemoval.name}? As importações ligadas ao CPF serão recalculadas.`}
+            confirmLabel="Remover doador"
+            isLoading={isDeleting}
+            onCancel={() => setDonorPendingRemoval(null)}
+            onConfirm={handleConfirmRemove}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

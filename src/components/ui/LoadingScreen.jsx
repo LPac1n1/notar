@@ -1,3 +1,4 @@
+import { motion as Motion } from "framer-motion";
 import { LoadingIcon } from "./icons";
 
 export default function LoadingScreen({
@@ -11,7 +12,12 @@ export default function LoadingScreen({
     >
       <div className={`mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center ${compact ? "gap-3" : "gap-4"}`}>
         <div className="flex h-12 w-12 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)]">
-          <LoadingIcon className="h-6 w-6 animate-spin text-[var(--accent-strong)]" />
+          <Motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.1, ease: "linear", repeat: Infinity }}
+          >
+            <LoadingIcon className="h-6 w-6 text-[var(--accent-strong)]" />
+          </Motion.div>
         </div>
 
         <div className="space-y-2">
@@ -24,9 +30,19 @@ export default function LoadingScreen({
         </div>
 
         <div className="grid w-full max-w-sm gap-2">
-          <div className="notar-shimmer h-3 rounded-full bg-[color:var(--surface-muted)]" />
-          <div className="notar-shimmer h-3 w-10/12 rounded-full bg-[color:var(--surface-muted)] [animation-delay:120ms]" />
-          <div className="notar-shimmer h-3 w-8/12 rounded-full bg-[color:var(--surface-muted)] [animation-delay:220ms]" />
+          {[1, 2, 3].map((item) => (
+            <Motion.div
+              key={item}
+              className={`h-3 rounded-full bg-[color:var(--surface-muted)] ${item === 2 ? "w-10/12" : item === 3 ? "w-8/12" : ""}`.trim()}
+              animate={{ opacity: [0.45, 0.95, 0.45], x: ["-4%", "4%", "-4%"] }}
+              transition={{
+                duration: 1.4,
+                ease: "easeInOut",
+                repeat: Infinity,
+                delay: item * 0.12,
+              }}
+            />
+          ))}
         </div>
       </div>
     </div>

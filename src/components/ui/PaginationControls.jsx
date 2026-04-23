@@ -1,6 +1,7 @@
 import Button from "./Button";
 import SelectInput from "./SelectInput";
 import { PAGE_SIZE_OPTIONS } from "../../hooks/usePagination";
+import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 export default function PaginationControls({
   className = "",
@@ -51,6 +52,7 @@ export default function PaginationControls({
             variant="subtle"
             onClick={() => onPageChange(Math.max(1, page - 1))}
             disabled={page <= 1}
+            leftIcon={<ChevronLeftIcon className="h-4 w-4" />}
           >
             Anterior
           </Button>
@@ -61,6 +63,7 @@ export default function PaginationControls({
             variant="subtle"
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages}
+            rightIcon={<ChevronRightIcon className="h-4 w-4" />}
           >
             Próxima
           </Button>

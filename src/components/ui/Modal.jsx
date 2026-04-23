@@ -1,5 +1,7 @@
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
+import { motion as Motion } from "framer-motion";
+import { CloseIcon, FileIcon } from "./icons";
 
 const SIZE_CLASSES = {
   sm: "max-w-lg",
@@ -11,6 +13,7 @@ const SIZE_CLASSES = {
 let openModalCount = 0;
 let previousBodyOverflow = "";
 let previousDocumentOverflow = "";
+let previousBodyPaddingRight = "";
 
 function lockPageScroll() {
   if (typeof document === "undefined") {
@@ -18,10 +21,16 @@ function lockPageScroll() {
   }
 
   if (openModalCount === 0) {
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth;
     previousBodyOverflow = document.body.style.overflow;
     previousDocumentOverflow = document.documentElement.style.overflow;
+    previousBodyPaddingRight = document.body.style.paddingRight;
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
   }
 
   openModalCount += 1;
@@ -37,29 +46,11 @@ function unlockPageScroll() {
   if (openModalCount === 0) {
     document.body.style.overflow = previousBodyOverflow;
     document.documentElement.style.overflow = previousDocumentOverflow;
+    document.body.style.paddingRight = previousBodyPaddingRight;
     previousBodyOverflow = "";
     previousDocumentOverflow = "";
+    previousBodyPaddingRight = "";
   }
-}
-
-function DefaultModalIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" />
-      <path d="M8 9h8" />
-      <path d="M8 12h8" />
-      <path d="M8 15h5" />
-    </svg>
-  );
 }
 
 export default function Modal({
@@ -92,27 +83,41 @@ export default function Modal({
   }, [canClose, onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <button
+    <Motion.div
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <Motion.button
         type="button"
         aria-label="Fechar modal"
-        className="modal-backdrop absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/58 backdrop-blur-[3px]"
         onClick={onClose}
         disabled={!canClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.16 }}
       />
 
-      <div
+      <Motion.div
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
-        className={`modal-panel relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_16px_40px_-26px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
+        className={`relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_20px_48px_-28px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.985 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)]">
-                {icon ?? <DefaultModalIcon />}
+                {icon ?? <FileIcon className="h-5 w-5" />}
               </div>
 
               <div className="min-w-0">
@@ -139,19 +144,19 @@ export default function Modal({
           <button
             type="button"
             aria-label="Fechar modal"
-            className="rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 w-10 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--muted)] transition hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={onClose}
             disabled={!canClose}
           >
-            Fechar
+            <CloseIcon className="h-4 w-4" />
           </button>
         </div>
 
         <div className="max-h-[calc(100vh-8rem)] overflow-y-auto px-5 py-4">
           {children}
         </div>
-      </div>
-    </div>,
+      </Motion.div>
+    </Motion.div>,
     document.body,
   );
 }

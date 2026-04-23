@@ -6,12 +6,362 @@ import {
   startOfMonth,
 } from "./db";
 
-export async function listMonthlySummaries({
+function parseSourceCpfs(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((cpfValue) => cpfValue.trim())
+    .filter(Boolean);
+}
+
+function parseSources(value) {
+  return String(value ?? "")
+    .split(";;")
+    .map((sourceValue) => {
+      const [name = "", cpfValue = "", type = "", notesCount = "0"] =
+        sourceValue.split("|");
+
+      return {
+        name,
+        cpf: cpfValue,
+        type: type === "holder" ? "holder" : "auxiliary",
+        typeLabel: type === "holder" ? "Titular" : "Auxiliar",
+        notesCount: Number(notesCount || 0),
+      };
+    })
+    .filter((source) => source.name || source.cpf);
+}
+
+function mapSummaryRow(row) {
+  const notesCount = Number(row.notes_count ?? 0);
+
+  return {
+    id: row.id,
+    importId: row.import_id ?? "",
+    donorId: row.donor_id,
+    referenceMonth: row.reference_month,
+    cpf: row.cpf,
+    donorName: row.donor_name,
+    demand: row.demand ?? "",
+    notesCount,
+    valuePerNote: Number(row.value_per_note ?? 0),
+    abatementAmount: Number(row.abatement_amount ?? 0),
+    abatementStatus: row.abatement_status ?? "pending",
+    abatementMarkedAt: row.abatement_marked_at ?? "",
+    donorType: row.donor_type === "auxiliary" ? "auxiliary" : "holder",
+    donorTypeLabel: row.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+    holderDonorId: row.active_holder_donor_id ?? row.holder_donor_id ?? "",
+    holderPersonId: row.holder_person_id ?? "",
+    holderName: row.holder_name ?? "",
+    holderCpf: row.holder_cpf ?? "",
+    holderIsActiveDonor: Boolean(row.active_holder_donor_id),
+    donationStartDate: row.donation_start_date ?? "",
+    sourceCpfs: parseSourceCpfs(row.source_cpfs),
+    sources: parseSources(row.source_details),
+    sourceCpfCount: Number(row.source_cpf_count ?? 0),
+    sourceStartConflictCount: Number(row.source_start_conflict_count ?? 0),
+    hasDonationsInMonth: notesCount > 0,
+    canUpdateAbatement: notesCount > 0,
+  };
+}
+
+function mapDonorWithoutDonation(row, { referenceMonth, valuePerNote = 0 }) {
+  return {
+    id: `${row.id}-${referenceMonth}-without-donation`,
+    importId: "",
+    donorId: row.id,
+    referenceMonth,
+    cpf: row.cpf,
+    donorName: row.name,
+    demand: row.demand ?? "",
+    notesCount: 0,
+    valuePerNote: Number(valuePerNote ?? 0),
+    abatementAmount: 0,
+    abatementStatus: "none",
+    abatementMarkedAt: "",
+    donorType: row.donor_type === "auxiliary" ? "auxiliary" : "holder",
+    donorTypeLabel: row.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+    holderDonorId: row.active_holder_donor_id ?? row.holder_donor_id ?? "",
+    holderPersonId: row.holder_person_id ?? "",
+    holderName: row.holder_name ?? "",
+    holderCpf: row.holder_cpf ?? "",
+    holderIsActiveDonor: Boolean(row.active_holder_donor_id),
+    donationStartDate: row.donation_start_date ?? "",
+    sourceCpfs: parseSourceCpfs(row.source_cpfs),
+    sources: parseSources(row.source_details),
+    sourceCpfCount: Number(row.source_cpf_count ?? 0),
+    sourceStartConflictCount: 0,
+    hasDonationsInMonth: false,
+    canUpdateAbatement: false,
+  };
+}
+
+function applySummaryFilters(
+  rows,
+  {
+    abatementStatus = "all",
+    donationActivity = "all",
+  } = {},
+) {
+  let filteredRows = rows;
+
+  if (donationActivity === "donated") {
+    filteredRows = filteredRows.filter((row) => row.hasDonationsInMonth);
+  }
+
+  if (donationActivity === "not-donated") {
+    filteredRows = filteredRows.filter((row) => !row.hasDonationsInMonth);
+  }
+
+  if (abatementStatus !== "all") {
+    filteredRows = filteredRows.filter(
+      (row) =>
+        row.hasDonationsInMonth && row.abatementStatus === abatementStatus,
+    );
+  }
+
+  return filteredRows;
+}
+
+function buildDonorConditions({
+  donorId = "",
+  cpf = "",
+  demand = "",
+} = {}) {
+  const conditions = ["donors.is_active = TRUE"];
+
+  if (donorId.trim()) {
+    conditions.push(`donors.id = '${escapeSqlString(donorId.trim())}'`);
+  }
+
+  if (cpf.trim()) {
+    conditions.push(`
+      EXISTS (
+        SELECT 1
+        FROM donor_cpf_links
+        WHERE donor_cpf_links.donor_id = donors.id
+          AND donor_cpf_links.is_active = TRUE
+          AND donor_cpf_links.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
+      )
+    `);
+  }
+
+  if (demand.trim()) {
+    conditions.push(
+      `lower(coalesce(donors.demand, '')) = lower('${escapeSqlString(demand.trim())}')`,
+    );
+  }
+
+  return conditions;
+}
+
+async function listMonthlySummariesByMonth({
+  referenceMonth,
+  donorId = "",
+  cpf = "",
+  demand = "",
+  abatementStatus = "all",
+  donationActivity = "all",
+} = {}) {
+  const normalizedReferenceMonth = startOfMonth(referenceMonth);
+  const donorConditions = buildDonorConditions({ donorId, cpf, demand });
+  const donorWhereClause =
+    donorConditions.length > 0 ? `WHERE ${donorConditions.join(" AND ")}` : "";
+
+  const [donorRows, monthlyRows, importContextRows] = await Promise.all([
+    query(`
+      SELECT
+        donors.id,
+        donors.name,
+        donors.cpf,
+        donors.demand,
+        donors.donor_type,
+        donors.holder_donor_id,
+        donors.holder_person_id,
+        holder_people.name AS holder_name,
+        holder_people.cpf AS holder_cpf,
+        holder_active_donors.id AS active_holder_donor_id,
+        strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
+        coalesce((
+          SELECT string_agg(DISTINCT donor_cpf_links.cpf, ',')
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.donor_id = donors.id
+            AND donor_cpf_links.is_active = TRUE
+        ), '') AS source_cpfs,
+        coalesce((
+          SELECT string_agg(
+            source_rows.source_name || '|' ||
+            source_rows.source_cpf || '|' ||
+            source_rows.source_type || '|0',
+            ';;'
+          )
+          FROM (
+            SELECT
+              donor_cpf_links.name AS source_name,
+              donor_cpf_links.cpf AS source_cpf,
+              donor_cpf_links.link_type AS source_type
+            FROM donor_cpf_links
+            WHERE donor_cpf_links.donor_id = donors.id
+              AND donor_cpf_links.is_active = TRUE
+            ORDER BY
+              CASE WHEN donor_cpf_links.link_type = 'holder' THEN 0 ELSE 1 END,
+              donor_cpf_links.name ASC
+          ) AS source_rows
+        ), '') AS source_details,
+        coalesce((
+          SELECT count(*)
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.donor_id = donors.id
+            AND donor_cpf_links.is_active = TRUE
+        ), 0) AS source_cpf_count
+      FROM donors
+      LEFT JOIN people AS holder_people
+        ON holder_people.id = donors.holder_person_id
+      LEFT JOIN donors AS holder_active_donors
+        ON holder_active_donors.person_id = donors.holder_person_id
+        AND holder_active_donors.donor_type = 'holder'
+        AND holder_active_donors.is_active = TRUE
+      ${donorWhereClause}
+      ORDER BY donors.name ASC
+    `),
+    query(`
+      SELECT
+        monthly_donor_summary.id,
+        monthly_donor_summary.import_id,
+        monthly_donor_summary.donor_id,
+        strftime(monthly_donor_summary.reference_month, '%Y-%m-%d') AS reference_month,
+        monthly_donor_summary.cpf,
+        monthly_donor_summary.donor_name,
+        monthly_donor_summary.demand,
+        monthly_donor_summary.notes_count,
+        monthly_donor_summary.value_per_note,
+        monthly_donor_summary.abatement_amount,
+        monthly_donor_summary.abatement_status,
+        strftime(monthly_donor_summary.abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at,
+        donors.donor_type,
+        donors.holder_donor_id,
+        donors.holder_person_id,
+        holder_people.name AS holder_name,
+        holder_people.cpf AS holder_cpf,
+        holder_active_donors.id AS active_holder_donor_id,
+        strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
+        coalesce((
+          SELECT string_agg(DISTINCT import_cpf_summary.cpf, ',')
+          FROM import_cpf_summary
+          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+        ), '') AS source_cpfs,
+        coalesce((
+          SELECT string_agg(
+            source_rows.source_name || '|' ||
+            source_rows.source_cpf || '|' ||
+            source_rows.source_type || '|' ||
+            CAST(source_rows.source_notes AS VARCHAR),
+            ';;'
+          )
+          FROM (
+            SELECT
+              donor_cpf_links.name AS source_name,
+              donor_cpf_links.cpf AS source_cpf,
+              donor_cpf_links.link_type AS source_type,
+              sum(import_cpf_summary.notes_count) AS source_notes
+            FROM import_cpf_summary
+            INNER JOIN donor_cpf_links
+              ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+            WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+              AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+            GROUP BY
+              donor_cpf_links.name,
+              donor_cpf_links.cpf,
+              donor_cpf_links.link_type
+            ORDER BY
+              CASE WHEN donor_cpf_links.link_type = 'holder' THEN 0 ELSE 1 END,
+              donor_cpf_links.name ASC
+          ) AS source_rows
+        ), '') AS source_details,
+        coalesce((
+          SELECT count(DISTINCT import_cpf_summary.cpf)
+          FROM import_cpf_summary
+          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+        ), 0) AS source_cpf_count,
+        coalesce((
+          SELECT count(*)
+          FROM import_cpf_summary
+          INNER JOIN donor_cpf_links
+            ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+            AND donor_cpf_links.donation_start_date IS NOT NULL
+            AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
+        ), 0) AS source_start_conflict_count
+      FROM monthly_donor_summary
+      INNER JOIN donors
+        ON donors.id = monthly_donor_summary.donor_id
+      LEFT JOIN people AS holder_people
+        ON holder_people.id = donors.holder_person_id
+      LEFT JOIN donors AS holder_active_donors
+        ON holder_active_donors.person_id = donors.holder_person_id
+        AND holder_active_donors.donor_type = 'holder'
+        AND holder_active_donors.is_active = TRUE
+      WHERE monthly_donor_summary.reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
+        AND donors.is_active = TRUE
+        ${donorId.trim() ? `AND donors.id = '${escapeSqlString(donorId.trim())}'` : ""}
+        ${cpf.trim() ? `
+          AND EXISTS (
+            SELECT 1
+            FROM donor_cpf_links
+            WHERE donor_cpf_links.donor_id = donors.id
+              AND donor_cpf_links.is_active = TRUE
+              AND donor_cpf_links.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
+          )
+        ` : ""}
+        ${demand.trim() ? `AND lower(coalesce(donors.demand, '')) = lower('${escapeSqlString(demand.trim())}')` : ""}
+      ORDER BY monthly_donor_summary.donor_name ASC
+    `),
+    query(`
+      SELECT
+        id,
+        value_per_note
+      FROM imports
+      WHERE status = 'processed'
+        AND reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
+      ORDER BY imported_at DESC
+      LIMIT 1
+    `),
+  ]);
+
+  const summaryByDonorId = new Map(
+    monthlyRows.map((row) => [row.donor_id, mapSummaryRow(row)]),
+  );
+  const monthValuePerNote = Number(importContextRows[0]?.value_per_note ?? 0);
+
+  const mergedRows = donorRows.map((row) =>
+    summaryByDonorId.get(row.id) ??
+    mapDonorWithoutDonation(row, {
+      referenceMonth: normalizedReferenceMonth,
+      valuePerNote: monthValuePerNote,
+    }),
+  );
+
+  return applySummaryFilters(mergedRows, {
+    abatementStatus,
+    donationActivity,
+  }).sort((left, right) => {
+    if (left.hasDonationsInMonth !== right.hasDonationsInMonth) {
+      return left.hasDonationsInMonth ? -1 : 1;
+    }
+
+    return left.donorName.localeCompare(right.donorName, "pt-BR");
+  });
+}
+
+async function listHistoricalMonthlySummaries({
   referenceMonth = "",
   donorId = "",
   cpf = "",
   demand = "",
   abatementStatus = "all",
+  donationActivity = "all",
 } = {}) {
   const conditions = [];
   conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
@@ -46,13 +396,8 @@ export async function listMonthlySummaries({
     );
   }
 
-  if (abatementStatus !== "all") {
-    conditions.push(
-      `monthly_donor_summary.abatement_status = '${escapeSqlString(abatementStatus)}'`,
-    );
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const rows = await query(`
     SELECT
@@ -70,7 +415,10 @@ export async function listMonthlySummaries({
       strftime(monthly_donor_summary.abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at,
       donors.donor_type,
       donors.holder_donor_id,
-      holder_donors.name AS holder_name,
+      donors.holder_person_id,
+      holder_people.name AS holder_name,
+      holder_people.cpf AS holder_cpf,
+      holder_active_donors.id AS active_holder_donor_id,
       strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
       coalesce((
         SELECT string_agg(DISTINCT import_cpf_summary.cpf, ',')
@@ -125,52 +473,49 @@ export async function listMonthlySummaries({
     FROM monthly_donor_summary
     LEFT JOIN donors
       ON donors.id = monthly_donor_summary.donor_id
-    LEFT JOIN donors AS holder_donors
-      ON holder_donors.id = donors.holder_donor_id
+    LEFT JOIN people AS holder_people
+      ON holder_people.id = donors.holder_person_id
+    LEFT JOIN donors AS holder_active_donors
+      ON holder_active_donors.person_id = donors.holder_person_id
+      AND holder_active_donors.donor_type = 'holder'
+      AND holder_active_donors.is_active = TRUE
     ${whereClause}
     ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
   `);
 
-  return rows.map((row) => ({
-    id: row.id,
-    importId: row.import_id,
-    donorId: row.donor_id,
-    referenceMonth: row.reference_month,
-    cpf: row.cpf,
-    donorName: row.donor_name,
-    demand: row.demand ?? "",
-    notesCount: Number(row.notes_count ?? 0),
-    valuePerNote: Number(row.value_per_note ?? 0),
-    abatementAmount: Number(row.abatement_amount ?? 0),
-    abatementStatus: row.abatement_status,
-    abatementMarkedAt: row.abatement_marked_at,
-    donorType: row.donor_type === "auxiliary" ? "auxiliary" : "holder",
-    donorTypeLabel: row.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
-    holderDonorId: row.holder_donor_id ?? "",
-    holderName: row.holder_name ?? "",
-    donationStartDate: row.donation_start_date ?? "",
-    sourceCpfs: String(row.source_cpfs ?? "")
-      .split(",")
-      .map((cpfValue) => cpfValue.trim())
-      .filter(Boolean),
-    sources: String(row.source_details ?? "")
-      .split(";;")
-      .map((sourceValue) => {
-        const [name = "", cpfValue = "", type = "", notesCount = "0"] =
-          sourceValue.split("|");
+  return applySummaryFilters(rows.map(mapSummaryRow), {
+    abatementStatus,
+    donationActivity,
+  });
+}
 
-        return {
-          name,
-          cpf: cpfValue,
-          type: type === "holder" ? "holder" : "auxiliary",
-          typeLabel: type === "holder" ? "Titular" : "Auxiliar",
-          notesCount: Number(notesCount || 0),
-        };
-      })
-      .filter((source) => source.name || source.cpf),
-    sourceCpfCount: Number(row.source_cpf_count ?? 0),
-    sourceStartConflictCount: Number(row.source_start_conflict_count ?? 0),
-  }));
+export async function listMonthlySummaries({
+  referenceMonth = "",
+  donorId = "",
+  cpf = "",
+  demand = "",
+  abatementStatus = "all",
+  donationActivity = "all",
+} = {}) {
+  if (referenceMonth) {
+    return listMonthlySummariesByMonth({
+      referenceMonth,
+      donorId,
+      cpf,
+      demand,
+      abatementStatus,
+      donationActivity,
+    });
+  }
+
+  return listHistoricalMonthlySummaries({
+    referenceMonth,
+    donorId,
+    cpf,
+    demand,
+    abatementStatus,
+    donationActivity,
+  });
 }
 
 export async function updateAbatementStatus({

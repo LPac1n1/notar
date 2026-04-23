@@ -1,5 +1,6 @@
 export const SNAPSHOT_TABLE_KEYS = [
   "demands",
+  "people",
   "donors",
   "donorCpfLinks",
   "imports",
@@ -11,6 +12,7 @@ export const SNAPSHOT_TABLE_KEYS = [
 export function createEmptySnapshot() {
   return {
     demands: [],
+    people: [],
     donors: [],
     donorCpfLinks: [],
     imports: [],

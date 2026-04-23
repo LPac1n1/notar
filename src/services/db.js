@@ -33,13 +33,23 @@ let storageInfo = { ...DEFAULT_STORAGE_INFO };
 
 const RESTORE_TABLE_COLUMNS = {
   demands: ["id", "name", "is_active", "created_at", "updated_at"],
+  people: [
+    "id",
+    "name",
+    "cpf",
+    "is_active",
+    "created_at",
+    "updated_at",
+  ],
   donors: [
     "id",
+    "person_id",
     "name",
     "cpf",
     "demand",
     "donor_type",
     "holder_donor_id",
+    "holder_person_id",
     "donation_start_date",
     "is_active",
     "created_at",
@@ -206,13 +216,26 @@ async function initSchema({ structural = true } = {}) {
   `);
 
     await conn.query(`
+    CREATE TABLE IF NOT EXISTS people (
+      id TEXT,
+      name TEXT,
+      cpf TEXT,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS donors (
       id TEXT,
+      person_id TEXT,
       name TEXT,
       cpf TEXT,
       demand TEXT,
       donor_type TEXT DEFAULT 'holder',
       holder_donor_id TEXT,
+      holder_person_id TEXT,
       donation_start_date DATE,
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -306,8 +329,23 @@ async function initSchema({ structural = true } = {}) {
   `);
 
     await conn.query(`
+    ALTER TABLE people
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
+  `);
+
+    await conn.query(`
+    ALTER TABLE people
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  `);
+
+    await conn.query(`
     ALTER TABLE donors
     ADD COLUMN IF NOT EXISTS demand TEXT
+  `);
+
+    await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS person_id TEXT
   `);
 
     await conn.query(`
@@ -318,6 +356,11 @@ async function initSchema({ structural = true } = {}) {
     await conn.query(`
     ALTER TABLE donors
     ADD COLUMN IF NOT EXISTS holder_donor_id TEXT
+  `);
+
+    await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS holder_person_id TEXT
   `);
 
     await conn.query(`
@@ -437,6 +480,15 @@ async function initSchema({ structural = true } = {}) {
   `);
   const shouldRebuildSummariesAfterCpfNormalization =
     Number(recordsNeedingCpfNormalizationRows.toArray()[0]?.total ?? 0) > 0;
+
+  await conn.query(`
+    UPDATE people
+    SET
+      name = upper(trim(name)),
+      cpf = ${normalizeCpfSqlExpression("cpf")},
+      is_active = coalesce(is_active, TRUE),
+      updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
+  `);
 
   await conn.query(`
     UPDATE donors
@@ -576,6 +628,99 @@ async function initSchema({ structural = true } = {}) {
         WHERE donor_cpf_links.donor_id = donors.id
           AND donor_cpf_links.link_type = 'holder'
       )
+  `);
+
+  await conn.query(`
+    INSERT INTO people (
+      id,
+      name,
+      cpf,
+      is_active,
+      created_at,
+      updated_at
+    )
+    SELECT
+      donors.id || '-person',
+      donors.name,
+      donors.cpf,
+      coalesce(donors.is_active, TRUE),
+      coalesce(donors.created_at, CURRENT_TIMESTAMP),
+      CURRENT_TIMESTAMP
+    FROM donors
+    WHERE donors.cpf IS NOT NULL
+      AND trim(donors.cpf) <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM people
+        WHERE people.cpf = donors.cpf
+      )
+  `);
+
+  await conn.query(`
+    UPDATE donors
+    SET
+      person_id = (
+        SELECT people.id
+        FROM people
+        WHERE people.cpf = donors.cpf
+        ORDER BY people.created_at ASC, people.id ASC
+        LIMIT 1
+      ),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE coalesce(trim(person_id), '') = ''
+      AND donors.cpf IS NOT NULL
+      AND trim(donors.cpf) <> ''
+  `);
+
+  await conn.query(`
+    UPDATE donors
+    SET
+      name = coalesce((
+        SELECT people.name
+        FROM people
+        WHERE people.id = donors.person_id
+        LIMIT 1
+      ), donors.name),
+      cpf = coalesce((
+        SELECT people.cpf
+        FROM people
+        WHERE people.id = donors.person_id
+        LIMIT 1
+      ), donors.cpf),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE coalesce(trim(person_id), '') <> ''
+  `);
+
+  await conn.query(`
+    UPDATE donors
+    SET
+      holder_person_id = (
+        SELECT holder_donors.person_id
+        FROM donors AS holder_donors
+        WHERE holder_donors.id = donors.holder_donor_id
+        LIMIT 1
+      ),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE donor_type = 'auxiliary'
+      AND coalesce(trim(holder_person_id), '') = ''
+      AND coalesce(trim(holder_donor_id), '') <> ''
+  `);
+
+  await conn.query(`
+    UPDATE donors
+    SET
+      holder_donor_id = (
+        SELECT holder_donors.id
+        FROM donors AS holder_donors
+        WHERE holder_donors.person_id = donors.holder_person_id
+          AND holder_donors.donor_type = 'holder'
+          AND holder_donors.is_active = TRUE
+        ORDER BY holder_donors.created_at ASC, holder_donors.id ASC
+        LIMIT 1
+      ),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE donor_type = 'auxiliary'
+      AND coalesce(trim(holder_person_id), '') <> ''
   `);
 
   await conn.query(`
@@ -752,6 +897,18 @@ async function initSchema({ structural = true } = {}) {
     `).catch(() => null);
 
     await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_people_cpf ON people(cpf)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_donors_person ON donors(person_id)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_donors_holder_person ON donors(holder_person_id)
+    `).catch(() => null);
+
+    await conn.query(`
       CREATE INDEX IF NOT EXISTS idx_donors_cpf ON donors(cpf)
     `).catch(() => null);
 
@@ -922,14 +1079,28 @@ async function exportDatabaseSnapshot() {
     ORDER BY name ASC, id ASC
   `);
 
+  const people = await query(`
+    SELECT
+      id,
+      name,
+      cpf,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM people
+    ORDER BY name ASC, id ASC
+  `);
+
   const donors = await query(`
     SELECT
       id,
+      person_id,
       name,
       cpf,
       demand,
       donor_type,
       holder_donor_id,
+      holder_person_id,
       CAST(donation_start_date AS VARCHAR) AS donation_start_date,
       is_active,
       CAST(created_at AS VARCHAR) AS created_at,
@@ -1020,6 +1191,7 @@ async function exportDatabaseSnapshot() {
 
   return {
     demands,
+    people,
     donors,
     donorCpfLinks,
     imports,
@@ -1055,11 +1227,13 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
     "imports",
     "donor_cpf_links",
     "donors",
+    "people",
     "demands",
     "trash_items",
   ];
   const tableEntriesToInsert = [
     ["demands", normalizedSnapshot.demands],
+    ["people", normalizedSnapshot.people],
     ["donors", normalizedSnapshot.donors],
     ["donor_cpf_links", normalizedSnapshot.donorCpfLinks],
     ["imports", normalizedSnapshot.imports],

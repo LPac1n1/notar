@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
@@ -9,6 +10,11 @@ import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
+import {
+  EditIcon,
+  PlusIcon,
+  TrashIcon,
+} from "../components/ui/icons";
 import {
   createDemand,
   deleteDemand,
@@ -191,7 +197,10 @@ export default function Demands() {
       />
 
       <div className="mb-6">
-        <Button onClick={() => setIsCreateModalOpen(true)}>
+        <Button
+          onClick={() => setIsCreateModalOpen(true)}
+          leftIcon={<PlusIcon className="h-4 w-4" />}
+        >
           Adicionar demanda
         </Button>
       </div>
@@ -246,12 +255,14 @@ export default function Demands() {
                 <Button
                   variant="subtle"
                   onClick={() => handleOpenEditModal(demand)}
+                  leftIcon={<EditIcon className="h-4 w-4" />}
                 >
                   Editar
                 </Button>
                 <Button
                   variant="danger"
                   onClick={() => setDemandPendingRemoval(demand)}
+                  leftIcon={<TrashIcon className="h-4 w-4" />}
                 >
                   Remover
                 </Button>
@@ -273,55 +284,61 @@ export default function Demands() {
         </ul>
       ) : null}
 
-      {isCreateModalOpen ? (
-        <FormModal
-          title="Adicionar demanda"
-          description="Cadastre o nome da demanda. O sistema salvará em CAIXA ALTA para manter o padrão."
-          confirmLabel="Adicionar demanda"
-          isLoading={isSubmitting}
-          onClose={() => {
-            setName("");
-            setIsCreateModalOpen(false);
-          }}
-          onSubmit={handleAdd}
-          size="sm"
-        >
-          <TextInput
-            placeholder="Nome da demanda"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </FormModal>
-      ) : null}
+      <AnimatePresence>
+        {isCreateModalOpen ? (
+          <FormModal
+            title="Adicionar demanda"
+            description="Cadastre o nome da demanda."
+            confirmLabel="Adicionar demanda"
+            isLoading={isSubmitting}
+            onClose={() => {
+              setName("");
+              setIsCreateModalOpen(false);
+            }}
+            onSubmit={handleAdd}
+            size="sm"
+          >
+            <TextInput
+              placeholder="Nome da demanda"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
 
-      {editingDemand ? (
-        <FormModal
-          title="Editar demanda"
-          description="Atualize o nome da demanda e salve as alterações."
-          onClose={handleCloseEditModal}
-          onSubmit={handleSaveEdit}
-          confirmLabel="Salvar alterações"
-          isLoading={isSubmitting}
-          size="sm"
-        >
-          <TextInput
-            placeholder="Nome da demanda"
-            value={editName}
-            onChange={(event) => setEditName(event.target.value)}
-          />
-        </FormModal>
-      ) : null}
+      <AnimatePresence>
+        {editingDemand ? (
+          <FormModal
+            title="Editar demanda"
+            description="Atualize o nome da demanda."
+            onClose={handleCloseEditModal}
+            onSubmit={handleSaveEdit}
+            confirmLabel="Salvar alterações"
+            isLoading={isSubmitting}
+            size="sm"
+          >
+            <TextInput
+              placeholder="Nome da demanda"
+              value={editName}
+              onChange={(event) => setEditName(event.target.value)}
+            />
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
 
-      {demandPendingRemoval ? (
-        <ConfirmModal
-          title="Remover demanda"
-          description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Ela ficará disponível na lixeira para restauração.`}
-          confirmLabel="Remover demanda"
-          isLoading={isDeleting}
-          onCancel={() => setDemandPendingRemoval(null)}
-          onConfirm={handleConfirmRemove}
-        />
-      ) : null}
+      <AnimatePresence>
+        {demandPendingRemoval ? (
+          <ConfirmModal
+            title="Remover demanda"
+            description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Ela ficará disponível na lixeira para restauração.`}
+            confirmLabel="Remover demanda"
+            isLoading={isDeleting}
+            onCancel={() => setDemandPendingRemoval(null)}
+            onConfirm={handleConfirmRemove}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

@@ -108,6 +108,12 @@ export async function deleteTrashItemPermanently(id) {
   `);
 }
 
+export async function deleteAllTrashItemsPermanently() {
+  await execute(`
+    DELETE FROM trash_items
+  `);
+}
+
 async function restoreDemand(payload) {
   const demandRow = payload.demands?.[0];
 
@@ -129,9 +135,33 @@ async function restoreDemand(payload) {
   await insertRows("demands", payload.demands ?? []);
 }
 
+async function restorePerson(payload) {
+  const personRow = payload.people?.[0];
+
+  if (!personRow) {
+    return;
+  }
+
+  const existingPerson = await query(`
+    SELECT id
+    FROM people
+    WHERE cpf = '${escapeSqlString(normalizeCpf(personRow.cpf))}'
+    LIMIT 1
+  `);
+
+  if (existingPerson.length > 0) {
+    throw new Error(
+      "Ja existe uma pessoa com esse CPF. Remova ou edite o cadastro atual antes de restaurar.",
+    );
+  }
+
+  await insertRows("people", payload.people ?? []);
+}
+
 async function restoreDonor(payload) {
-  const donors = payload.donors ?? [];
+  const donors = (payload.donors ?? []).map((row) => ({ ...row }));
   const donorCpfLinks = payload.donorCpfLinks ?? [];
+  const people = [...(payload.people ?? [])];
   const cpfs = donorCpfLinks.map((link) => normalizeCpf(link.cpf));
 
   if (cpfs.length > 0) {
@@ -150,8 +180,98 @@ async function restoreDonor(payload) {
     }
   }
 
+  const peopleById = new Map(people.map((person) => [person.id, person]));
+  const donorById = new Map(donors.map((donor) => [donor.id, donor]));
+
+  for (const donor of donors) {
+    if (!donor.person_id) {
+      const existingPerson = await query(`
+        SELECT id
+        FROM people
+        WHERE cpf = '${escapeSqlString(normalizeCpf(donor.cpf))}'
+        LIMIT 1
+      `);
+
+      if (existingPerson.length > 0) {
+        donor.person_id = existingPerson[0].id;
+      } else {
+        donor.person_id = `${donor.id}-person`;
+
+        if (!peopleById.has(donor.person_id)) {
+          const derivedPerson = {
+            id: donor.person_id,
+            name: donor.name,
+            cpf: donor.cpf,
+            is_active: true,
+            created_at: donor.created_at,
+            updated_at: donor.updated_at,
+          };
+
+          people.push(derivedPerson);
+          peopleById.set(derivedPerson.id, derivedPerson);
+        }
+      }
+    }
+
+    if (!donor.holder_person_id && donor.holder_donor_id) {
+      const payloadHolderDonor = donorById.get(donor.holder_donor_id);
+
+      if (payloadHolderDonor?.person_id) {
+        donor.holder_person_id = payloadHolderDonor.person_id;
+      } else {
+        const existingHolderDonorRows = await query(`
+          SELECT person_id, cpf
+          FROM donors
+          WHERE id = '${escapeSqlString(donor.holder_donor_id)}'
+          LIMIT 1
+        `);
+
+        const existingHolderDonor = existingHolderDonorRows[0];
+
+        if (existingHolderDonor?.person_id) {
+          donor.holder_person_id = existingHolderDonor.person_id;
+        } else if (existingHolderDonor?.cpf) {
+          const existingHolderPerson = await query(`
+            SELECT id
+            FROM people
+            WHERE cpf = '${escapeSqlString(normalizeCpf(existingHolderDonor.cpf))}'
+            LIMIT 1
+          `);
+
+          if (existingHolderPerson.length > 0) {
+            donor.holder_person_id = existingHolderPerson[0].id;
+          }
+        }
+      }
+    }
+  }
+
+  for (const person of people) {
+    const existingPersonRows = await query(`
+      SELECT id
+      FROM people
+      WHERE id = '${escapeSqlString(person.id)}'
+      LIMIT 1
+    `);
+
+    if (existingPersonRows.length === 0) {
+      await insertRows("people", [person]);
+    }
+  }
+
   await insertRows("donors", donors);
   await insertRows("donor_cpf_links", donorCpfLinks);
+
+  for (const donor of donors.filter((item) => item.donor_type === "holder")) {
+    await execute(`
+      UPDATE donors
+      SET
+        holder_donor_id = '${escapeSqlString(donor.id)}',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE holder_person_id = '${escapeSqlString(donor.holder_person_id || donor.person_id)}'
+        AND donor_type = 'auxiliary'
+    `);
+  }
 
   for (const auxiliaryId of payload.auxiliaryIdsToRelink ?? []) {
     await execute(`
@@ -211,6 +331,8 @@ export async function restoreTrashItem(id) {
   await runInTransaction(async () => {
     if (trashItem.entity_type === "demand") {
       await restoreDemand(payload);
+    } else if (trashItem.entity_type === "person") {
+      await restorePerson(payload);
     } else if (trashItem.entity_type === "donor") {
       await restoreDonor(payload);
     } else if (trashItem.entity_type === "import") {

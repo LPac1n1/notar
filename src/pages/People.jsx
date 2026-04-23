@@ -1,0 +1,441 @@
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { nanoid } from "nanoid";
+import { useNavigate } from "react-router-dom";
+import Button from "../components/ui/Button";
+import ConfirmModal from "../components/ui/ConfirmModal";
+import EmptyState from "../components/ui/EmptyState";
+import FeedbackMessage from "../components/ui/FeedbackMessage";
+import FormModal from "../components/ui/FormModal";
+import LoadingScreen from "../components/ui/LoadingScreen";
+import PageHeader from "../components/ui/PageHeader";
+import PaginationControls from "../components/ui/PaginationControls";
+import SectionCard from "../components/ui/SectionCard";
+import SelectInput from "../components/ui/SelectInput";
+import StatusBadge from "../components/ui/StatusBadge";
+import TextInput from "../components/ui/TextInput";
+import {
+  EditIcon,
+  PlusIcon,
+  TrashIcon,
+  UserIcon,
+} from "../components/ui/icons";
+import {
+  createPerson,
+  deletePerson,
+  listPeople,
+  updatePerson,
+} from "../services/personService";
+import { formatCpf } from "../utils/cpf";
+import { getErrorMessage } from "../utils/error";
+import { usePagination } from "../hooks/usePagination";
+
+const EMPTY_PERSON_FORM = {
+  name: "",
+  cpf: "",
+};
+
+const INITIAL_FILTERS = {
+  name: "",
+  cpf: "",
+  role: "",
+};
+
+const ROLE_OPTIONS = [
+  { value: "", label: "Todos os papéis" },
+  { value: "holder", label: "Doadores titulares" },
+  { value: "auxiliary", label: "Doadores auxiliares" },
+  { value: "reference", label: "Pessoas de referência" },
+];
+
+export default function People() {
+  const [people, setPeople] = useState([]);
+  const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
+  const [createForm, setCreateForm] = useState({ ...EMPTY_PERSON_FORM });
+  const [editForm, setEditForm] = useState({ ...EMPTY_PERSON_FORM });
+  const [editingPerson, setEditingPerson] = useState(null);
+  const [personPendingRemoval, setPersonPendingRemoval] = useState(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const navigate = useNavigate();
+  const peoplePagination = usePagination(people, { initialPageSize: 25 });
+
+  const loadPeople = useCallback(async (currentFilters = filters) => {
+    try {
+      setError("");
+      const personRows = await listPeople(currentFilters);
+      setPeople(personRows);
+    } catch (err) {
+      console.error(
+        "Erro ao carregar pessoas:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError("Nao foi possivel carregar as pessoas.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
+
+  const handleFormChange = (setter) => (event) => {
+    const { name, value } = event.target;
+
+    setter((current) => ({
+      ...current,
+      [name]: name === "cpf" ? formatCpf(value) : value,
+    }));
+  };
+
+  const handleFilterChange = async (event) => {
+    const { name, value } = event.target;
+    const nextFilters = {
+      ...filters,
+      [name]: name === "cpf" ? formatCpf(value) : value,
+    };
+    setFilters(nextFilters);
+    await loadPeople(nextFilters);
+  };
+
+  const handleClearFilters = async () => {
+    const nextFilters = { ...INITIAL_FILTERS };
+    setFilters(nextFilters);
+    await loadPeople(nextFilters);
+  };
+
+  const handleAdd = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsSubmitting(true);
+      await createPerson({
+        id: nanoid(),
+        name: createForm.name,
+        cpf: createForm.cpf,
+      });
+      await loadPeople();
+      setIsCreateModalOpen(false);
+      setCreateForm({ ...EMPTY_PERSON_FORM });
+      setSuccessMessage("Pessoa cadastrada com sucesso.");
+    } catch (err) {
+      console.error(
+        "Erro ao adicionar pessoa:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(getErrorMessage(err, "Nao foi possivel cadastrar a pessoa."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPerson) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsSubmitting(true);
+      await updatePerson({
+        id: editingPerson.id,
+        name: editForm.name,
+        cpf: editForm.cpf,
+      });
+      await loadPeople();
+      setEditingPerson(null);
+      setEditForm({ ...EMPTY_PERSON_FORM });
+      setSuccessMessage("Pessoa atualizada com sucesso.");
+    } catch (err) {
+      console.error(
+        "Erro ao atualizar pessoa:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(getErrorMessage(err, "Nao foi possivel atualizar a pessoa."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!personPendingRemoval) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsDeleting(true);
+      await deletePerson(personPendingRemoval.id);
+      await loadPeople();
+      setPersonPendingRemoval(null);
+      setSuccessMessage("Pessoa enviada para a lixeira com sucesso.");
+    } catch (err) {
+      console.error(
+        "Erro ao remover pessoa:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(getErrorMessage(err, "Nao foi possivel remover a pessoa."));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  if (isLoading && !people.length && !error) {
+    return (
+      <div>
+        <PageHeader
+          title="Pessoas"
+          subtitle="Referências e pessoas vinculadas aos doadores."
+          className="mb-6"
+        />
+        <LoadingScreen
+          title="Carregando pessoas"
+          description="Buscando vínculos e papéis cadastrados."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Pessoas"
+        subtitle={`${people.length} pessoa(s) encontrada(s).`}
+        className="mb-6"
+      />
+
+      <div className="mb-6">
+        <Button
+          onClick={() => {
+            setError("");
+            setSuccessMessage("");
+            setCreateForm({ ...EMPTY_PERSON_FORM });
+            setIsCreateModalOpen(true);
+          }}
+          leftIcon={<PlusIcon className="h-4 w-4" />}
+        >
+          Adicionar pessoa
+        </Button>
+      </div>
+
+      <SectionCard title="Buscar pessoas" className="mb-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <TextInput
+            name="name"
+            placeholder="Filtrar por nome"
+            value={filters.name}
+            onChange={handleFilterChange}
+          />
+          <TextInput
+            name="cpf"
+            placeholder="Filtrar por CPF"
+            value={filters.cpf}
+            onChange={handleFilterChange}
+          />
+          <SelectInput
+            name="role"
+            value={filters.role}
+            onChange={handleFilterChange}
+            options={ROLE_OPTIONS}
+            placeholder="Todos os papéis"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Button variant="subtle" onClick={handleClearFilters}>
+            Limpar filtros
+          </Button>
+        </div>
+      </SectionCard>
+
+      <FeedbackMessage message={error} tone="error" />
+      <FeedbackMessage message={successMessage} tone="success" />
+
+      {!isLoading && people.length === 0 ? (
+        <EmptyState
+          title="Nenhuma pessoa cadastrada"
+          description="Cadastre uma pessoa de referência ou promova um cadastro a doador quando precisar."
+        />
+      ) : !isLoading ? (
+        <ul className="space-y-2">
+          <li>
+            <PaginationControls
+              endItem={peoplePagination.endItem}
+              onPageChange={peoplePagination.setPage}
+              onPageSizeChange={peoplePagination.handlePageSizeChange}
+              page={peoplePagination.page}
+              pageSize={peoplePagination.pageSize}
+              totalItems={peoplePagination.totalItems}
+              totalPages={peoplePagination.totalPages}
+            />
+          </li>
+
+          {peoplePagination.visibleItems.map((person) => (
+            <li
+              key={person.id}
+              className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-[var(--text-main)]">
+                    {person.name}
+                  </p>
+                  <StatusBadge
+                    label={person.roleLabel}
+                    tone={person.roleTone}
+                  />
+                </div>
+
+                <p className="text-sm text-[var(--muted)]">CPF: {person.cpf}</p>
+
+                {person.donorId ? (
+                  <p className="text-sm text-[var(--muted)]">
+                    Demanda: {person.demand || "Nao informada"} • Início:{" "}
+                    {person.donationStartDate || "Nao informado"}
+                  </p>
+                ) : (
+                  <p className="text-sm text-[var(--muted)]">
+                    {person.referencedByAuxiliaries > 0
+                      ? `Vinculada a ${person.referencedByAuxiliaries} auxiliar(es).`
+                      : "Sem papel de doador ativo."}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {person.donorId ? (
+                  <Button
+                    variant="subtle"
+                    onClick={() => navigate(`/doadores/${person.donorId}`)}
+                    leftIcon={<UserIcon className="h-4 w-4" />}
+                  >
+                    Abrir doador
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="subtle"
+                      onClick={() => {
+                        setError("");
+                        setSuccessMessage("");
+                        setEditingPerson(person);
+                        setEditForm({
+                          name: person.name,
+                          cpf: person.cpf,
+                        });
+                      }}
+                      leftIcon={<EditIcon className="h-4 w-4" />}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => setPersonPendingRemoval(person)}
+                      leftIcon={<TrashIcon className="h-4 w-4" />}
+                    >
+                      Remover
+                    </Button>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+
+          <li>
+            <PaginationControls
+              endItem={peoplePagination.endItem}
+              onPageChange={peoplePagination.setPage}
+              onPageSizeChange={peoplePagination.handlePageSizeChange}
+              page={peoplePagination.page}
+              pageSize={peoplePagination.pageSize}
+              totalItems={peoplePagination.totalItems}
+              totalPages={peoplePagination.totalPages}
+            />
+          </li>
+        </ul>
+      ) : null}
+
+      <AnimatePresence>
+        {isCreateModalOpen ? (
+          <FormModal
+            title="Adicionar pessoa"
+            description="Cadastre uma pessoa para uso como referência ou vínculo informativo."
+            confirmLabel="Adicionar pessoa"
+            isLoading={isSubmitting}
+            onClose={() => {
+              setIsCreateModalOpen(false);
+              setCreateForm({ ...EMPTY_PERSON_FORM });
+            }}
+            onSubmit={handleAdd}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <TextInput
+                name="name"
+                placeholder="Nome da pessoa"
+                value={createForm.name}
+                onChange={handleFormChange(setCreateForm)}
+              />
+              <TextInput
+                name="cpf"
+                placeholder="CPF"
+                value={createForm.cpf}
+                onChange={handleFormChange(setCreateForm)}
+              />
+            </div>
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingPerson ? (
+          <FormModal
+            title="Editar pessoa"
+            description="Atualize os dados da pessoa de referência."
+            confirmLabel="Salvar alterações"
+            isLoading={isSubmitting}
+            onClose={() => {
+              setEditingPerson(null);
+              setEditForm({ ...EMPTY_PERSON_FORM });
+            }}
+            onSubmit={handleSaveEdit}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <TextInput
+                name="name"
+                placeholder="Nome da pessoa"
+                value={editForm.name}
+                onChange={handleFormChange(setEditForm)}
+              />
+              <TextInput
+                name="cpf"
+                placeholder="CPF"
+                value={editForm.cpf}
+                onChange={handleFormChange(setEditForm)}
+              />
+            </div>
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {personPendingRemoval ? (
+          <ConfirmModal
+            title="Remover pessoa"
+            description={`Tem certeza de que deseja remover ${personPendingRemoval.name}?`}
+            confirmLabel="Remover pessoa"
+            isLoading={isDeleting}
+            onCancel={() => setPersonPendingRemoval(null)}
+            onConfirm={handleDelete}
+          />
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
