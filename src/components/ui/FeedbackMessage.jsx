@@ -63,10 +63,10 @@ function AlertBox({ message, tone, className }) {
   return (
     <div
       role="alert"
-      className={`mb-4 rounded-[22px] border px-4 py-4 text-sm ${toneStyles.container} ${className}`.trim()}
+      className={`mb-4 rounded-md border px-4 py-4 text-sm ${toneStyles.container} ${className}`.trim()}
     >
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black/10">
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-black/10">
           <ToneIcon className="h-4.5 w-4.5" />
         </div>
         <p className="min-w-0 flex-1 leading-6">{message}</p>
@@ -118,10 +118,10 @@ function ToastMessage({
   return createPortal(
     <div
       role="alert"
-      className={`pointer-events-auto overflow-hidden rounded-[24px] border shadow-xl backdrop-blur-xl ${toneStyles.container} ${className}`.trim()}
+      className={`pointer-events-auto overflow-hidden rounded-md border shadow-xl backdrop-blur-xl ${toneStyles.container} ${className}`.trim()}
     >
       <div className="flex items-start gap-3 px-4 py-3">
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black/10">
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-black/10">
           <ToneIcon className="h-4.5 w-4.5" />
         </div>
         <p className="min-w-0 flex-1 text-sm leading-6">{message}</p>
@@ -129,7 +129,7 @@ function ToastMessage({
           type="button"
           aria-label="Fechar toast"
           onClick={() => setIsVisible(false)}
-          className={`rounded-xl px-2.5 py-1.5 text-sm transition ${toneStyles.button}`.trim()}
+          className={`rounded-md px-2.5 py-1.5 text-sm transition ${toneStyles.button}`.trim()}
         >
           X
         </button>

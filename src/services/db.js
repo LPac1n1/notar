@@ -31,6 +31,82 @@ const DEFAULT_STORAGE_INFO = {
 };
 let storageInfo = { ...DEFAULT_STORAGE_INFO };
 
+const RESTORE_TABLE_COLUMNS = {
+  demands: ["id", "name", "is_active", "created_at", "updated_at"],
+  donors: [
+    "id",
+    "name",
+    "cpf",
+    "demand",
+    "donor_type",
+    "holder_donor_id",
+    "donation_start_date",
+    "is_active",
+    "created_at",
+    "updated_at",
+  ],
+  donor_cpf_links: [
+    "id",
+    "donor_id",
+    "name",
+    "cpf",
+    "donation_start_date",
+    "link_type",
+    "is_active",
+    "created_at",
+    "updated_at",
+  ],
+  imports: [
+    "id",
+    "reference_month",
+    "file_name",
+    "value_per_note",
+    "total_rows",
+    "matched_rows",
+    "matched_donors",
+    "status",
+    "notes",
+    "imported_at",
+    "updated_at",
+  ],
+  import_cpf_summary: [
+    "id",
+    "import_id",
+    "reference_month",
+    "cpf",
+    "notes_count",
+    "matched_donor_id",
+    "matched_source_id",
+    "is_registered_donor",
+    "created_at",
+    "updated_at",
+  ],
+  monthly_donor_summary: [
+    "id",
+    "import_id",
+    "donor_id",
+    "reference_month",
+    "cpf",
+    "donor_name",
+    "demand",
+    "notes_count",
+    "value_per_note",
+    "abatement_amount",
+    "abatement_status",
+    "abatement_marked_at",
+    "created_at",
+    "updated_at",
+  ],
+  trash_items: [
+    "id",
+    "entity_type",
+    "entity_id",
+    "label",
+    "payload_json",
+    "deleted_at",
+  ],
+};
+
 function updateStorageInfo(nextStorageInfo) {
   storageInfo = { ...nextStorageInfo };
 
@@ -49,6 +125,28 @@ function supportsFileDatabaseSelection() {
     typeof window.showOpenFilePicker === "function" &&
     typeof window.showSaveFilePicker === "function"
   );
+}
+
+function normalizeCpfSqlExpression(expression) {
+  return `
+    replace(
+      replace(
+        replace(
+          replace(
+            replace(trim(coalesce(${expression}, '')), '.', ''),
+            '-',
+            ''
+          ),
+          '/',
+          ''
+        ),
+        ' ',
+        ''
+      ),
+      ',',
+      ''
+    )
+  `;
 }
 
 async function ensureFileHandlePermission(handle, requestPermission = false) {
@@ -95,8 +193,9 @@ async function openDatabase() {
   });
 }
 
-async function initSchema() {
-  await conn.query(`
+async function initSchema({ structural = true } = {}) {
+  if (structural) {
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS demands (
       id TEXT,
       name TEXT,
@@ -106,12 +205,14 @@ async function initSchema() {
     );
   `);
 
-  await conn.query(`
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS donors (
       id TEXT,
       name TEXT,
       cpf TEXT,
       demand TEXT,
+      donor_type TEXT DEFAULT 'holder',
+      holder_donor_id TEXT,
       donation_start_date DATE,
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -119,7 +220,7 @@ async function initSchema() {
     );
   `);
 
-  await conn.query(`
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS donor_cpf_links (
       id TEXT,
       donor_id TEXT,
@@ -133,7 +234,7 @@ async function initSchema() {
     );
   `);
 
-  await conn.query(`
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS imports (
       id TEXT,
       reference_month DATE,
@@ -149,7 +250,7 @@ async function initSchema() {
     );
   `);
 
-  await conn.query(`
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS import_cpf_summary (
       id TEXT,
       import_id TEXT,
@@ -164,7 +265,7 @@ async function initSchema() {
     );
   `);
 
-  await conn.query(`
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS monthly_donor_summary (
       id TEXT,
       import_id TEXT,
@@ -183,105 +284,122 @@ async function initSchema() {
     );
   `);
 
-  await conn.query(`
+    await conn.query(`
+    CREATE TABLE IF NOT EXISTS trash_items (
+      id TEXT,
+      entity_type TEXT,
+      entity_id TEXT,
+      label TEXT,
+      payload_json TEXT,
+      deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+    await conn.query(`
     ALTER TABLE demands
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE demands
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donors
     ADD COLUMN IF NOT EXISTS demand TEXT
   `);
 
-  await conn.query(`
+    await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS donor_type TEXT DEFAULT 'holder'
+  `);
+
+    await conn.query(`
+    ALTER TABLE donors
+    ADD COLUMN IF NOT EXISTS holder_donor_id TEXT
+  `);
+
+    await conn.query(`
     ALTER TABLE donors
     ADD COLUMN IF NOT EXISTS donation_start_date DATE
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donors
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donors
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donor_cpf_links
     ADD COLUMN IF NOT EXISTS name TEXT
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donor_cpf_links
     ADD COLUMN IF NOT EXISTS donation_start_date DATE
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donor_cpf_links
     ADD COLUMN IF NOT EXISTS link_type TEXT DEFAULT 'auxiliary'
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donor_cpf_links
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE donor_cpf_links
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS total_rows INTEGER DEFAULT 0
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS matched_rows INTEGER DEFAULT 0
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS matched_donors INTEGER DEFAULT 0
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS value_per_note DOUBLE DEFAULT 0
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS notes TEXT
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE imports
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
 
-  await conn.query(`
+    await conn.query(`
     ALTER TABLE import_cpf_summary
     ADD COLUMN IF NOT EXISTS matched_source_id TEXT
   `);
-
-  await conn.query(`
-    ALTER TABLE monthly_donor_summary
-    DROP COLUMN IF EXISTS rule_id
-  `).catch(() => null);
+  }
 
   await conn.query(`
     INSERT INTO demands (id, name, is_active, created_at, updated_at)
@@ -302,9 +420,30 @@ async function initSchema() {
     GROUP BY trim(demand)
   `);
 
+  const recordsNeedingCpfNormalizationRows = await conn.query(`
+    SELECT
+      (
+        SELECT count(*)
+        FROM donors
+        WHERE cpf IS NOT NULL
+          AND cpf <> ${normalizeCpfSqlExpression("cpf")}
+      ) +
+      (
+        SELECT count(*)
+        FROM donor_cpf_links
+        WHERE cpf IS NOT NULL
+          AND cpf <> ${normalizeCpfSqlExpression("cpf")}
+      ) AS total
+  `);
+  const shouldRebuildSummariesAfterCpfNormalization =
+    Number(recordsNeedingCpfNormalizationRows.toArray()[0]?.total ?? 0) > 0;
+
   await conn.query(`
     UPDATE donors
     SET
+      name = upper(trim(name)),
+      cpf = ${normalizeCpfSqlExpression("cpf")},
+      donor_type = coalesce(nullif(trim(donor_type), ''), 'holder'),
       is_active = coalesce(is_active, TRUE),
       updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
   `);
@@ -312,9 +451,93 @@ async function initSchema() {
   await conn.query(`
     UPDATE donor_cpf_links
     SET
-      link_type = coalesce(link_type, 'auxiliary'),
+      name = upper(trim(name)),
+      cpf = ${normalizeCpfSqlExpression("cpf")},
+      link_type = CASE
+        WHEN lower(trim(coalesce(link_type, ''))) IN ('holder', 'titular') THEN 'holder'
+        WHEN lower(trim(coalesce(link_type, ''))) IN ('auxiliary', 'auxiliar') THEN 'auxiliary'
+        ELSE coalesce(nullif(lower(trim(link_type)), ''), 'auxiliary')
+      END,
       is_active = coalesce(is_active, TRUE),
       updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
+  `);
+
+  const legacyAuxiliaryLinkRows = await conn.query(`
+    SELECT count(*) AS total
+    FROM donor_cpf_links
+    INNER JOIN donors
+      ON donors.id = donor_cpf_links.donor_id
+    WHERE donor_cpf_links.link_type = 'auxiliary'
+      AND donors.donor_type = 'holder'
+      AND donor_cpf_links.cpf IS NOT NULL
+      AND trim(donor_cpf_links.cpf) <> ''
+  `);
+  const shouldRebuildSummariesAfterAuxiliaryMigration =
+    Number(legacyAuxiliaryLinkRows.toArray()[0]?.total ?? 0) > 0;
+  const shouldRebuildMonthlySummaries =
+    shouldRebuildSummariesAfterAuxiliaryMigration ||
+    shouldRebuildSummariesAfterCpfNormalization;
+
+  await conn.query(`
+    INSERT INTO donors (
+      id,
+      name,
+      cpf,
+      demand,
+      donor_type,
+      holder_donor_id,
+      donation_start_date,
+      is_active,
+      created_at,
+      updated_at
+    )
+    SELECT
+      donor_cpf_links.id || '-donor',
+      upper(trim(donor_cpf_links.name)),
+      donor_cpf_links.cpf,
+      donors.demand,
+      'auxiliary',
+      donor_cpf_links.donor_id,
+      donor_cpf_links.donation_start_date,
+      coalesce(donor_cpf_links.is_active, TRUE),
+      coalesce(donor_cpf_links.created_at, CURRENT_TIMESTAMP),
+      CURRENT_TIMESTAMP
+    FROM donor_cpf_links
+    INNER JOIN donors
+      ON donors.id = donor_cpf_links.donor_id
+    WHERE donor_cpf_links.link_type = 'auxiliary'
+      AND donors.donor_type = 'holder'
+      AND donor_cpf_links.cpf IS NOT NULL
+      AND trim(donor_cpf_links.cpf) <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM donors AS existing_donors
+        WHERE existing_donors.cpf = donor_cpf_links.cpf
+      )
+  `);
+
+  await conn.query(`
+    UPDATE donor_cpf_links
+    SET
+      donor_id = (
+        SELECT migrated_donors.id
+        FROM donors AS migrated_donors
+        WHERE migrated_donors.cpf = donor_cpf_links.cpf
+          AND migrated_donors.id <> donor_cpf_links.donor_id
+        ORDER BY
+          CASE WHEN migrated_donors.donor_type = 'auxiliary' THEN 0 ELSE 1 END,
+          migrated_donors.created_at ASC
+        LIMIT 1
+      ),
+      link_type = 'holder',
+      updated_at = CURRENT_TIMESTAMP
+    WHERE link_type = 'auxiliary'
+      AND EXISTS (
+        SELECT 1
+        FROM donors AS migrated_donors
+        WHERE migrated_donors.cpf = donor_cpf_links.cpf
+          AND migrated_donors.id <> donor_cpf_links.donor_id
+      )
   `);
 
   await conn.query(`
@@ -422,15 +645,141 @@ async function initSchema() {
       updated_at = CURRENT_TIMESTAMP
   `);
 
-  await conn.query(`
-    DROP TABLE IF EXISTS rule_versions
-  `).catch(() => null);
+  if (shouldRebuildMonthlySummaries) {
+    await conn.query(`
+      CREATE TEMP TABLE notar_monthly_status_backup AS
+      SELECT
+        import_id,
+        donor_id,
+        abatement_status,
+        abatement_marked_at
+      FROM monthly_donor_summary
+    `);
 
-  await conn.query(`
-    DROP TABLE IF EXISTS rules
-  `).catch(() => null);
+    await conn.query(`
+      DELETE FROM monthly_donor_summary
+    `);
 
-  console.log("Tabelas principais criadas");
+    await conn.query(`
+      INSERT INTO monthly_donor_summary (
+        id,
+        import_id,
+        donor_id,
+        reference_month,
+        cpf,
+        donor_name,
+        demand,
+        notes_count,
+        value_per_note,
+        abatement_amount,
+        abatement_status,
+        abatement_marked_at,
+        created_at,
+        updated_at
+      )
+      SELECT
+        import_cpf_summary.import_id || '-' || donors.id,
+        import_cpf_summary.import_id,
+        donors.id,
+        import_cpf_summary.reference_month,
+        donors.cpf,
+        donors.name,
+        donors.demand,
+        sum(import_cpf_summary.notes_count),
+        imports.value_per_note,
+        sum(import_cpf_summary.notes_count) * imports.value_per_note,
+        coalesce(notar_monthly_status_backup.abatement_status, 'pending'),
+        notar_monthly_status_backup.abatement_marked_at,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      FROM import_cpf_summary
+      INNER JOIN donor_cpf_links
+        ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+      INNER JOIN donors
+        ON donors.id = donor_cpf_links.donor_id
+      INNER JOIN imports
+        ON imports.id = import_cpf_summary.import_id
+      LEFT JOIN notar_monthly_status_backup
+        ON notar_monthly_status_backup.import_id = import_cpf_summary.import_id
+        AND notar_monthly_status_backup.donor_id = donors.id
+      WHERE imports.status = 'processed'
+        AND donors.is_active = TRUE
+        AND donor_cpf_links.is_active = TRUE
+      GROUP BY
+        import_cpf_summary.import_id,
+        import_cpf_summary.reference_month,
+        imports.value_per_note,
+        donors.id,
+        donors.cpf,
+        donors.name,
+        donors.demand,
+        notar_monthly_status_backup.abatement_status,
+        notar_monthly_status_backup.abatement_marked_at
+    `);
+
+    await conn.query(`
+      UPDATE imports
+      SET
+        matched_rows = coalesce((
+          SELECT sum(notes_count)
+          FROM import_cpf_summary
+          WHERE import_id = imports.id
+            AND is_registered_donor = TRUE
+        ), 0),
+        matched_donors = coalesce((
+          SELECT count(DISTINCT matched_donor_id)
+          FROM import_cpf_summary
+          WHERE import_id = imports.id
+            AND is_registered_donor = TRUE
+            AND matched_donor_id IS NOT NULL
+        ), 0),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'processed'
+    `);
+
+    await conn.query(`
+      DROP TABLE IF EXISTS notar_monthly_status_backup
+    `).catch(() => null);
+  }
+
+  if (structural) {
+    await conn.query(`
+      DROP TABLE IF EXISTS rule_versions
+    `).catch(() => null);
+
+    await conn.query(`
+      DROP TABLE IF EXISTS rules
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_donors_cpf ON donors(cpf)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_donors_type ON donors(donor_type)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_donors_holder ON donors(holder_donor_id)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_donor_cpf_links_cpf ON donor_cpf_links(cpf)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_import_cpf_summary_cpf ON import_cpf_summary(cpf)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_import_cpf_summary_import ON import_cpf_summary(import_id)
+    `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_monthly_summary_import ON monthly_donor_summary(import_id)
+    `).catch(() => null);
+  }
+
 }
 
 export async function initDB() {
@@ -439,15 +788,13 @@ export async function initDB() {
 
   initPromise = (async () => {
     const worker = new Worker(MVP_BUNDLE.mainWorker);
-    const logger = new duckdb.ConsoleLogger();
+    const logger = new duckdb.VoidLogger();
 
     db = new duckdb.AsyncDuckDB(logger, worker);
     await db.instantiate(MVP_BUNDLE.mainModule);
     await openDatabase();
 
     conn = await db.connect();
-
-    console.log("DuckDB inicializado");
 
     await initSchema();
 
@@ -581,6 +928,8 @@ async function exportDatabaseSnapshot() {
       name,
       cpf,
       demand,
+      donor_type,
+      holder_donor_id,
       CAST(donation_start_date AS VARCHAR) AS donation_start_date,
       is_active,
       CAST(created_at AS VARCHAR) AS created_at,
@@ -657,6 +1006,18 @@ async function exportDatabaseSnapshot() {
     ORDER BY reference_month ASC, donor_name ASC, id ASC
   `);
 
+  const trashItems = await query(`
+    SELECT
+      id,
+      entity_type,
+      entity_id,
+      label,
+      payload_json,
+      CAST(deleted_at AS VARCHAR) AS deleted_at
+    FROM trash_items
+    ORDER BY deleted_at DESC, id ASC
+  `);
+
   return {
     demands,
     donors,
@@ -664,6 +1025,7 @@ async function exportDatabaseSnapshot() {
     imports,
     importCpfSummary,
     monthlyDonorSummary,
+    trashItems,
   };
 }
 
@@ -694,6 +1056,7 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
     "donor_cpf_links",
     "donors",
     "demands",
+    "trash_items",
   ];
   const tableEntriesToInsert = [
     ["demands", normalizedSnapshot.demands],
@@ -702,6 +1065,7 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
     ["imports", normalizedSnapshot.imports],
     ["import_cpf_summary", normalizedSnapshot.importCpfSummary],
     ["monthly_donor_summary", normalizedSnapshot.monthlyDonorSummary],
+    ["trash_items", normalizedSnapshot.trashItems],
   ];
 
   await runInTransaction(async () => {
@@ -711,7 +1075,10 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
 
     for (const [tableName, rows] of tableEntriesToInsert) {
       for (const row of rows) {
-        const columns = Object.keys(row);
+        const allowedColumns = RESTORE_TABLE_COLUMNS[tableName] ?? [];
+        const columns = Object.keys(row).filter((columnName) =>
+          allowedColumns.includes(columnName),
+        );
 
         if (columns.length === 0) {
           continue;
@@ -729,7 +1096,8 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
     }
   });
 
-  await initSchema();
+  await initSchema({ structural: false });
+  await flushOpenFiles();
 }
 
 async function readSnapshotFromFileHandle(handle) {

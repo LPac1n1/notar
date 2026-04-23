@@ -6,13 +6,12 @@ export default function SectionCard({
 }) {
   return (
     <section
-      className={`relative overflow-hidden rounded-[28px] border border-[var(--line)] bg-[var(--surface-strong)] p-5 shadow-[0_12px_30px_-24px_rgba(0,0,0,0.5)] backdrop-blur-sm ${className}`.trim()}
+      className={`rounded-md border border-slate-800 bg-slate-950/48 p-5 ${className}`.trim()}
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--accent-soft),transparent)]" />
       {(title || description) ? (
         <div className="mb-5">
           {title ? (
-            <h3 className="font-[var(--font-display)] text-2xl font-semibold tracking-tight text-[var(--text-main)]">
+            <h3 className="font-[var(--font-display)] text-xl font-semibold text-[var(--text-main)]">
               {title}
             </h3>
           ) : null}

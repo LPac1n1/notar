@@ -23,8 +23,10 @@ export async function exportDonorsCsv(filters = {}) {
   const csvContent = buildCsvContent(
     [
       { key: "name", label: "Nome" },
+      { key: "donorTypeLabel", label: "Tipo" },
       { key: "cpf", label: "CPF" },
       { key: "demand", label: "Demanda" },
+      { key: "holderName", label: "Titular vinculado" },
       { key: "donationStartDate", label: "Inicio das doacoes" },
       { key: "isActive", label: "Ativo" },
     ],
@@ -78,6 +80,8 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
     cpf: item.cpf,
     sourceName: item.sourceName || "",
     donorName: item.donorName || "",
+    donorType: item.donorType === "auxiliary" ? "Auxiliar" : item.donorType === "holder" ? "Titular" : "",
+    holderName: item.holderName || "",
     demand: item.demand || "",
     notesCount: item.notesCount,
     monthCount: item.monthCount,
@@ -94,8 +98,10 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
     [
       { key: "cpf", label: "CPF" },
       { key: "sourceName", label: "Doador do CPF" },
-      { key: "donorName", label: "Titular beneficiado" },
-      { key: "demand", label: "Demanda do titular" },
+      { key: "donorName", label: "Doador vinculado" },
+      { key: "donorType", label: "Tipo do doador" },
+      { key: "holderName", label: "Titular informativo" },
+      { key: "demand", label: "Demanda" },
       { key: "notesCount", label: "Total de notas" },
       { key: "monthCount", label: "Quantidade de meses" },
       { key: "registrationStatus", label: "Status de cadastro" },

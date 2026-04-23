@@ -1,10 +1,10 @@
 const VARIANTS = {
   primary:
-    "border border-[color:var(--line-strong)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[0_10px_24px_-18px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 hover:bg-[color:var(--accent)] hover:text-[#07120d] hover:shadow-[0_12px_28px_-18px_rgba(0,0,0,0.46)]",
+    "border border-slate-300 bg-slate-100 text-slate-950 hover:border-slate-50 hover:bg-slate-50",
   danger:
-    "border border-[color:var(--line-strong)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] shadow-[0_10px_24px_-18px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 hover:bg-[color:var(--danger)] hover:text-[#120707] hover:shadow-[0_12px_28px_-18px_rgba(0,0,0,0.46)]",
+    "border border-red-400/35 bg-red-500/10 text-red-200 hover:border-red-300/60 hover:bg-red-500/15",
   subtle:
-    "border border-[color:var(--line)] bg-[color:var(--surface-elevated)] text-[var(--text-main)] shadow-[0_8px_22px_-18px_rgba(0,0,0,0.44)] hover:-translate-y-0.5 hover:border-[color:var(--line-strong)] hover:bg-[color:var(--surface-muted)]",
+    "border border-slate-700/80 bg-slate-900/70 text-slate-100 hover:border-slate-500 hover:bg-slate-800",
 };
 
 export default function Button({
@@ -19,7 +19,7 @@ export default function Button({
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 font-medium transition-all duration-200 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55 ${VARIANTS[variant] || VARIANTS.primary} ${className}`.trim()}
+      className={`inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-55 ${VARIANTS[variant] || VARIANTS.primary} ${className}`.trim()}
       {...props}
     >
       {leftIcon}

@@ -18,6 +18,7 @@ test("normalizeSnapshotPayload accepts wrapped backup payloads", () => {
       imports: [],
       importCpfSummary: [],
       monthlyDonorSummary: [],
+      trashItems: [],
     },
   });
 
@@ -50,6 +51,7 @@ test("snapshot helpers detect data and count rows correctly", () => {
     imports: 0,
     importCpfSummary: 0,
     monthlyDonorSummary: 0,
+    trashItems: 0,
   });
 });
 
@@ -62,4 +64,5 @@ test("createSnapshotPayload wraps normalized data", () => {
   assert.equal(payload.exportedAt, "2026-04-14T12:00:00.000Z");
   assert.deepEqual(payload.data.donors, [{ id: "10" }]);
   assert.deepEqual(payload.data.demands, []);
+  assert.deepEqual(payload.data.trashItems, []);
 });

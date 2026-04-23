@@ -6,28 +6,136 @@ import {
   runInTransaction,
   startOfMonth,
 } from "./db";
-import {
-  reconcileAllImports,
-} from "./importService";
+import { reconcileImportsForCpfs } from "./importService";
+import { createTrashItem } from "./trashService";
 import { formatCpf } from "../utils/cpf";
 import { formatMonthYear } from "../utils/date";
+import { normalizePersonName } from "../utils/normalize";
+
+function normalizeDonorType(value) {
+  return value === "auxiliary" ? "auxiliary" : "holder";
+}
+
+function normalizeOptionalStartDate(value) {
+  return value ? startOfMonth(value) : null;
+}
+
+function parseAuxiliarySummary(value) {
+  return String(value ?? "")
+    .split(";;")
+    .map((item) => {
+      const [id = "", name = "", cpf = ""] = item.split("|");
+
+      return {
+        id,
+        name,
+        cpf: formatCpf(cpf),
+      };
+    })
+    .filter((item) => item.id || item.name || item.cpf);
+}
+
+async function ensureDonationCpfIsAvailable(
+  normalizedCpf,
+  { ignoreDonorId = "" } = {},
+) {
+  const existingLink = await query(`
+    SELECT
+      donor_cpf_links.id,
+      donor_cpf_links.donor_id,
+      donor_cpf_links.name,
+      donors.name AS donor_name
+    FROM donor_cpf_links
+    LEFT JOIN donors
+      ON donors.id = donor_cpf_links.donor_id
+    WHERE donor_cpf_links.cpf = '${escapeSqlString(normalizedCpf)}'
+      ${ignoreDonorId ? `AND donor_cpf_links.donor_id <> '${escapeSqlString(ignoreDonorId)}'` : ""}
+    LIMIT 1
+  `);
+
+  if (existingLink.length > 0) {
+    const holderName =
+      existingLink[0].donor_name || existingLink[0].name || "outro doador";
+    throw new Error(`Este CPF ja esta vinculado a ${holderName}.`);
+  }
+}
+
+async function ensureDemandExists(demand, { required = true } = {}) {
+  const trimmedDemand = demand.trim();
+
+  if (!trimmedDemand) {
+    if (required) {
+      throw new Error("Selecione uma demanda para o titular.");
+    }
+
+    return "";
+  }
+
+  const existingDemand = await query(`
+    SELECT name
+    FROM demands
+    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(trimmedDemand)}'))
+    LIMIT 1
+  `);
+
+  if (existingDemand.length === 0) {
+    throw new Error("A demanda selecionada nao existe mais.");
+  }
+
+  return existingDemand[0].name;
+}
+
+async function getHolderContext(holderDonorId) {
+  if (!holderDonorId) {
+    return null;
+  }
+
+  const holderRows = await query(`
+    SELECT id, name, demand
+    FROM donors
+    WHERE id = '${escapeSqlString(holderDonorId)}'
+      AND donor_type = 'holder'
+      AND is_active = TRUE
+    LIMIT 1
+  `);
+
+  if (holderRows.length === 0) {
+    throw new Error("O titular selecionado nao existe mais.");
+  }
+
+  return {
+    id: holderRows[0].id,
+    name: holderRows[0].name,
+    demand: holderRows[0].demand ?? "",
+  };
+}
+
+async function reconcileCpfChanges(cpfs) {
+  const normalizedCpfs = cpfs
+    .map((cpf) => normalizeCpf(cpf))
+    .filter((cpf) => cpf.length === 11);
+
+  await reconcileImportsForCpfs(normalizedCpfs);
+}
 
 export async function listDonors(filters = {}) {
   const {
     name = "",
     cpf = "",
     demand = "",
+    donorType = "",
   } = filters;
-  const conditions = [];
+  const conditions = ["donors.is_active = TRUE"];
 
   if (name.trim()) {
     conditions.push(
       `(lower(donors.name) LIKE lower('%${escapeSqlString(name.trim())}%')
         OR EXISTS (
           SELECT 1
-          FROM donor_cpf_links
-          WHERE donor_cpf_links.donor_id = donors.id
-            AND lower(donor_cpf_links.name) LIKE lower('%${escapeSqlString(name.trim())}%')
+          FROM donors AS auxiliary_donors
+          WHERE auxiliary_donors.holder_donor_id = donors.id
+            AND auxiliary_donors.is_active = TRUE
+            AND lower(auxiliary_donors.name) LIKE lower('%${escapeSqlString(name.trim())}%')
         ))`,
     );
   }
@@ -49,17 +157,23 @@ export async function listDonors(filters = {}) {
     );
   }
 
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  if (donorType.trim()) {
+    conditions.push(
+      `donors.donor_type = '${escapeSqlString(normalizeDonorType(donorType))}'`,
+    );
+  }
 
   const rows = await query(`
     SELECT
-      id,
-      name,
-      cpf,
-      demand,
-      strftime(donation_start_date, '%Y-%m-01') AS donation_start_date,
-      is_active,
+      donors.id,
+      donors.name,
+      donors.cpf,
+      donors.demand,
+      donors.donor_type,
+      donors.holder_donor_id,
+      holder_donors.name AS holder_name,
+      strftime(donors.donation_start_date, '%Y-%m-01') AS donation_start_date,
+      donors.is_active,
       coalesce((
         SELECT count(*)
         FROM donor_cpf_links
@@ -68,28 +182,38 @@ export async function listDonors(filters = {}) {
       ), 0) AS linked_cpf_count,
       coalesce((
         SELECT count(*)
-        FROM donor_cpf_links
-        WHERE donor_cpf_links.donor_id = donors.id
-          AND donor_cpf_links.is_active = TRUE
-          AND donor_cpf_links.link_type = 'auxiliary'
+        FROM donors AS auxiliary_donors
+        WHERE auxiliary_donors.holder_donor_id = donors.id
+          AND auxiliary_donors.donor_type = 'auxiliary'
+          AND auxiliary_donors.is_active = TRUE
       ), 0) AS auxiliary_count,
       coalesce((
-        SELECT string_agg(name, ';;')
-        FROM donor_cpf_links
-        WHERE donor_cpf_links.donor_id = donors.id
-          AND donor_cpf_links.is_active = TRUE
-          AND donor_cpf_links.link_type = 'auxiliary'
-      ), '') AS auxiliary_names
+        SELECT string_agg(
+          auxiliary_donors.id || '|' || auxiliary_donors.name || '|' || auxiliary_donors.cpf,
+          ';;'
+        )
+        FROM donors AS auxiliary_donors
+        WHERE auxiliary_donors.holder_donor_id = donors.id
+          AND auxiliary_donors.donor_type = 'auxiliary'
+          AND auxiliary_donors.is_active = TRUE
+      ), '') AS auxiliary_summary
     FROM donors
-    ${whereClause}
-    ORDER BY created_at DESC, name ASC
+    LEFT JOIN donors AS holder_donors
+      ON holder_donors.id = donors.holder_donor_id
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY donors.created_at DESC, donors.name ASC
   `);
 
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     cpf: formatCpf(row.cpf),
+    cpfValue: row.cpf,
     demand: row.demand ?? "",
+    donorType: normalizeDonorType(row.donor_type),
+    donorTypeLabel: row.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+    holderDonorId: row.holder_donor_id ?? "",
+    holderName: row.holder_name ?? "",
     donationStartDateValue: row.donation_start_date
       ? String(row.donation_start_date).slice(0, 7)
       : "",
@@ -97,56 +221,15 @@ export async function listDonors(filters = {}) {
     isActive: Boolean(row.is_active),
     linkedCpfCount: Number(row.linked_cpf_count ?? 0),
     auxiliaryCount: Number(row.auxiliary_count ?? 0),
-    auxiliaryNames: String(row.auxiliary_names ?? "")
-      .split(";;")
-      .map((name) => name.trim())
-      .filter(Boolean),
+    auxiliaryDonors: parseAuxiliarySummary(row.auxiliary_summary),
+    auxiliaryNames: parseAuxiliarySummary(row.auxiliary_summary).map(
+      (auxiliary) => auxiliary.name,
+    ),
   }));
 }
 
-async function ensureDonationCpfIsAvailable(normalizedCpf, { ignoreDonorId = "" } = {}) {
-  const existingLink = await query(`
-    SELECT
-      donor_cpf_links.id,
-      donor_cpf_links.donor_id,
-      donor_cpf_links.name,
-      donors.name AS donor_name
-    FROM donor_cpf_links
-    LEFT JOIN donors
-      ON donors.id = donor_cpf_links.donor_id
-    WHERE donor_cpf_links.cpf = '${escapeSqlString(normalizedCpf)}'
-      ${ignoreDonorId ? `AND NOT (
-        donor_cpf_links.donor_id = '${escapeSqlString(ignoreDonorId)}'
-        AND donor_cpf_links.link_type = 'holder'
-      )` : ""}
-    LIMIT 1
-  `);
-
-  if (existingLink.length > 0) {
-    const holderName = existingLink[0].donor_name || existingLink[0].name || "outro titular";
-    throw new Error(`Este CPF ja esta vinculado a ${holderName}.`);
-  }
-}
-
-async function ensureDemandExists(demand) {
-  if (!demand.trim()) {
-    throw new Error("Selecione uma demanda para o titular.");
-  }
-
-  const existingDemand = await query(`
-    SELECT id
-    FROM demands
-    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(demand.trim())}'))
-    LIMIT 1
-  `);
-
-  if (existingDemand.length === 0) {
-    throw new Error("A demanda selecionada nao existe mais.");
-  }
-}
-
-function normalizeOptionalStartDate(value) {
-  return value ? startOfMonth(value) : null;
+export async function listHolderDonors() {
+  return listDonors({ donorType: "holder" });
 }
 
 export async function createDonor({
@@ -155,10 +238,14 @@ export async function createDonor({
   cpf,
   demand = "",
   donationStartDate = "",
+  donorType = "holder",
+  holderDonorId = "",
 }) {
+  const normalizedName = normalizePersonName(name);
   const normalizedCpf = normalizeCpf(cpf);
+  const normalizedDonorType = normalizeDonorType(donorType);
 
-  if (!name.trim()) {
+  if (!normalizedName) {
     throw new Error("O nome do doador e obrigatorio.");
   }
 
@@ -167,8 +254,21 @@ export async function createDonor({
   }
 
   await ensureDonationCpfIsAvailable(normalizedCpf);
-  await ensureDemandExists(demand);
 
+  const holderContext =
+    normalizedDonorType === "auxiliary"
+      ? await getHolderContext(holderDonorId).catch((error) => {
+          if (holderDonorId) {
+            throw error;
+          }
+
+          return null;
+        })
+      : null;
+  const resolvedDemand = await ensureDemandExists(
+    demand.trim() || holderContext?.demand || "",
+    { required: normalizedDonorType === "holder" },
+  );
   const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
 
   await runInTransaction(async () => {
@@ -178,15 +278,19 @@ export async function createDonor({
         name,
         cpf,
         demand,
+        donor_type,
+        holder_donor_id,
         donation_start_date,
         is_active,
         updated_at
       )
       VALUES (
         '${escapeSqlString(id)}',
-        '${escapeSqlString(name.trim())}',
+        '${escapeSqlString(normalizedName)}',
         '${escapeSqlString(normalizedCpf)}',
-        '${escapeSqlString(demand.trim())}',
+        '${escapeSqlString(resolvedDemand)}',
+        '${escapeSqlString(normalizedDonorType)}',
+        ${normalizedDonorType === "auxiliary" && holderContext ? `'${escapeSqlString(holderContext.id)}'` : "NULL"},
         ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
         TRUE,
         CURRENT_TIMESTAMP
@@ -207,7 +311,7 @@ export async function createDonor({
       VALUES (
         '${escapeSqlString(`${id}-titular`)}',
         '${escapeSqlString(id)}',
-        '${escapeSqlString(name.trim())}',
+        '${escapeSqlString(normalizedName)}',
         '${escapeSqlString(normalizedCpf)}',
         ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
         'holder',
@@ -217,7 +321,7 @@ export async function createDonor({
     `);
   });
 
-  await reconcileAllImports();
+  await reconcileCpfChanges([normalizedCpf]);
 }
 
 export async function updateDonor({
@@ -226,14 +330,18 @@ export async function updateDonor({
   cpf,
   demand = "",
   donationStartDate = "",
+  donorType = "holder",
+  holderDonorId = "",
 }) {
   if (!id) {
     throw new Error("O identificador do doador e obrigatorio.");
   }
 
+  const normalizedName = normalizePersonName(name);
   const normalizedCpf = normalizeCpf(cpf);
+  const normalizedDonorType = normalizeDonorType(donorType);
 
-  if (!name.trim()) {
+  if (!normalizedName) {
     throw new Error("O nome do doador e obrigatorio.");
   }
 
@@ -241,18 +349,44 @@ export async function updateDonor({
     throw new Error("Informe um CPF valido com 11 digitos.");
   }
 
-  await ensureDonationCpfIsAvailable(normalizedCpf, { ignoreDonorId: id });
-  await ensureDemandExists(demand);
+  const currentRows = await query(`
+    SELECT cpf
+    FROM donors
+    WHERE id = '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
 
+  if (currentRows.length === 0) {
+    throw new Error("Doador nao encontrado.");
+  }
+
+  await ensureDonationCpfIsAvailable(normalizedCpf, { ignoreDonorId: id });
+
+  const holderContext =
+    normalizedDonorType === "auxiliary"
+      ? await getHolderContext(holderDonorId).catch((error) => {
+          if (holderDonorId) {
+            throw error;
+          }
+
+          return null;
+        })
+      : null;
+  const resolvedDemand = await ensureDemandExists(
+    demand.trim() || holderContext?.demand || "",
+    { required: normalizedDonorType === "holder" },
+  );
   const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
 
   await runInTransaction(async () => {
     await execute(`
       UPDATE donors
       SET
-        name = '${escapeSqlString(name.trim())}',
+        name = '${escapeSqlString(normalizedName)}',
         cpf = '${escapeSqlString(normalizedCpf)}',
-        demand = '${escapeSqlString(demand.trim())}',
+        demand = '${escapeSqlString(resolvedDemand)}',
+        donor_type = '${escapeSqlString(normalizedDonorType)}',
+        holder_donor_id = ${normalizedDonorType === "auxiliary" && holderContext ? `'${escapeSqlString(holderContext.id)}'` : "NULL"},
         donation_start_date = ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = '${escapeSqlString(id)}'
@@ -278,7 +412,7 @@ export async function updateDonor({
       VALUES (
         '${escapeSqlString(`${id}-titular`)}',
         '${escapeSqlString(id)}',
-        '${escapeSqlString(name.trim())}',
+        '${escapeSqlString(normalizedName)}',
         '${escapeSqlString(normalizedCpf)}',
         ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
         'holder',
@@ -288,14 +422,79 @@ export async function updateDonor({
     `);
   });
 
-  await reconcileAllImports();
+  await reconcileCpfChanges([currentRows[0].cpf, normalizedCpf]);
 }
 
 export async function deleteDonor(id) {
+  const donorRows = await query(`
+    SELECT
+      id,
+      name,
+      cpf,
+      demand,
+      donor_type,
+      holder_donor_id,
+      CAST(donation_start_date AS VARCHAR) AS donation_start_date,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM donors
+    WHERE id = '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
+
+  if (donorRows.length === 0) {
+    return;
+  }
+
+  const cpfRows = await query(`
+    SELECT
+      id,
+      donor_id,
+      name,
+      cpf,
+      CAST(donation_start_date AS VARCHAR) AS donation_start_date,
+      link_type,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM donor_cpf_links
+    WHERE donor_id = '${escapeSqlString(id)}'
+  `);
+
+  const auxiliaryRows = await query(`
+    SELECT id
+    FROM donors
+    WHERE holder_donor_id = '${escapeSqlString(id)}'
+      AND donor_type = 'auxiliary'
+  `);
+
   await runInTransaction(async () => {
+    await createTrashItem({
+      entityType: "donor",
+      entityId: id,
+      label: donorRows[0].name,
+      payload: {
+        donors: donorRows,
+        donorCpfLinks: cpfRows,
+        auxiliaryIdsToRelink: auxiliaryRows.map((row) => row.id),
+      },
+    });
+
+    await execute(`
+      DELETE FROM monthly_donor_summary
+      WHERE donor_id = '${escapeSqlString(id)}'
+    `);
+
     await execute(`
       DELETE FROM donor_cpf_links
       WHERE donor_id = '${escapeSqlString(id)}'
+    `);
+
+    await execute(`
+      UPDATE donors
+      SET holder_donor_id = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE holder_donor_id = '${escapeSqlString(id)}'
     `);
 
     await execute(`
@@ -304,7 +503,7 @@ export async function deleteDonor(id) {
     `);
   });
 
-  await reconcileAllImports();
+  await reconcileCpfChanges(cpfRows.map((row) => row.cpf));
 }
 
 export async function listDonorCpfLinks(donorId) {
@@ -319,10 +518,7 @@ export async function listDonorCpfLinks(donorId) {
       is_active
     FROM donor_cpf_links
     WHERE donor_id = '${escapeSqlString(donorId)}'
-    ORDER BY
-      CASE WHEN link_type = 'holder' THEN 0 ELSE 1 END,
-      name ASC,
-      cpf ASC
+    ORDER BY name ASC, cpf ASC
   `);
 
   return rows.map((row) => ({
@@ -335,8 +531,8 @@ export async function listDonorCpfLinks(donorId) {
       ? String(row.donation_start_date).slice(0, 7)
       : "",
     donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
-    type: row.link_type === "holder" ? "holder" : "auxiliary",
-    typeLabel: row.link_type === "holder" ? "Titular" : "Auxiliar",
+    type: "holder",
+    typeLabel: "CPF principal",
     isActive: Boolean(row.is_active),
   }));
 }
@@ -348,58 +544,14 @@ export async function createAuxiliaryDonor({
   cpf,
   donationStartDate = "",
 }) {
-  const normalizedCpf = normalizeCpf(cpf);
-
-  if (!donorId) {
-    throw new Error("Selecione o titular que recebera o abatimento.");
-  }
-
-  if (!name.trim()) {
-    throw new Error("O nome do doador auxiliar e obrigatorio.");
-  }
-
-  if (normalizedCpf.length !== 11) {
-    throw new Error("Informe um CPF valido com 11 digitos.");
-  }
-
-  const donorRows = await query(`
-    SELECT id
-    FROM donors
-    WHERE id = '${escapeSqlString(donorId)}'
-    LIMIT 1
-  `);
-
-  if (donorRows.length === 0) {
-    throw new Error("O titular selecionado nao existe mais.");
-  }
-
-  await ensureDonationCpfIsAvailable(normalizedCpf);
-  const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
-
-  await execute(`
-    INSERT INTO donor_cpf_links (
-      id,
-      donor_id,
-      name,
-      cpf,
-      donation_start_date,
-      link_type,
-      is_active,
-      updated_at
-    )
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(donorId)}',
-      '${escapeSqlString(name.trim())}',
-      '${escapeSqlString(normalizedCpf)}',
-      ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
-      'auxiliary',
-      TRUE,
-      CURRENT_TIMESTAMP
-    )
-  `);
-
-  await reconcileAllImports();
+  return createDonor({
+    id,
+    name,
+    cpf,
+    donationStartDate,
+    donorType: "auxiliary",
+    holderDonorId: donorId,
+  });
 }
 
 export async function updateAuxiliaryDonor({
@@ -409,74 +561,30 @@ export async function updateAuxiliaryDonor({
   cpf,
   donationStartDate = "",
 }) {
-  const normalizedCpf = normalizeCpf(cpf);
-
-  if (!id || !donorId) {
-    throw new Error("O identificador do auxiliar e do titular sao obrigatorios.");
-  }
-
-  if (!name.trim()) {
-    throw new Error("O nome do doador auxiliar e obrigatorio.");
-  }
-
-  if (normalizedCpf.length !== 11) {
-    throw new Error("Informe um CPF valido com 11 digitos.");
-  }
-
-  const existingSource = await query(`
-    SELECT id, link_type
+  const sourceRows = await query(`
+    SELECT donor_id
     FROM donor_cpf_links
     WHERE id = '${escapeSqlString(id)}'
-      AND donor_id = '${escapeSqlString(donorId)}'
     LIMIT 1
   `);
 
-  if (existingSource.length === 0) {
+  if (sourceRows.length === 0) {
     throw new Error("O auxiliar selecionado nao existe mais.");
   }
 
-  if (existingSource[0].link_type === "holder") {
-    throw new Error("O CPF principal do titular deve ser editado no cadastro do titular.");
-  }
-
-  const duplicatedCpf = await query(`
-    SELECT
-      donor_cpf_links.id,
-      donors.name AS donor_name
-    FROM donor_cpf_links
-    LEFT JOIN donors
-      ON donors.id = donor_cpf_links.donor_id
-    WHERE donor_cpf_links.cpf = '${escapeSqlString(normalizedCpf)}'
-      AND donor_cpf_links.id <> '${escapeSqlString(id)}'
-    LIMIT 1
-  `);
-
-  if (duplicatedCpf.length > 0) {
-    throw new Error(
-      `Este CPF ja esta vinculado a ${duplicatedCpf[0].donor_name || "outro titular"}.`,
-    );
-  }
-
-  const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
-
-  await execute(`
-    UPDATE donor_cpf_links
-    SET
-      name = '${escapeSqlString(name.trim())}',
-      cpf = '${escapeSqlString(normalizedCpf)}',
-      donation_start_date = ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = '${escapeSqlString(id)}'
-      AND donor_id = '${escapeSqlString(donorId)}'
-      AND link_type = 'auxiliary'
-  `);
-
-  await reconcileAllImports();
+  return updateDonor({
+    id: sourceRows[0].donor_id,
+    name,
+    cpf,
+    donationStartDate,
+    donorType: "auxiliary",
+    holderDonorId: donorId,
+  });
 }
 
 export async function deleteAuxiliaryDonor(sourceId) {
   const sourceRows = await query(`
-    SELECT id, link_type
+    SELECT donor_id
     FROM donor_cpf_links
     WHERE id = '${escapeSqlString(sourceId)}'
     LIMIT 1
@@ -486,29 +594,26 @@ export async function deleteAuxiliaryDonor(sourceId) {
     return;
   }
 
-  if (sourceRows[0].link_type === "holder") {
-    throw new Error("O CPF principal do titular nao pode ser removido por aqui.");
-  }
-
-  await execute(`
-    DELETE FROM donor_cpf_links
-    WHERE id = '${escapeSqlString(sourceId)}'
-  `);
-
-  await reconcileAllImports();
+  await deleteDonor(sourceRows[0].donor_id);
 }
 
 export async function getDonorProfile(donorId) {
   const donorRows = await query(`
     SELECT
-      id,
-      name,
-      cpf,
-      demand,
-      strftime(donation_start_date, '%Y-%m-01') AS donation_start_date,
-      is_active
+      donors.id,
+      donors.name,
+      donors.cpf,
+      donors.demand,
+      donors.donor_type,
+      donors.holder_donor_id,
+      holder_donors.name AS holder_name,
+      holder_donors.cpf AS holder_cpf,
+      strftime(donors.donation_start_date, '%Y-%m-01') AS donation_start_date,
+      donors.is_active
     FROM donors
-    WHERE id = '${escapeSqlString(donorId)}'
+    LEFT JOIN donors AS holder_donors
+      ON holder_donors.id = donors.holder_donor_id
+    WHERE donors.id = '${escapeSqlString(donorId)}'
     LIMIT 1
   `);
 
@@ -546,9 +651,21 @@ export async function getDonorProfile(donorId) {
       donor_cpf_links.cpf,
       donor_cpf_links.link_type,
       donor_cpf_links.donation_start_date
-    ORDER BY
-      CASE WHEN donor_cpf_links.link_type = 'holder' THEN 0 ELSE 1 END,
-      donor_cpf_links.name ASC
+    ORDER BY donor_cpf_links.name ASC
+  `);
+
+  const auxiliaryRows = await query(`
+    SELECT
+      id,
+      name,
+      cpf,
+      demand,
+      strftime(donation_start_date, '%Y-%m-01') AS donation_start_date
+    FROM donors
+    WHERE holder_donor_id = '${escapeSqlString(donorId)}'
+      AND donor_type = 'auxiliary'
+      AND is_active = TRUE
+    ORDER BY name ASC
   `);
 
   const donor = donorRows[0];
@@ -566,16 +683,32 @@ export async function getDonorProfile(donorId) {
       id: donor.id,
       name: donor.name,
       cpf: formatCpf(donor.cpf),
+      cpfValue: donor.cpf,
       demand: donor.demand ?? "",
+      donorType: normalizeDonorType(donor.donor_type),
+      donorTypeLabel: donor.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+      holderDonorId: donor.holder_donor_id ?? "",
+      holderName: donor.holder_name ?? "",
+      holderCpf: donor.holder_cpf ? formatCpf(donor.holder_cpf) : "",
+      donationStartDateValue: donor.donation_start_date
+        ? String(donor.donation_start_date).slice(0, 7)
+        : "",
       donationStartDate: formatMonthYear(donor.donation_start_date ?? ""),
       isActive: Boolean(donor.is_active),
     },
+    auxiliaryDonors: auxiliaryRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      cpf: formatCpf(row.cpf),
+      demand: row.demand ?? "",
+      donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
+    })),
     sources: sourceRows.map((row) => ({
       id: row.id,
       name: row.name ?? "",
       cpf: formatCpf(row.cpf),
-      type: row.link_type === "holder" ? "holder" : "auxiliary",
-      typeLabel: row.link_type === "holder" ? "Titular" : "Auxiliar",
+      type: "holder",
+      typeLabel: "CPF principal",
       donationStartDateValue: row.donation_start_date
         ? String(row.donation_start_date).slice(0, 7)
         : "",
@@ -594,6 +727,7 @@ export async function getDonorProfile(donorId) {
       totalAbatement,
       monthCount: monthlyRows.length,
       linkedCpfCount: sourceRows.length,
+      auxiliaryCount: auxiliaryRows.length,
     },
   };
 }

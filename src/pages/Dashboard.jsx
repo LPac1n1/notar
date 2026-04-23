@@ -14,14 +14,13 @@ import { formatCurrency, formatInteger } from "../utils/format";
 
 function MetricCard({ helper = "", label, onClick, value }) {
   const sharedClassName =
-    "relative overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--surface-strong)] p-4 text-left shadow-[0_10px_24px_-18px_rgba(0,0,0,0.46)] transition-all duration-200";
+    "rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4 text-left transition-colors duration-150";
 
   const content = (
     <>
-      <div className="absolute right-0 top-0 h-12 w-12 rounded-full bg-[color:var(--accent-soft)]/45 blur-2xl" />
-      <p className="relative text-sm font-medium text-[var(--muted)]">{label}</p>
-      <p className="relative mt-2 font-[var(--font-display)] text-3xl font-semibold text-[var(--text-main)]">{value}</p>
-      {helper ? <p className="relative mt-1 text-sm leading-6 text-[var(--muted)]">{helper}</p> : null}
+      <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
+      <p className="mt-2 font-[var(--font-display)] text-3xl font-semibold text-[var(--text-main)]">{value}</p>
+      {helper ? <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{helper}</p> : null}
     </>
   );
 
@@ -32,7 +31,7 @@ function MetricCard({ helper = "", label, onClick, value }) {
   return (
     <button
       type="button"
-      className={`${sharedClassName} hover:-translate-y-0.5 hover:border-[var(--line-strong)] hover:shadow-[0_14px_28px_-18px_rgba(0,0,0,0.54)]`}
+      className={`${sharedClassName} hover:border-[var(--line-strong)] hover:bg-[var(--surface-elevated)]`}
       onClick={onClick}
     >
       {content}
@@ -44,7 +43,7 @@ function DetailList({ children, emptyMessage = "Nenhum detalhe disponível." }) 
   return Children.count(children) ? (
     <div className="space-y-3">{children}</div>
   ) : (
-    <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
+    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
       {emptyMessage}
     </div>
   );
@@ -76,7 +75,7 @@ export default function Dashboard() {
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
-      navigate(`/doadores?perfil=${encodeURIComponent(donorId)}`);
+      navigate(`/doadores/${encodeURIComponent(donorId)}`);
     }
   };
 
@@ -168,7 +167,7 @@ export default function Dashboard() {
             {dashboard?.activeDonors?.map((donor) => (
               <div
                 key={donor.donorId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <button
                   type="button"
@@ -209,7 +208,7 @@ export default function Dashboard() {
             {dashboard?.activeDemands?.map((demand) => (
               <div
                 key={demand.demandId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">{demand.demandName}</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
@@ -241,7 +240,7 @@ export default function Dashboard() {
             {dashboard?.recentImports?.map((item) => (
               <div
                 key={item.id}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">
                   {formatMonthYear(item.referenceMonth)}
@@ -286,7 +285,7 @@ export default function Dashboard() {
             <MetricCard label="Realizados" value={formatInteger(latestMonth.appliedCount)} />
           </div>
 
-          <div className="mt-4 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
+          <div className="mt-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
             <p className="break-all">
               Arquivo: <span className="font-medium text-[var(--text-main)]">{latestMonth.fileName}</span>
             </p>
@@ -300,7 +299,7 @@ export default function Dashboard() {
               dashboard.demandBreakdown.map((item) => (
                 <div
                   key={item.demand}
-                  className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                  className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
                 >
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -316,7 +315,7 @@ export default function Dashboard() {
                 </div>
               ))
             ) : (
-              <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
+              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
                 Nenhuma consolidação por demanda disponível para este mês.
               </div>
             )}
@@ -343,7 +342,7 @@ export default function Dashboard() {
             {dashboard?.latestMonthPendingSummaries?.map((item) => (
               <div
                 key={item.donorId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <button
                   type="button"
@@ -386,7 +385,7 @@ export default function Dashboard() {
               {dashboard?.latestMonthUnregisteredCpfSamples?.map((item) => (
                 <div
                   key={item.cpf}
-                  className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                  className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
                 >
                   <p className="font-medium text-[var(--text-main)]">{formatCpf(item.cpf)}</p>
                   <p className="mt-1 text-sm text-[var(--muted)]">
@@ -421,7 +420,7 @@ export default function Dashboard() {
               {inconsistencies.unregisteredCpfSamples.map((item) => (
                 <div
                   key={`${item.cpf}-${item.latestReferenceMonth}`}
-                  className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                  className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
                 >
                   <p className="font-medium text-[var(--text-main)]">{formatCpf(item.cpf)}</p>
                   <p className="mt-1 text-sm text-[var(--muted)]">
@@ -456,11 +455,11 @@ export default function Dashboard() {
             {inconsistencies.donationStartConflictSamples.map((item) => (
               <div
                 key={`${item.cpf}-${item.referenceMonth}`}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">{item.sourceName}</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(item.cpf)} • Abate para{" "}
+                  {formatCpf(item.cpf)} • Vinculado ao doador{" "}
                   <button
                     type="button"
                     onClick={() => openDonorProfile(item.donorId)}
@@ -499,7 +498,7 @@ export default function Dashboard() {
             {inconsistencies.donorWithoutDemandSamples.map((item) => (
               <div
                 key={item.donorId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <button
                   type="button"
@@ -535,14 +534,14 @@ export default function Dashboard() {
             {inconsistencies.donorWithoutStartDateSamples.map((item) => (
               <div
                 key={item.sourceId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">{item.sourceName}</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {formatCpf(item.cpf)} • {item.sourceType === "holder" ? "Titular" : "Auxiliar"}
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Abate para{" "}
+                  Doador{" "}
                   <button
                     type="button"
                     onClick={() => openDonorProfile(item.donorId)}
@@ -578,7 +577,7 @@ export default function Dashboard() {
             {inconsistencies.importsWithoutMatchesSamples.map((item) => (
               <div
                 key={item.importId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">
                   {formatMonthYear(item.referenceMonth)}
@@ -613,7 +612,7 @@ export default function Dashboard() {
             {inconsistencies.emptyImportSamples.map((item) => (
               <div
                 key={item.importId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">
                   {formatMonthYear(item.referenceMonth)}
@@ -651,7 +650,7 @@ export default function Dashboard() {
             {inconsistencies.importsWithManyUnregisteredSamples.map((item) => (
               <div
                 key={item.importId}
-                className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <p className="font-medium text-[var(--text-main)]">
                   {formatMonthYear(item.referenceMonth)}
@@ -677,7 +676,7 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Acompanhe o panorama geral do sistema, confira pontos de revisão e entre nos detalhes sem sair da visão principal."
+        subtitle="Indicadores e pontos de revisão."
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
@@ -685,7 +684,7 @@ export default function Dashboard() {
       {isLoading && !dashboard && !error ? (
         <LoadingScreen
           title="Montando o dashboard"
-          description="Conferindo importações, consolidados mensais e indicadores mais recentes."
+          description="Carregando indicadores."
         />
       ) : null}
 
@@ -731,10 +730,9 @@ export default function Dashboard() {
         <div className="space-y-6">
           <SectionCard
             title="Pontos para revisar"
-            description="Resumo dos itens que podem valer uma conferência nos cadastros e nas importações. Clique nos cards para ver os detalhes."
           >
             {totalInconsistencyCount === 0 ? (
-              <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
+              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
                 Nenhum ponto importante de revisão foi encontrado com os dados atuais.
               </div>
             ) : (
@@ -838,7 +836,7 @@ export default function Dashboard() {
                   />
                 </div>
 
-                <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
+                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
                   <p className="break-all">
                     Arquivo:{" "}
                     <span className="font-medium text-[var(--text-main)]">
@@ -871,9 +869,9 @@ export default function Dashboard() {
                   {dashboard.topDonors.map((donor, index) => (
                     <div
                       key={donor.donorId}
-                      className="grid gap-2 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[auto_1fr_auto]"
+                      className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[auto_1fr_auto]"
                     >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--surface-muted)] text-sm font-semibold text-[var(--text-soft)]">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[color:var(--surface-muted)] text-sm font-semibold text-[var(--text-soft)]">
                         {index + 1}
                       </div>
                       <div>
@@ -920,7 +918,7 @@ export default function Dashboard() {
                   {dashboard.demandBreakdown.map((item) => (
                     <div
                       key={item.demand}
-                      className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+                      className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
                     >
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div>
@@ -938,10 +936,10 @@ export default function Dashboard() {
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-                        <span className="rounded-full border border-[var(--line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--warning)]">
+                        <span className="rounded-md border border-[var(--line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--warning)]">
                           {formatInteger(item.pendingCount)} pendente(s)
                         </span>
-                        <span className="rounded-full border border-[var(--line)] bg-[color:var(--accent-soft)] px-2 py-1 text-[var(--success)]">
+                        <span className="rounded-md border border-[var(--line)] bg-[color:var(--accent-soft)] px-2 py-1 text-[var(--success)]">
                           {formatInteger(item.appliedCount)} realizado(s)
                         </span>
                       </div>
@@ -966,7 +964,7 @@ export default function Dashboard() {
                 {dashboard.recentImports.map((item) => (
                   <div
                     key={item.id}
-                    className="grid gap-2 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_auto_auto]"
+                    className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_auto_auto]"
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-[var(--text-main)]">

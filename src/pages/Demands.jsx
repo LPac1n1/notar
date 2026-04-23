@@ -3,8 +3,8 @@ import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import FormModal from "../components/ui/FormModal";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import Modal from "../components/ui/Modal";
 import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
@@ -27,6 +27,7 @@ export default function Demands() {
   const [name, setName] = useState("");
   const [editName, setEditName] = useState("");
   const [editingDemand, setEditingDemand] = useState(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [demandPendingRemoval, setDemandPendingRemoval] = useState(null);
   const [filters, setFilters] = useState({
     ...INITIAL_DEMAND_FILTERS,
@@ -70,6 +71,7 @@ export default function Demands() {
       await createDemand({ name });
       setName("");
       await loadDemands();
+      setIsCreateModalOpen(false);
       setSuccessMessage("Demanda cadastrada com sucesso.");
     } catch (err) {
       console.error(
@@ -137,7 +139,7 @@ export default function Demands() {
         handleCloseEditModal();
       }
       setDemandPendingRemoval(null);
-      setSuccessMessage("Demanda removida com sucesso.");
+      setSuccessMessage("Demanda enviada para a lixeira com sucesso.");
     } catch (err) {
       console.error(
         "Erro ao remover demanda:",
@@ -169,12 +171,12 @@ export default function Demands() {
       <div>
         <PageHeader
           title="Demandas"
-          subtitle="Organize os grupos atendidos pela ONG e mantenha os vínculos prontos para os cadastros de doadores."
+          subtitle="Grupos usados nos cadastros de doadores."
           className="mb-6"
         />
         <LoadingScreen
           title="Buscando demandas"
-          description="Carregando os grupos já cadastrados para deixar a gestão pronta."
+          description="Carregando grupos cadastrados."
         />
       </div>
     );
@@ -184,26 +186,15 @@ export default function Demands() {
     <div>
       <PageHeader
         title="Demandas"
-        subtitle="Organize os grupos atendidos pela ONG e mantenha os vínculos prontos para os cadastros de doadores."
+        subtitle="Grupos usados nos cadastros de doadores."
         className="mb-6"
       />
 
-      <SectionCard title="Nova demanda" className="mb-6">
-        <div className="flex flex-col gap-3 md:flex-row">
-          <TextInput
-            className="md:flex-1"
-            placeholder="Nome da demanda"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <Button
-            onClick={handleAdd}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Salvando..." : "Adicionar demanda"}
-          </Button>
-        </div>
-      </SectionCard>
+      <div className="mb-6">
+        <Button onClick={() => setIsCreateModalOpen(true)}>
+          Adicionar demanda
+        </Button>
+      </div>
 
       <SectionCard title="Buscar demandas" className="mb-4">
         <div className="flex flex-col gap-3 md:flex-row">
@@ -248,7 +239,7 @@ export default function Demands() {
           {demandsPagination.visibleItems.map((demand) => (
             <li
               key={demand.id}
-              className="flex flex-col gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between"
             >
               <p className="font-medium">{demand.name}</p>
               <div className="flex flex-wrap gap-2">
@@ -282,43 +273,49 @@ export default function Demands() {
         </ul>
       ) : null}
 
+      {isCreateModalOpen ? (
+        <FormModal
+          title="Adicionar demanda"
+          description="Cadastre o nome da demanda. O sistema salvará em CAIXA ALTA para manter o padrão."
+          confirmLabel="Adicionar demanda"
+          isLoading={isSubmitting}
+          onClose={() => {
+            setName("");
+            setIsCreateModalOpen(false);
+          }}
+          onSubmit={handleAdd}
+          size="sm"
+        >
+          <TextInput
+            placeholder="Nome da demanda"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </FormModal>
+      ) : null}
+
       {editingDemand ? (
-        <Modal
+        <FormModal
           title="Editar demanda"
           description="Atualize o nome da demanda e salve as alterações."
           onClose={handleCloseEditModal}
+          onSubmit={handleSaveEdit}
+          confirmLabel="Salvar alterações"
+          isLoading={isSubmitting}
           size="sm"
         >
-          <div className="space-y-4">
-            <TextInput
-              placeholder="Nome da demanda"
-              value={editName}
-              onChange={(event) => setEditName(event.target.value)}
-            />
-
-            <div className="flex flex-wrap justify-end gap-3">
-              <Button
-                variant="subtle"
-                onClick={handleCloseEditModal}
-                disabled={isSubmitting}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleSaveEdit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Salvando..." : "Salvar alterações"}
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          <TextInput
+            placeholder="Nome da demanda"
+            value={editName}
+            onChange={(event) => setEditName(event.target.value)}
+          />
+        </FormModal>
       ) : null}
 
       {demandPendingRemoval ? (
         <ConfirmModal
           title="Remover demanda"
-          description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Essa ação não pode ser desfeita.`}
+          description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Ela ficará disponível na lixeira para restauração.`}
           confirmLabel="Remover demanda"
           isLoading={isDeleting}
           onCancel={() => setDemandPendingRemoval(null)}

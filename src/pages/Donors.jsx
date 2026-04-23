@@ -1,33 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import FormModal from "../components/ui/FormModal";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import Modal from "../components/ui/Modal";
+import MonthInput from "../components/ui/MonthInput";
 import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
+import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
 import { listDemands } from "../services/demandService";
 import {
-  createAuxiliaryDonor,
   createDonor,
   deleteDonor,
-  deleteAuxiliaryDonor,
-  getDonorProfile,
   listDonors,
-  updateAuxiliaryDonor,
+  listHolderDonors,
   updateDonor,
 } from "../services/donorService";
 import { exportDonorsCsv } from "../services/exportService";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
-import { formatCurrency } from "../utils/format";
-import { formatMonthYear } from "../utils/date";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 
@@ -36,51 +33,46 @@ const EMPTY_DONOR_FORM = {
   cpf: "",
   demand: "",
   donationStartDate: "",
-};
-
-const EMPTY_AUXILIARY_FORM = {
-  name: "",
-  cpf: "",
-  donationStartDate: "",
+  donorType: "holder",
+  holderDonorId: "",
 };
 
 const INITIAL_DONOR_FILTERS = {
   name: "",
   cpf: "",
   demand: "",
+  donorType: "",
 };
+
+const DONOR_TYPE_OPTIONS = [
+  { value: "", label: "Todos os tipos" },
+  { value: "holder", label: "Titulares", tone: "default" },
+  { value: "auxiliary", label: "Auxiliares", tone: "default" },
+];
+
+const DONOR_FORM_TYPE_OPTIONS = [
+  { value: "holder", label: "Titular" },
+  { value: "auxiliary", label: "Auxiliar" },
+];
 
 export default function Donors() {
   const [donors, setDonors] = useState([]);
+  const [holderDonors, setHolderDonors] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
   const [editForm, setEditForm] = useState({ ...EMPTY_DONOR_FORM });
-  const [auxiliaryForm, setAuxiliaryForm] = useState({ ...EMPTY_AUXILIARY_FORM });
-  const [auxiliaryEditForm, setAuxiliaryEditForm] = useState({ ...EMPTY_AUXILIARY_FORM });
   const [editingDonor, setEditingDonor] = useState(null);
-  const [editingAuxiliary, setEditingAuxiliary] = useState(null);
-  const [profileDonor, setProfileDonor] = useState(null);
-  const [donorProfile, setDonorProfile] = useState(null);
   const [donorPendingRemoval, setDonorPendingRemoval] = useState(null);
-  const [auxiliaryPendingRemoval, setAuxiliaryPendingRemoval] = useState(null);
-  const [filters, setFilters] = useState({
-    ...INITIAL_DONOR_FILTERS,
-  });
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [filters, setFilters] = useState({ ...INITIAL_DONOR_FILTERS });
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isProfileLoading, setIsProfileLoading] = useState(false);
-  const [isAuxiliarySubmitting, setIsAuxiliarySubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const profileDonorId = searchParams.get("perfil") ?? "";
-  const ignoredProfileIdRef = useRef("");
-  const donorsPagination = usePagination(donors, {
-    initialPageSize: 25,
-  });
+  const donorsPagination = usePagination(donors, { initialPageSize: 25 });
 
   const donorFormDemandOptions = useMemo(
     () =>
@@ -102,11 +94,25 @@ export default function Donors() {
     [demands],
   );
 
+  const holderOptions = useMemo(
+    () =>
+      buildSelectOptions(holderDonors, {
+        getValue: (donor) => donor.id,
+        getLabel: (donor) => donor.name,
+        emptyLabel: "Sem titular vinculado",
+      }),
+    [holderDonors],
+  );
+
   const loadDonors = useCallback(async (currentFilters = filters) => {
     try {
       setError("");
-      const donorRows = await listDonors(currentFilters);
+      const [donorRows, holderRows] = await Promise.all([
+        listDonors(currentFilters),
+        listHolderDonors(),
+      ]);
       setDonors(donorRows);
+      setHolderDonors(holderRows);
     } catch (err) {
       console.error(
         "Erro ao carregar doadores:",
@@ -135,76 +141,64 @@ export default function Donors() {
     loadDemands();
   }, [loadDemands, loadDonors]);
 
-  const handleCreateFormChange = (event) => {
+  const handleFormChange = (setter) => (event) => {
     const { name, value } = event.target;
-    setCreateForm((current) => ({
+    setter((current) => ({
       ...current,
-      [name]: name === "cpf" ? formatCpf(value) : value,
-    }));
-  };
-
-  const handleEditFormChange = (event) => {
-    const { name, value } = event.target;
-    setEditForm((current) => ({
-      ...current,
-      [name]: name === "cpf" ? formatCpf(value) : value,
-    }));
-  };
-
-  const handleAuxiliaryFormChange = (event) => {
-    const { name, value } = event.target;
-    setAuxiliaryForm((current) => ({
-      ...current,
-      [name]: name === "cpf" ? formatCpf(value) : value,
-    }));
-  };
-
-  const handleAuxiliaryEditFormChange = (event) => {
-    const { name, value } = event.target;
-    setAuxiliaryEditForm((current) => ({
-      ...current,
+      ...(name === "donorType" && value === "holder"
+        ? { holderDonorId: "" }
+        : {}),
       [name]: name === "cpf" ? formatCpf(value) : value,
     }));
   };
 
   const handleFilterChange = async (event) => {
-    const nextSearch = event.target.value;
-    const { name } = event.target;
+    const { name, value } = event.target;
     const nextFilters = {
       ...filters,
-      [name]: name === "cpf" ? formatCpf(nextSearch) : nextSearch,
+      [name]: name === "cpf" ? formatCpf(value) : value,
     };
     setFilters(nextFilters);
     await loadDonors(nextFilters);
   };
 
-  const handleAdd = async () => {
-    if (!createForm.name.trim() || !createForm.cpf.trim()) return;
+  const handleOpenCreateModal = () => {
+    setError("");
+    setSuccessMessage("");
+    setCreateForm({ ...EMPTY_DONOR_FORM });
+    setIsCreateModalOpen(true);
+  };
 
+  const handleCloseCreateModal = () => {
+    setCreateForm({ ...EMPTY_DONOR_FORM });
+    setIsCreateModalOpen(false);
+  };
+
+  const handleAdd = async () => {
     try {
       setError("");
       setSuccessMessage("");
       setIsSubmitting(true);
       await createDonor({
         id: nanoid(),
-        name: createForm.name.trim(),
-        cpf: createForm.cpf.trim(),
-        demand: createForm.demand.trim(),
+        name: createForm.name,
+        cpf: createForm.cpf,
+        demand: createForm.demand,
         donationStartDate: createForm.donationStartDate,
+        donorType: createForm.donorType,
+        holderDonorId: createForm.holderDonorId,
       });
       await loadDonors();
-      setCreateForm({ ...EMPTY_DONOR_FORM });
+      handleCloseCreateModal();
       setSuccessMessage(
-        "Doador cadastrado e reconciliado com as importacoes ja existentes.",
+        "Doador cadastrado e reconciliado com as importacoes existentes.",
       );
     } catch (err) {
       console.error(
         "Erro ao adicionar doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(
-        getErrorMessage(err, "Nao foi possivel adicionar o doador."),
-      );
+      setError(getErrorMessage(err, "Nao foi possivel adicionar o doador."));
     } finally {
       setIsSubmitting(false);
     }
@@ -219,6 +213,8 @@ export default function Donors() {
       cpf: donor.cpf,
       demand: donor.demand,
       donationStartDate: donor.donationStartDateValue,
+      donorType: donor.donorType,
+      holderDonorId: donor.holderDonorId,
     });
   };
 
@@ -238,10 +234,12 @@ export default function Donors() {
       setIsSubmitting(true);
       await updateDonor({
         id: editingDonor.id,
-        name: editForm.name.trim(),
-        cpf: editForm.cpf.trim(),
-        demand: editForm.demand.trim(),
+        name: editForm.name,
+        cpf: editForm.cpf,
+        demand: editForm.demand,
         donationStartDate: editForm.donationStartDate,
+        donorType: editForm.donorType,
+        holderDonorId: editForm.holderDonorId,
       });
       await loadDonors();
       handleCloseEditModal();
@@ -253,219 +251,9 @@ export default function Donors() {
         "Erro ao atualizar doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(
-        getErrorMessage(err, "Nao foi possivel atualizar o doador."),
-      );
+      setError(getErrorMessage(err, "Nao foi possivel atualizar o doador."));
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const loadDonorProfile = useCallback(async (donorId) => {
-    try {
-      setIsProfileLoading(true);
-      const profile = await getDonorProfile(donorId);
-      setDonorProfile(profile);
-      return profile;
-    } catch (err) {
-      console.error(
-        "Erro ao carregar perfil do doador:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Nao foi possivel carregar o perfil do doador.");
-      return null;
-    } finally {
-      setIsProfileLoading(false);
-    }
-  }, []);
-
-  const handleOpenProfileModal = async (donor, { syncUrl = true } = {}) => {
-    setError("");
-    setSuccessMessage("");
-    setProfileDonor(donor);
-    setDonorProfile(null);
-    setAuxiliaryForm({ ...EMPTY_AUXILIARY_FORM });
-    setEditingAuxiliary(null);
-    setAuxiliaryEditForm({ ...EMPTY_AUXILIARY_FORM });
-    if (syncUrl) {
-      ignoredProfileIdRef.current = "";
-      navigate(`/doadores?perfil=${encodeURIComponent(donor.id)}`, {
-        replace: false,
-      });
-    }
-    await loadDonorProfile(donor.id);
-  };
-
-  const handleCloseProfileModal = () => {
-    setProfileDonor(null);
-    setDonorProfile(null);
-    setAuxiliaryForm({ ...EMPTY_AUXILIARY_FORM });
-    setEditingAuxiliary(null);
-    setAuxiliaryEditForm({ ...EMPTY_AUXILIARY_FORM });
-    if (profileDonorId) {
-      ignoredProfileIdRef.current = profileDonorId;
-      navigate("/doadores", { replace: true });
-    }
-  };
-
-  useEffect(() => {
-    if (!profileDonorId) {
-      ignoredProfileIdRef.current = "";
-      return;
-    }
-
-    if (ignoredProfileIdRef.current === profileDonorId) {
-      return;
-    }
-
-    if (!profileDonorId || isLoading) {
-      return;
-    }
-
-    if (profileDonor?.id === profileDonorId) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const openProfileFromUrl = async () => {
-      const donorFromList = donors.find((donor) => donor.id === profileDonorId);
-
-      if (donorFromList) {
-        setError("");
-        setSuccessMessage("");
-        setProfileDonor(donorFromList);
-        setDonorProfile(null);
-        setAuxiliaryForm({ ...EMPTY_AUXILIARY_FORM });
-        setEditingAuxiliary(null);
-        setAuxiliaryEditForm({ ...EMPTY_AUXILIARY_FORM });
-        await loadDonorProfile(donorFromList.id);
-        return;
-      }
-
-      const profile = await loadDonorProfile(profileDonorId);
-
-      if (isMounted && profile) {
-        setProfileDonor({
-          id: profile.donor.id,
-          name: profile.donor.name,
-          cpf: profile.donor.cpf,
-          demand: profile.donor.demand,
-          donationStartDate: profile.donor.donationStartDate,
-        });
-      }
-    };
-
-    openProfileFromUrl();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [donors, isLoading, loadDonorProfile, profileDonor?.id, profileDonorId]);
-
-  const handleAddAuxiliary = async () => {
-    if (!profileDonor) {
-      return;
-    }
-
-    try {
-      setError("");
-      setSuccessMessage("");
-      setIsAuxiliarySubmitting(true);
-      await createAuxiliaryDonor({
-        id: nanoid(),
-        donorId: profileDonor.id,
-        name: auxiliaryForm.name.trim(),
-        cpf: auxiliaryForm.cpf.trim(),
-        donationStartDate: auxiliaryForm.donationStartDate,
-      });
-      await loadDonors();
-      await loadDonorProfile(profileDonor.id);
-      setAuxiliaryForm({ ...EMPTY_AUXILIARY_FORM });
-      setSuccessMessage("Doador auxiliar vinculado ao titular com sucesso.");
-    } catch (err) {
-      console.error(
-        "Erro ao adicionar doador auxiliar:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError(
-        getErrorMessage(err, "Nao foi possivel adicionar o doador auxiliar."),
-      );
-    } finally {
-      setIsAuxiliarySubmitting(false);
-    }
-  };
-
-  const handleOpenAuxiliaryEdit = (source) => {
-    setEditingAuxiliary(source);
-    setAuxiliaryEditForm({
-      name: source.name,
-      cpf: source.cpf,
-      donationStartDate: source.donationStartDateValue,
-    });
-  };
-
-  const handleCloseAuxiliaryEdit = () => {
-    setEditingAuxiliary(null);
-    setAuxiliaryEditForm({ ...EMPTY_AUXILIARY_FORM });
-  };
-
-  const handleSaveAuxiliaryEdit = async () => {
-    if (!profileDonor || !editingAuxiliary) {
-      return;
-    }
-
-    try {
-      setError("");
-      setSuccessMessage("");
-      setIsAuxiliarySubmitting(true);
-      await updateAuxiliaryDonor({
-        id: editingAuxiliary.id,
-        donorId: profileDonor.id,
-        name: auxiliaryEditForm.name.trim(),
-        cpf: auxiliaryEditForm.cpf.trim(),
-        donationStartDate: auxiliaryEditForm.donationStartDate,
-      });
-      await loadDonors();
-      await loadDonorProfile(profileDonor.id);
-      handleCloseAuxiliaryEdit();
-      setSuccessMessage("Doador auxiliar atualizado com sucesso.");
-    } catch (err) {
-      console.error(
-        "Erro ao atualizar doador auxiliar:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError(
-        getErrorMessage(err, "Nao foi possivel atualizar o doador auxiliar."),
-      );
-    } finally {
-      setIsAuxiliarySubmitting(false);
-    }
-  };
-
-  const handleConfirmRemoveAuxiliary = async () => {
-    if (!auxiliaryPendingRemoval || !profileDonor) {
-      return;
-    }
-
-    try {
-      setError("");
-      setIsDeleting(true);
-      await deleteAuxiliaryDonor(auxiliaryPendingRemoval.id);
-      await loadDonors();
-      await loadDonorProfile(profileDonor.id);
-      setAuxiliaryPendingRemoval(null);
-      setSuccessMessage("Doador auxiliar removido com sucesso.");
-    } catch (err) {
-      console.error(
-        "Erro ao remover doador auxiliar:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError(
-        getErrorMessage(err, "Nao foi possivel remover o doador auxiliar."),
-      );
-    } finally {
-      setIsDeleting(false);
     }
   };
 
@@ -476,17 +264,12 @@ export default function Donors() {
 
     try {
       setError("");
+      setSuccessMessage("");
       setIsDeleting(true);
       await deleteDonor(donorPendingRemoval.id);
       await loadDonors();
-      if (editingDonor?.id === donorPendingRemoval.id) {
-        handleCloseEditModal();
-      }
-      if (profileDonor?.id === donorPendingRemoval.id) {
-        handleCloseProfileModal();
-      }
       setDonorPendingRemoval(null);
-      setSuccessMessage("Doador removido com sucesso.");
+      setSuccessMessage("Doador enviado para a lixeira com sucesso.");
     } catch (err) {
       console.error(
         "Erro ao remover doador:",
@@ -504,9 +287,7 @@ export default function Donors() {
       setSuccessMessage("");
       setIsExporting(true);
       const result = await exportDonorsCsv(filters);
-      setSuccessMessage(
-        `${result.rowCount} doador(es) exportado(s) em CSV.`,
-      );
+      setSuccessMessage(`${result.rowCount} doador(es) exportado(s) em CSV.`);
     } catch (err) {
       console.error(
         "Erro ao exportar doadores:",
@@ -524,17 +305,78 @@ export default function Donors() {
     await loadDonors(clearedFilters);
   };
 
+  const renderDonorForm = (form, onChange) => (
+    <div className="grid gap-3 md:grid-cols-2">
+      <SelectInput
+        name="donorType"
+        value={form.donorType}
+        onChange={onChange}
+        options={DONOR_FORM_TYPE_OPTIONS}
+        placeholder="Tipo de doador"
+      />
+      {form.donorType === "auxiliary" ? (
+        <SelectInput
+          name="holderDonorId"
+          value={form.holderDonorId}
+          onChange={onChange}
+          options={holderOptions}
+          placeholder="Titular vinculado"
+          searchable
+          searchPlaceholder="Buscar titular..."
+        />
+      ) : (
+        <SelectInput
+          name="demand"
+          value={form.demand}
+          onChange={onChange}
+          options={donorFormDemandOptions}
+          placeholder="Selecione uma demanda"
+          searchable
+          searchPlaceholder="Buscar demanda..."
+        />
+      )}
+      <TextInput
+        name="name"
+        placeholder="Nome do doador"
+        value={form.name}
+        onChange={onChange}
+      />
+      <TextInput
+        name="cpf"
+        placeholder="CPF"
+        value={form.cpf}
+        onChange={onChange}
+      />
+      {form.donorType === "auxiliary" ? (
+        <SelectInput
+          name="demand"
+          value={form.demand}
+          onChange={onChange}
+          options={donorFormDemandOptions}
+          placeholder="Demanda própria ou herdada"
+          searchable
+          searchPlaceholder="Buscar demanda..."
+        />
+      ) : null}
+      <MonthInput
+        name="donationStartDate"
+        value={form.donationStartDate}
+        onChange={onChange}
+      />
+    </div>
+  );
+
   if (isLoading && !donors.length && !error) {
     return (
       <div>
         <PageHeader
           title="Doadores"
-          subtitle={`Quantidade de doadores: ${donors.length}. Cadastre, pesquise e mantenha os CPFs prontos para a conciliação das importações.`}
+          subtitle="Titulares e auxiliares com abatimento próprio."
           className="mb-6"
         />
         <LoadingScreen
           title="Carregando doadores"
-          description="Preparando os cadastros e os vínculos com demandas para você."
+          description="Carregando cadastros e vínculos."
         />
       </div>
     );
@@ -544,53 +386,19 @@ export default function Donors() {
     <div>
       <PageHeader
         title="Doadores"
-        subtitle={`Quantidade de doadores: ${donors.length}. Cadastre, pesquise e mantenha os CPFs prontos para a conciliação das importações.`}
+        subtitle={`${donors.length} doador(es) cadastrado(s).`}
         className="mb-6"
       />
 
-      <SectionCard title="Novo doador" className="mb-6">
-        <div className="mb-4 grid gap-2 md:grid-cols-4">
-          <TextInput
-            name="name"
-            placeholder="Nome"
-            value={createForm.name}
-            onChange={handleCreateFormChange}
-          />
-          <TextInput
-            name="cpf"
-            placeholder="CPF"
-            value={createForm.cpf}
-            onChange={handleCreateFormChange}
-          />
-          <SelectInput
-            name="demand"
-            value={createForm.demand}
-            onChange={handleCreateFormChange}
-            options={donorFormDemandOptions}
-            placeholder="Selecione uma demanda"
-            searchable
-            searchPlaceholder="Buscar demanda..."
-          />
-          <TextInput
-            type="month"
-            name="donationStartDate"
-            value={createForm.donationStartDate}
-            onChange={handleCreateFormChange}
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button
-            onClick={handleAdd}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Salvando..." : "Adicionar doador"}
-          </Button>
-        </div>
-      </SectionCard>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Button onClick={handleOpenCreateModal}>Adicionar doador</Button>
+        <Button variant="subtle" onClick={handleExport} disabled={isExporting}>
+          {isExporting ? "Exportando..." : "Exportar CSV"}
+        </Button>
+      </div>
 
       <SectionCard title="Buscar doadores" className="mb-4">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <TextInput
             name="name"
             placeholder="Filtrar por nome"
@@ -612,20 +420,17 @@ export default function Donors() {
             searchable
             searchPlaceholder="Buscar demanda..."
           />
+          <SelectInput
+            name="donorType"
+            value={filters.donorType}
+            onChange={handleFilterChange}
+            options={DONOR_TYPE_OPTIONS}
+            placeholder="Todos os tipos"
+          />
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button
-            variant="subtle"
-            onClick={handleExport}
-            disabled={isExporting}
-          >
-            {isExporting ? "Exportando..." : "Exportar CSV"}
-          </Button>
-          <Button
-            variant="subtle"
-            onClick={handleClearFilters}
-          >
+          <Button variant="subtle" onClick={handleClearFilters}>
             Limpar filtros
           </Button>
         </div>
@@ -637,7 +442,7 @@ export default function Donors() {
       {!isLoading && donors.length === 0 ? (
         <EmptyState
           title="Nenhum doador cadastrado"
-          description="Cadastre o primeiro doador para começar a acompanhar as doações e os abatimentos."
+          description="Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."
         />
       ) : !isLoading ? (
         <ul className="space-y-2">
@@ -653,48 +458,59 @@ export default function Donors() {
             />
           </li>
 
-          {donorsPagination.visibleItems.map((d) => (
+          {donorsPagination.visibleItems.map((donor) => (
             <li
-              key={d.id}
-              className="flex flex-col gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
+              key={donor.id}
+              className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between"
             >
               <div>
-                <p className="font-medium">{d.name}</p>
-                <p className="text-sm text-[var(--muted)]">CPF: {d.cpf}</p>
-                <p className="text-sm text-[var(--muted)]">
-                  Demanda: {d.demand || "Nao informada"}
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/doadores/${donor.id}`)}
+                    className="text-left font-semibold text-slate-100 underline-offset-4 transition hover:text-slate-50 hover:underline"
+                  >
+                    {donor.name}
+                  </button>
+                  <StatusBadge status={donor.donorType} />
+                </div>
+                <p className="text-sm text-slate-400">CPF: {donor.cpf}</p>
+                <p className="text-sm text-slate-400">
+                  Demanda: {donor.demand || "Nao informada"}
                 </p>
-                <p className="text-sm text-[var(--muted)]">
-                  Inicio: {d.donationStartDate || "Nao informado"}
+                <p className="text-sm text-slate-400">
+                  Início: {donor.donationStartDate || "Nao informado"}
                 </p>
-                <p className="text-sm text-[var(--muted)]">
-                  CPFs de doação: {d.linkedCpfCount} ({d.auxiliaryCount} auxiliar(es))
-                </p>
-                {d.auxiliaryNames.length > 0 ? (
-                  <p className="text-sm text-[var(--muted)]">
-                    Auxiliares: {d.auxiliaryNames.join(", ")}
+                {donor.donorType === "auxiliary" ? (
+                  <p className="text-sm text-slate-300">
+                    Vinculado informativamente a:{" "}
+                    {donor.holderName || "nenhum titular"}
+                  </p>
+                ) : donor.auxiliaryDonors.length > 0 ? (
+                  <p className="text-sm text-slate-400">
+                    Auxiliares:{" "}
+                    {donor.auxiliaryDonors
+                      .map((auxiliary) => `${auxiliary.name} (${auxiliary.cpf})`)
+                      .join(", ")}
                   </p>
                 ) : (
-                  <p className="text-sm text-[var(--muted)]">
+                  <p className="text-sm text-slate-500">
                     Sem auxiliares vinculados
                   </p>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  onClick={() => handleOpenProfileModal(d)}
+                  onClick={() => navigate(`/doadores/${donor.id}`)}
                   variant="subtle"
                 >
                   Perfil
                 </Button>
-                <Button
-                  onClick={() => handleOpenEditModal(d)}
-                  variant="subtle"
-                >
+                <Button onClick={() => handleOpenEditModal(donor)} variant="subtle">
                   Editar
                 </Button>
                 <Button
-                  onClick={() => setDonorPendingRemoval(d)}
+                  onClick={() => setDonorPendingRemoval(donor)}
                   variant="danger"
                 >
                   Remover
@@ -717,298 +533,40 @@ export default function Donors() {
         </ul>
       ) : null}
 
-      {profileDonor ? (
-        <Modal
-          title={`Perfil de ${profileDonor.name}`}
-          description="Veja o titular, os CPFs vinculados e o histórico de abatimentos consolidados."
-          onClose={handleCloseProfileModal}
-          size="xl"
+      {isCreateModalOpen ? (
+        <FormModal
+          title="Adicionar doador"
+          description="Titulares e auxiliares aparecem separados nos abatimentos."
+          confirmLabel="Adicionar doador"
+          isLoading={isSubmitting}
+          onClose={handleCloseCreateModal}
+          onSubmit={handleAdd}
         >
-          {isProfileLoading || !donorProfile ? (
-            <LoadingScreen
-              compact
-              title="Carregando perfil"
-              description="Buscando CPFs vinculados, histórico mensal e totais do titular."
-            />
-          ) : (
-            <div className="space-y-5">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Titular</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {donorProfile.donor.name}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted)]">
-                    {donorProfile.donor.cpf}
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Demanda</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {donorProfile.donor.demand || "Nao informada"}
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Notas históricas</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {donorProfile.totals.totalNotes}
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Total abatido</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {formatCurrency(donorProfile.totals.totalAbatement)}
-                  </p>
-                </div>
-              </div>
-
-              <SectionCard
-                title="CPFs de doação"
-                description="CPFs que geram notas para abatimento na contribuição deste titular."
-              >
-                <div className="mb-4 grid gap-3 md:grid-cols-3">
-                  <TextInput
-                    name="name"
-                    placeholder="Nome do auxiliar"
-                    value={auxiliaryForm.name}
-                    onChange={handleAuxiliaryFormChange}
-                  />
-                  <TextInput
-                    name="cpf"
-                    placeholder="CPF do auxiliar"
-                    value={auxiliaryForm.cpf}
-                    onChange={handleAuxiliaryFormChange}
-                  />
-                  <TextInput
-                    type="month"
-                    name="donationStartDate"
-                    value={auxiliaryForm.donationStartDate}
-                    onChange={handleAuxiliaryFormChange}
-                  />
-                </div>
-                <Button
-                  onClick={handleAddAuxiliary}
-                  disabled={isAuxiliarySubmitting}
-                >
-                  {isAuxiliarySubmitting ? "Vinculando..." : "Adicionar auxiliar"}
-                </Button>
-
-                {editingAuxiliary ? (
-                  <div className="mt-5 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                    <div className="mb-4">
-                      <p className="font-medium text-[var(--text-main)]">
-                        Editar auxiliar
-                      </p>
-                      <p className="text-sm text-[var(--muted)]">
-                        Atualize os dados do CPF auxiliar vinculado a este titular.
-                      </p>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <TextInput
-                        name="name"
-                        placeholder="Nome do auxiliar"
-                        value={auxiliaryEditForm.name}
-                        onChange={handleAuxiliaryEditFormChange}
-                      />
-                      <TextInput
-                        name="cpf"
-                        placeholder="CPF do auxiliar"
-                        value={auxiliaryEditForm.cpf}
-                        onChange={handleAuxiliaryEditFormChange}
-                      />
-                      <TextInput
-                        type="month"
-                        name="donationStartDate"
-                        value={auxiliaryEditForm.donationStartDate}
-                        onChange={handleAuxiliaryEditFormChange}
-                      />
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap justify-end gap-3">
-                      <Button
-                        variant="subtle"
-                        onClick={handleCloseAuxiliaryEdit}
-                        disabled={isAuxiliarySubmitting}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        onClick={handleSaveAuxiliaryEdit}
-                        disabled={isAuxiliarySubmitting}
-                      >
-                        {isAuxiliarySubmitting ? "Salvando..." : "Salvar auxiliar"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="mt-5 space-y-3">
-                  {donorProfile.sources.map((source) => (
-                    <div
-                      key={source.id}
-                      className="flex flex-col gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
-                    >
-                      <div>
-                        <p className="font-medium text-[var(--text-main)]">
-                          {source.name}
-                        </p>
-                        <p className="text-sm text-[var(--muted)]">
-                          {source.cpf} • {source.typeLabel}
-                        </p>
-                        <p className="text-sm text-[var(--muted)]">
-                          Início: {source.donationStartDate || "Nao informado"} • {source.totalNotes} nota(s)
-                        </p>
-                      </div>
-                      {source.type === "auxiliary" ? (
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="subtle"
-                            onClick={() => handleOpenAuxiliaryEdit(source)}
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            variant="danger"
-                            onClick={() => setAuxiliaryPendingRemoval(source)}
-                          >
-                            Remover
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                title="Histórico mensal"
-                description="Meses em que este titular recebeu abatimento, incluindo notas de auxiliares vinculados."
-              >
-                {donorProfile.monthlyHistory.length === 0 ? (
-                  <EmptyState
-                    title="Sem histórico mensal"
-                    description="Quando uma importação encontrar CPFs vinculados a este titular, o histórico aparecerá aqui."
-                  />
-                ) : (
-                  <div className="space-y-3">
-                    {donorProfile.monthlyHistory.map((item) => (
-                      <div
-                        key={item.referenceMonth}
-                        className="grid gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-4"
-                      >
-                        <div>
-                          <p className="text-sm text-[var(--muted)]">Mês</p>
-                          <p className="font-medium text-[var(--text-main)]">
-                            {formatMonthYear(item.referenceMonth)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-[var(--muted)]">Notas</p>
-                          <p className="font-medium text-[var(--text-main)]">
-                            {item.notesCount}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-[var(--muted)]">Abatimento</p>
-                          <p className="font-medium text-[var(--text-main)]">
-                            {formatCurrency(item.abatementAmount)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-[var(--muted)]">Status</p>
-                          <p className="font-medium text-[var(--text-main)]">
-                            {item.abatementStatus === "applied"
-                              ? "Realizado"
-                              : "Pendente"}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </SectionCard>
-            </div>
-          )}
-        </Modal>
+          {renderDonorForm(createForm, handleFormChange(setCreateForm))}
+        </FormModal>
       ) : null}
 
       {editingDonor ? (
-        <Modal
+        <FormModal
           title="Editar doador"
-          description="Atualize os dados do cadastro e salve as alterações."
+          description="Atualize os dados do cadastro. O nome será salvo em CAIXA ALTA."
+          confirmLabel="Salvar alterações"
+          isLoading={isSubmitting}
           onClose={handleCloseEditModal}
-          size="lg"
+          onSubmit={handleSaveEdit}
         >
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <TextInput
-                name="name"
-                placeholder="Nome"
-                value={editForm.name}
-                onChange={handleEditFormChange}
-              />
-              <TextInput
-                name="cpf"
-                placeholder="CPF"
-                value={editForm.cpf}
-                onChange={handleEditFormChange}
-              />
-              <SelectInput
-                name="demand"
-                value={editForm.demand}
-                onChange={handleEditFormChange}
-                options={donorFormDemandOptions}
-                placeholder="Selecione uma demanda"
-                searchable
-                searchPlaceholder="Buscar demanda..."
-              />
-              <TextInput
-                type="month"
-                name="donationStartDate"
-                value={editForm.donationStartDate}
-                onChange={handleEditFormChange}
-              />
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-3">
-              <Button
-                variant="subtle"
-                onClick={handleCloseEditModal}
-                disabled={isSubmitting}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleSaveEdit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Salvando..." : "Salvar alterações"}
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          {renderDonorForm(editForm, handleFormChange(setEditForm))}
+        </FormModal>
       ) : null}
 
       {donorPendingRemoval ? (
         <ConfirmModal
           title="Remover doador"
-          description={`Tem certeza de que deseja remover ${donorPendingRemoval.name}? As importações serão reconciliadas em seguida.`}
+          description={`Tem certeza de que deseja remover ${donorPendingRemoval.name}? As importações ligadas ao CPF serão recalculadas.`}
           confirmLabel="Remover doador"
           isLoading={isDeleting}
           onCancel={() => setDonorPendingRemoval(null)}
           onConfirm={handleConfirmRemove}
-        />
-      ) : null}
-
-      {auxiliaryPendingRemoval ? (
-        <ConfirmModal
-          title="Remover auxiliar"
-          description={`Tem certeza de que deseja remover ${auxiliaryPendingRemoval.name}? As importações serão reconciliadas em seguida.`}
-          confirmLabel="Remover auxiliar"
-          isLoading={isDeleting}
-          onCancel={() => setAuxiliaryPendingRemoval(null)}
-          onConfirm={handleConfirmRemoveAuxiliary}
         />
       ) : null}
     </div>

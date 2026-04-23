@@ -1,31 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #0b0f12;
-  --surface: rgba(16, 20, 24, 0.78);
-  --surface-strong: rgba(19, 24, 29, 0.94);
-  --surface-muted: #161c21;
-  --surface-elevated: rgba(24, 30, 36, 0.98);
-  --line: rgba(170, 184, 194, 0.12);
-  --line-strong: rgba(170, 184, 194, 0.2);
-  --text-main: #f1f4f6;
-  --text-soft: #d5dde3;
-  --muted: #97a6b1;
-  --muted-strong: #b8c3ca;
-  --accent: #7ed0b0;
-  --accent-strong: #51b38d;
-  --accent-soft: rgba(126, 208, 176, 0.16);
-  --accent-2: #c99569;
-  --accent-2-soft: rgba(201, 149, 105, 0.16);
-  --danger: #ef8b88;
-  --danger-soft: rgba(239, 139, 136, 0.16);
-  --success: #76c7a3;
-  --warning: #e3ba72;
+  --app-bg: #020617;
+  --surface: rgba(15, 23, 42, 0.82);
+  --surface-strong: rgba(15, 23, 42, 0.96);
+  --surface-muted: #1e293b;
+  --surface-elevated: rgba(30, 41, 59, 0.58);
+  --line: rgba(148, 163, 184, 0.16);
+  --line-strong: rgba(148, 163, 184, 0.38);
+  --text-main: #f8fafc;
+  --text-soft: #cbd5e1;
+  --muted: #94a3b8;
+  --muted-strong: #cbd5e1;
+  --accent: #cbd5e1;
+  --accent-strong: #f8fafc;
+  --accent-soft: rgba(148, 163, 184, 0.14);
+  --accent-2: #94a3b8;
+  --accent-2-soft: rgba(148, 163, 184, 0.12);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.13);
+  --success: #34d399;
+  --warning: #fbbf24;
   --font-sans:
     "Aptos", "Segoe UI Variable", "Segoe UI", "Trebuchet MS", "Noto Sans",
     sans-serif;
-  --font-display:
-    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Georgia", serif;
+  --font-display: var(--font-sans);
 }
 
 html,
@@ -43,32 +42,16 @@ html {
 body {
   font-family: var(--font-sans);
   color: var(--text-main);
-  background:
-    radial-gradient(circle at top left, rgba(126, 208, 176, 0.1), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(201, 149, 105, 0.08), transparent 20%),
-    linear-gradient(180deg, #0b0f12 0%, #0e1317 48%, #11161a 100%);
+  background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
 }
 
 #root {
   position: relative;
 }
 
-#root::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(126, 208, 176, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(126, 208, 176, 0.02) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(circle at center, black 36%, transparent 80%);
-  opacity: 0.28;
-}
-
 ::selection {
-  background: rgba(126, 208, 176, 0.24);
-  color: #08100d;
+  background: rgba(203, 213, 225, 0.24);
+  color: #f8fafc;
 }
 
 button {

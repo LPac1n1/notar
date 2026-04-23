@@ -271,6 +271,7 @@ export async function getDashboardOverview() {
       donor_cpf_links.cpf,
       donors.id AS donor_id,
       donors.name AS donor_name,
+      donors.donor_type,
       strftime(import_cpf_summary.reference_month, '%Y-%m-01') AS reference_month,
       strftime(donor_cpf_links.donation_start_date, '%Y-%m-01') AS donation_start_date
     FROM import_cpf_summary
@@ -301,7 +302,7 @@ export async function getDashboardOverview() {
       donor_cpf_links.id,
       donor_cpf_links.name,
       donor_cpf_links.cpf,
-      donor_cpf_links.link_type,
+      donors.donor_type,
       donors.id AS donor_id,
       donors.name AS donor_name,
       donors.demand
@@ -443,6 +444,7 @@ export async function getDashboardOverview() {
         sourceName: row.source_name,
         donorId: row.donor_id,
         donorName: row.donor_name,
+        donorType: row.donor_type,
         cpf: row.cpf,
         referenceMonth: row.reference_month,
         donationStartDate: row.donation_start_date,
@@ -455,7 +457,7 @@ export async function getDashboardOverview() {
       donorWithoutStartDateSamples: donorWithoutStartDateRows.map((row) => ({
         sourceId: row.id,
         sourceName: row.name,
-        sourceType: row.link_type,
+        sourceType: row.donor_type,
         donorId: row.donor_id,
         donorName: row.donor_name,
         cpf: row.cpf,

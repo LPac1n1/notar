@@ -3,6 +3,7 @@ import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/Dashboard";
 import Donors from "../pages/Donors";
+import DonorProfile from "../pages/DonorProfile";
 import Demands from "../pages/Demands";
 import Monthly from "../pages/Monthly";
 import Imports from "../pages/Imports";
@@ -15,6 +16,7 @@ export default function AppRoutes() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/doadores" element={<Donors />} />
+          <Route path="/doadores/:donorId" element={<DonorProfile />} />
           <Route path="/demandas" element={<Demands />} />
           <Route path="/mensal" element={<Monthly />} />
           <Route path="/importacoes" element={<Imports />} />

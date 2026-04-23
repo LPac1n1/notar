@@ -7,6 +7,17 @@ export function startOfMonth(value) {
     return `${value}-01`;
   }
 
+  if (/^\d{2}\/\d{4}$/.test(value)) {
+    const [month, year] = value.split("/");
+    const monthNumber = Number(month);
+
+    if (monthNumber < 1 || monthNumber > 12) {
+      return "";
+    }
+
+    return `${year}-${month}-01`;
+  }
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return `${value.slice(0, 7)}-01`;
   }

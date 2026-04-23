@@ -15,16 +15,22 @@ import {
   importDatabaseBackup,
   openDatabaseFile,
 } from "../services/db";
+import {
+  deleteTrashItemPermanently,
+  listTrashItems,
+  restoreTrashItem,
+} from "../services/trashService";
 import { getErrorMessage } from "../utils/error";
 
 function formatBackupStats(stats = {}) {
   return [
     `${stats.demands ?? 0} demanda(s)`,
-    `${stats.donors ?? 0} titular(es)`,
+    `${stats.donors ?? 0} doador(es)`,
     `${stats.donorCpfLinks ?? 0} CPF(s) vinculado(s)`,
     `${stats.imports ?? 0} importacao(oes)`,
     `${stats.importCpfSummary ?? 0} CPF(s) consolidados`,
     `${stats.monthlyDonorSummary ?? 0} resumo(s) mensal(is)`,
+    `${stats.trashItems ?? 0} item(ns) na lixeira`,
   ].join(", ");
 }
 
@@ -36,17 +42,24 @@ export default function Settings() {
   const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [backupInputKey, setBackupInputKey] = useState(0);
   const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
+  const [trashItems, setTrashItems] = useState([]);
+  const [trashItemPendingPermanentDelete, setTrashItemPendingPermanentDelete] =
+    useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadStorageInfo = async () => {
+    const loadSettings = async () => {
       try {
         setError("");
-        const info = await getDatabaseStorageInfo();
+        const [info, trashRows] = await Promise.all([
+          getDatabaseStorageInfo(),
+          listTrashItems(),
+        ]);
 
         if (isMounted) {
           setStorageInfo(info);
+          setTrashItems(trashRows);
         }
       } catch (storageError) {
         console.error(
@@ -62,7 +75,7 @@ export default function Settings() {
       }
     };
 
-    loadStorageInfo();
+    loadSettings();
 
     return () => {
       isMounted = false;
@@ -72,6 +85,11 @@ export default function Settings() {
   const refreshStorageInfo = async () => {
     const info = await getDatabaseStorageInfo();
     setStorageInfo(info);
+  };
+
+  const refreshTrashItems = async () => {
+    const trashRows = await listTrashItems();
+    setTrashItems(trashRows);
   };
 
   const handleCreateFile = async () => {
@@ -204,6 +222,7 @@ export default function Settings() {
 
       const result = await importDatabaseBackup(selectedBackupFile);
       setStorageInfo(result.storageInfo);
+      await refreshTrashItems();
       resetBackupFileSelection();
       setIsImportBackupConfirmOpen(false);
       setSuccessMessage(
@@ -221,17 +240,59 @@ export default function Settings() {
     }
   };
 
+  const handleRestoreTrashItem = async (item) => {
+    try {
+      setIsSubmitting(true);
+      setError("");
+      setSuccessMessage("");
+      await restoreTrashItem(item.id);
+      await refreshTrashItems();
+      setSuccessMessage(`${item.label} foi restaurado com sucesso.`);
+    } catch (trashError) {
+      setError(
+        getErrorMessage(trashError, "Nao foi possivel restaurar o item."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePermanentDeleteTrashItem = async () => {
+    if (!trashItemPendingPermanentDelete) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError("");
+      setSuccessMessage("");
+      await deleteTrashItemPermanently(trashItemPendingPermanentDelete.id);
+      await refreshTrashItems();
+      setTrashItemPendingPermanentDelete(null);
+      setSuccessMessage("Item removido permanentemente da lixeira.");
+    } catch (trashError) {
+      setError(
+        getErrorMessage(
+          trashError,
+          "Nao foi possivel excluir o item permanentemente.",
+        ),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (storageInfo === null && !error) {
     return (
       <div>
         <PageHeader
           title="Configurações"
-          subtitle="Gerencie o arquivo de dados principal, mantenha cópias de segurança e recupere o sistema quando precisar."
+          subtitle="Arquivo de dados, backup e lixeira."
           className="mb-6"
         />
         <LoadingScreen
           title="Verificando o armazenamento"
-          description="Conferindo o estado do arquivo de dados e preparando as opções de backup."
+          description="Carregando opções de armazenamento."
         />
       </div>
     );
@@ -241,7 +302,7 @@ export default function Settings() {
     <div>
       <PageHeader
         title="Configurações"
-        subtitle="Gerencie o arquivo de dados principal, mantenha cópias de segurança e recupere o sistema quando precisar."
+        subtitle="Arquivo de dados, backup e lixeira."
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
@@ -249,26 +310,19 @@ export default function Settings() {
 
       <SectionCard
         title="Armazenamento local"
-        description="O Notar funciona na sessao atual e pode persistir os dados quando um arquivo local estiver conectado."
         className="mb-6"
       >
         {storageInfo ? (
           <div className="space-y-3">
-            <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
-              <p className="font-medium text-[var(--text-main)]">Fluxo recomendado</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>Ao abrir o sistema, conecte seu arquivo de dados em `Abrir arquivo existente`.</li>
-                <li>Se for o primeiro uso, crie um arquivo em `Criar arquivo de dados`.</li>
-                <li>Use `Salvar backup` periodicamente para manter uma cópia de segurança.</li>
-              </ol>
-            </div>
-
-            <div>
+            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
               <p className="text-sm text-[var(--muted)]">Status</p>
-              <p className="font-medium text-[var(--text-main)]">{storageInfo.label}</p>
+              <p className="font-medium text-[var(--text-main)]">
+                {storageInfo.label}
+              </p>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                {storageInfo.description}
+              </p>
             </div>
-
-            <p className="text-sm text-[var(--muted)]">{storageInfo.description}</p>
 
             {storageInfo.fileName ? (
               <div>
@@ -321,7 +375,7 @@ export default function Settings() {
 
       <SectionCard
         title="Cópia de segurança"
-        description="Salvar cria uma cópia dos dados atuais. Restaurar traz de volta uma cópia salva antes."
+        description="Exportação e restauração em JSON."
         className="mb-6"
       >
         <div className="space-y-4">
@@ -334,7 +388,7 @@ export default function Settings() {
             </p>
           </div>
 
-          <div className="rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <div className="mb-3">
               <p className="text-sm font-medium text-[var(--text-main)]">
                 Restaurar backup
@@ -374,10 +428,50 @@ export default function Settings() {
         </div>
       </SectionCard>
 
-      <EmptyState
-        title="Mais configurações virão depois"
-        description="Esta área continuará crescendo conforme o Notar ganhar novos módulos operacionais."
-      />
+      <SectionCard
+        title="Lixeira"
+        description="Itens removidos que ainda podem ser restaurados."
+        className="mb-6"
+      >
+        {trashItems.length === 0 ? (
+          <EmptyState
+            title="Lixeira vazia"
+            description="Quando você remover doadores, demandas ou importações, eles aparecerão aqui."
+          />
+        ) : (
+          <div className="space-y-3">
+            {trashItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <p className="font-semibold text-slate-100">{item.label}</p>
+                  <p className="text-sm text-slate-400">
+                    Tipo: {item.entityType} • Removido em {item.deletedAt}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="subtle"
+                    onClick={() => handleRestoreTrashItem(item)}
+                    disabled={isSubmitting}
+                  >
+                    Restaurar
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => setTrashItemPendingPermanentDelete(item)}
+                    disabled={isSubmitting}
+                  >
+                    Excluir permanentemente
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       {isImportBackupConfirmOpen ? (
         <ConfirmModal
@@ -387,6 +481,18 @@ export default function Settings() {
           isLoading={isSubmitting}
           onCancel={() => setIsImportBackupConfirmOpen(false)}
           onConfirm={handleImportBackup}
+          tone="danger"
+        />
+      ) : null}
+
+      {trashItemPendingPermanentDelete ? (
+        <ConfirmModal
+          title="Excluir permanentemente"
+          description={`Esta ação remove ${trashItemPendingPermanentDelete.label} da lixeira e não poderá ser desfeita.`}
+          confirmLabel="Excluir permanentemente"
+          isLoading={isSubmitting}
+          onCancel={() => setTrashItemPendingPermanentDelete(null)}
+          onConfirm={handlePermanentDeleteTrashItem}
           tone="danger"
         />
       ) : null}

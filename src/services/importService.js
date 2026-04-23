@@ -27,6 +27,28 @@ function buildCsvSource(fileName) {
   return `read_csv_auto('${escapeSqlString(fileName)}', all_varchar = true)`;
 }
 
+function normalizeCpfSqlExpression(expression) {
+  return `
+    replace(
+      replace(
+        replace(
+          replace(
+            replace(trim(coalesce(${expression}, '')), '.', ''),
+            '-',
+            ''
+          ),
+          '/',
+          ''
+        ),
+        ' ',
+        ''
+      ),
+      ',',
+      ''
+    )
+  `;
+}
+
 async function registerSpreadsheetPreviewFile(file, registeredFileName) {
   const fileExtension = getImportFileExtension(file.name);
 
@@ -250,6 +272,9 @@ export async function listImportCpfSummary({
       imports.file_name,
       donors.name AS donor_name,
       donors.demand AS demand,
+      donors.donor_type AS donor_type,
+      donors.holder_donor_id,
+      holder_donors.name AS holder_name,
       donor_cpf_links.name AS source_name,
       donor_cpf_links.link_type AS source_type
     FROM import_cpf_summary
@@ -257,6 +282,8 @@ export async function listImportCpfSummary({
       ON imports.id = import_cpf_summary.import_id
     LEFT JOIN donors
       ON donors.id = import_cpf_summary.matched_donor_id
+    LEFT JOIN donors AS holder_donors
+      ON holder_donors.id = donors.holder_donor_id
     LEFT JOIN donor_cpf_links
       ON donor_cpf_links.id = import_cpf_summary.matched_source_id
     ${whereClause}
@@ -280,6 +307,9 @@ export async function listImportCpfSummary({
         donorName: row.donor_name ?? "",
         sourceName: row.source_name ?? "",
         sourceType: row.source_type ?? "",
+        donorType: row.donor_type ?? "",
+        holderDonorId: row.holder_donor_id ?? "",
+        holderName: row.holder_name ?? "",
         demand: row.demand ?? "",
         appearancesByMonth: new Map(),
       });
@@ -295,6 +325,9 @@ export async function listImportCpfSummary({
       currentSummary.donorName = row.donor_name ?? "";
       currentSummary.sourceName = row.source_name ?? "";
       currentSummary.sourceType = row.source_type ?? "";
+      currentSummary.donorType = row.donor_type ?? "";
+      currentSummary.holderDonorId = row.holder_donor_id ?? "";
+      currentSummary.holderName = row.holder_name ?? "";
       currentSummary.demand = row.demand ?? "";
     }
 
@@ -337,6 +370,9 @@ export async function listImportCpfSummary({
         donorName: item.donorName,
         sourceName: item.sourceName,
         sourceType: item.sourceType,
+        donorType: item.donorType,
+        holderDonorId: item.holderDonorId,
+        holderName: item.holderName,
         demand: item.demand,
         monthCount: appearances.length,
         appearances,
@@ -501,15 +537,16 @@ export async function processImportedFile({
       valuePerNote,
       status: "processing",
     });
+    const normalizedCpfExpression = normalizeCpfSqlExpression(
+      escapeIdentifier(cpfColumn),
+    );
 
     const cpfCounts = await query(`
       SELECT
-        regexp_replace(coalesce(${escapeIdentifier(cpfColumn)}, ''), '[^0-9]', '', 'g') AS cpf,
+        ${normalizedCpfExpression} AS cpf,
         count(*) AS notes_count
       FROM ${buildCsvSource(registeredFileName)}
-      WHERE length(
-        regexp_replace(coalesce(${escapeIdentifier(cpfColumn)}, ''), '[^0-9]', '', 'g')
-      ) = 11
+      WHERE length(${normalizedCpfExpression}) = 11
       GROUP BY 1
       ORDER BY notes_count DESC, cpf ASC
     `);
@@ -544,7 +581,88 @@ export async function processImportedFile({
 }
 
 export async function deleteImport(importId) {
+  const importRows = await query(`
+    SELECT
+      id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      file_name,
+      value_per_note,
+      total_rows,
+      matched_rows,
+      matched_donors,
+      status,
+      notes,
+      CAST(imported_at AS VARCHAR) AS imported_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM imports
+    WHERE id = '${escapeSqlString(importId)}'
+    LIMIT 1
+  `);
+
+  if (importRows.length === 0) {
+    return;
+  }
+
+  const importCpfSummaryRows = await query(`
+    SELECT
+      id,
+      import_id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      cpf,
+      notes_count,
+      matched_donor_id,
+      matched_source_id,
+      is_registered_donor,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM import_cpf_summary
+    WHERE import_id = '${escapeSqlString(importId)}'
+  `);
+
+  const monthlySummaryRows = await query(`
+    SELECT
+      id,
+      import_id,
+      donor_id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      cpf,
+      donor_name,
+      demand,
+      notes_count,
+      value_per_note,
+      abatement_amount,
+      abatement_status,
+      CAST(abatement_marked_at AS VARCHAR) AS abatement_marked_at,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM monthly_donor_summary
+    WHERE import_id = '${escapeSqlString(importId)}'
+  `);
+
   await runInTransaction(async () => {
+    await execute(`
+      INSERT INTO trash_items (
+        id,
+        entity_type,
+        entity_id,
+        label,
+        payload_json,
+        deleted_at
+      )
+      VALUES (
+        '${escapeSqlString(nanoid())}',
+        'import',
+        '${escapeSqlString(importId)}',
+        '${escapeSqlString(importRows[0].file_name)}',
+        '${escapeSqlString(JSON.stringify({
+          imports: importRows,
+          importCpfSummary: importCpfSummaryRows,
+          monthlyDonorSummary: monthlySummaryRows,
+        }))}',
+        CURRENT_TIMESTAMP
+      )
+    `);
+
     await execute(`
       DELETE FROM monthly_donor_summary
       WHERE import_id = '${escapeSqlString(importId)}'
@@ -727,6 +845,34 @@ export async function reconcileAllImports() {
     SELECT id
     FROM imports
     ORDER BY reference_month ASC, imported_at ASC
+  `);
+
+  for (const importRow of imports) {
+    await reconcileImport(importRow.id);
+  }
+}
+
+export async function reconcileImportsForCpfs(cpfs = []) {
+  const normalizedCpfs = Array.from(
+    new Set(
+      cpfs
+        .map((cpf) => normalizeCpf(cpf))
+        .filter((cpf) => cpf.length === 11),
+    ),
+  );
+
+  if (normalizedCpfs.length === 0) {
+    return;
+  }
+
+  const cpfList = normalizedCpfs
+    .map((cpf) => `'${escapeSqlString(cpf)}'`)
+    .join(", ");
+  const imports = await query(`
+    SELECT DISTINCT import_id AS id
+    FROM import_cpf_summary
+    WHERE cpf IN (${cpfList})
+    ORDER BY import_id ASC
   `);
 
   for (const importRow of imports) {

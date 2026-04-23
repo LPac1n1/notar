@@ -18,7 +18,7 @@ export default function PaginationControls({
 
   return (
     <div
-      className={`flex flex-col gap-3 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between ${className}`.trim()}
+      className={`flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/55 px-4 py-3 text-sm text-slate-400 md:flex-row md:items-center md:justify-between ${className}`.trim()}
     >
       <div>
         Mostrando{" "}

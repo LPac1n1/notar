@@ -1,6 +1,8 @@
 import { nanoid } from "nanoid";
 import { escapeSqlString, execute, query } from "./db";
 import { reconcileAllImports } from "./importService";
+import { createTrashItem } from "./trashService";
+import { normalizeDemandName } from "../utils/normalize";
 
 export async function listDemands(filters = {}) {
   const { name = "" } = filters;
@@ -30,7 +32,7 @@ export async function listDemands(filters = {}) {
 }
 
 export async function createDemand({ id = nanoid(), name }) {
-  const trimmedName = name.trim();
+  const trimmedName = normalizeDemandName(name);
 
   if (!trimmedName) {
     throw new Error("O nome da demanda e obrigatorio.");
@@ -59,7 +61,7 @@ export async function createDemand({ id = nanoid(), name }) {
 }
 
 export async function updateDemand({ id, name }) {
-  const trimmedName = name.trim();
+  const trimmedName = normalizeDemandName(name);
 
   if (!id) {
     throw new Error("O identificador da demanda e obrigatorio.");
@@ -114,6 +116,22 @@ export async function updateDemand({ id, name }) {
 }
 
 export async function deleteDemand(id) {
+  const demandRows = await query(`
+    SELECT
+      id,
+      name,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM demands
+    WHERE id = '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
+
+  if (demandRows.length === 0) {
+    return;
+  }
+
   const linkedDonors = await query(`
     SELECT id
     FROM donors
@@ -129,6 +147,15 @@ export async function deleteDemand(id) {
   if (linkedDonors.length > 0) {
     throw new Error("Nao e possivel remover uma demanda vinculada a doadores.");
   }
+
+  await createTrashItem({
+    entityType: "demand",
+    entityId: id,
+    label: demandRows[0].name,
+    payload: {
+      demands: demandRows,
+    },
+  });
 
   await execute(`
     DELETE FROM demands

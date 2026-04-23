@@ -14,6 +14,7 @@ export async function listMonthlySummaries({
   abatementStatus = "all",
 } = {}) {
   const conditions = [];
+  conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
 
   if (referenceMonth) {
     conditions.push(
@@ -67,6 +68,9 @@ export async function listMonthlySummaries({
       monthly_donor_summary.abatement_amount,
       monthly_donor_summary.abatement_status,
       strftime(monthly_donor_summary.abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at,
+      donors.donor_type,
+      donors.holder_donor_id,
+      holder_donors.name AS holder_name,
       strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
       coalesce((
         SELECT string_agg(DISTINCT import_cpf_summary.cpf, ',')
@@ -121,6 +125,8 @@ export async function listMonthlySummaries({
     FROM monthly_donor_summary
     LEFT JOIN donors
       ON donors.id = monthly_donor_summary.donor_id
+    LEFT JOIN donors AS holder_donors
+      ON holder_donors.id = donors.holder_donor_id
     ${whereClause}
     ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
   `);
@@ -138,6 +144,10 @@ export async function listMonthlySummaries({
     abatementAmount: Number(row.abatement_amount ?? 0),
     abatementStatus: row.abatement_status,
     abatementMarkedAt: row.abatement_marked_at,
+    donorType: row.donor_type === "auxiliary" ? "auxiliary" : "holder",
+    donorTypeLabel: row.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+    holderDonorId: row.holder_donor_id ?? "",
+    holderName: row.holder_name ?? "",
     donationStartDate: row.donation_start_date ?? "",
     sourceCpfs: String(row.source_cpfs ?? "")
       .split(",")

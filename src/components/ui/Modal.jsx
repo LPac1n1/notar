@@ -106,12 +106,12 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
-        className={`modal-panel relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-[30px] border border-[var(--line)] bg-[var(--surface-strong)] shadow-[0_16px_40px_-26px_rgba(0,0,0,0.72)] backdrop-blur-xl ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
+        className={`modal-panel relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-slate-800 bg-slate-950 shadow-[0_16px_40px_-26px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)] shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)] shadow-sm">
                 {icon ?? <DefaultModalIcon />}
               </div>
 
@@ -119,7 +119,7 @@ export default function Modal({
                 {title ? (
                   <h2
                     id={titleId}
-                    className="font-[var(--font-display)] text-2xl font-semibold tracking-tight text-[var(--text-main)]"
+                    className="font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]"
                   >
                     {title}
                   </h2>
@@ -139,7 +139,7 @@ export default function Modal({
           <button
             type="button"
             aria-label="Fechar modal"
-            className="rounded-full border border-[var(--line)] bg-[color:var(--surface-elevated)] px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={onClose}
             disabled={!canClose}
           >

@@ -4,11 +4,12 @@ import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import MonthInput from "../components/ui/MonthInput";
 import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
-import TextInput from "../components/ui/TextInput";
+import StatusBadge from "../components/ui/StatusBadge";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { listImports } from "../services/importService";
 import {
@@ -214,12 +215,12 @@ export default function Monthly() {
       <div>
         <PageHeader
           title="Gestão Mensal"
-          subtitle="Escolha um mês importado, refine o resumo e acompanhe o status dos abatimentos de forma operacional."
+          subtitle="Abatimentos por mês, doador e status."
           className="mb-6"
         />
         <LoadingScreen
           title="Montando o resumo mensal"
-          description="Conferindo meses disponíveis, importações processadas e abatimentos já consolidados."
+          description="Carregando meses e abatimentos."
         />
       </div>
     );
@@ -229,21 +230,15 @@ export default function Monthly() {
     <div>
       <PageHeader
         title="Gestão Mensal"
-        subtitle="Escolha um mês importado, refine o resumo e acompanhe o status dos abatimentos de forma operacional."
+        subtitle="Abatimentos por mês, doador e status."
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
-      <FeedbackMessage
-        message="O valor por nota é definido no momento da importação e o histórico mensal usa esse valor fixo."
-        tone="info"
-        persistent
-      />
 
       <SectionCard
         title="Resumo mensal"
-        description="Use o mês para focar em uma importação específica ou deixe em branco para visualizar a tabela geral de todos os meses."
-        className="mt-8"
+        className="mt-6"
       >
         {availableImports.length === 0 ? (
           <EmptyState
@@ -251,14 +246,11 @@ export default function Monthly() {
             description="Depois que você importar uma planilha, os meses disponíveis para consulta aparecerão aqui."
           />
         ) : (
-          <div className="mb-5 rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <div className="mb-5 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm font-semibold text-[var(--text-main)]">
-                  Meses já importados
-                </p>
-                <p className="text-sm text-[var(--muted)]">
-                  Escolha um mês abaixo para abrir rapidamente o resumo mensal.
+                  Meses importados
                 </p>
               </div>
               <p className="text-xs text-[var(--muted)]">
@@ -289,7 +281,7 @@ export default function Monthly() {
                         demand: "",
                       }));
                     }}
-                    className={`rounded-[22px] border p-4 text-left transition ${
+                    className={`rounded-md border p-4 text-left transition ${
                       isSelected
                         ? "border-[var(--accent)] bg-[var(--surface-elevated)]"
                         : "border-[var(--line)] bg-[var(--surface-strong)] hover:border-[var(--line-strong)]"
@@ -305,7 +297,7 @@ export default function Monthly() {
                         </p>
                       </div>
                       <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
+                        className={`rounded-md px-2 py-1 text-xs font-medium ${
                           isSelected
                             ? "bg-[color:var(--accent-soft)] text-[var(--accent)]"
                             : "bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
@@ -370,8 +362,7 @@ export default function Monthly() {
         </div>
 
         <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <TextInput
-            type="month"
+          <MonthInput
             name="referenceMonth"
             value={filters.referenceMonth}
             onChange={handleFilterChange}
@@ -446,7 +437,7 @@ export default function Monthly() {
               return (
                 <div
                   key={summary.id}
-                  className={`grid gap-3 rounded-[22px] border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
+                  className={`grid gap-3 rounded-md border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
                     hasStartDateConflict
                       ? "border-[color:var(--warning)]/45 bg-[var(--surface-elevated)]"
                       : "border-[var(--line)] bg-[var(--surface-elevated)]"
@@ -456,14 +447,22 @@ export default function Monthly() {
                     <button
                       type="button"
                       onClick={() =>
-                        navigate(`/doadores?perfil=${encodeURIComponent(summary.donorId)}`)
+                        navigate(`/doadores/${encodeURIComponent(summary.donorId)}`)
                       }
                       className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
                     >
                       {summary.donorName}
                     </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <StatusBadge status={summary.donorType} />
+                      {summary.donorType === "auxiliary" && summary.holderName ? (
+                        <span className="text-xs font-medium text-slate-300">
+                          Titular informativo: {summary.holderName}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="text-sm text-[var(--muted)]">
-                      CPF do titular: {summary.cpf}
+                      CPF: {summary.cpf}
                     </p>
                     <p className="text-sm text-[var(--muted)]">
                       Demanda: {summary.demand || "Nao informada"}
@@ -472,7 +471,7 @@ export default function Monthly() {
                       {summary.sources.map((source) => (
                         <span
                           key={`${summary.id}-${source.cpf}`}
-                          className={`rounded-full border px-2 py-1 text-xs ${
+                          className={`rounded-md border px-2 py-1 text-xs ${
                             source.type === "auxiliary"
                               ? "border-[color:var(--accent-2-soft)] bg-[color:var(--accent-2-soft)] text-[var(--warning)]"
                               : "border-[var(--line)] bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
@@ -481,7 +480,7 @@ export default function Monthly() {
                         >
                           {source.type === "auxiliary"
                             ? `Auxiliar: ${source.name}`
-                            : "Titular"}
+                            : "CPF principal"}
                         </span>
                       ))}
                     </div>
