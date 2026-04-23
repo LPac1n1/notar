@@ -439,7 +439,7 @@ export default function Monthly() {
                   key={summary.id}
                   className={`grid gap-3 rounded-md border p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] ${
                     hasStartDateConflict
-                      ? "border-[color:var(--warning)]/45 bg-[var(--surface-elevated)]"
+                      ? "border-[var(--warning-line)] bg-[var(--surface-elevated)]"
                       : "border-[var(--line)] bg-[var(--surface-elevated)]"
                   }`}
                 >
@@ -456,7 +456,7 @@ export default function Monthly() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <StatusBadge status={summary.donorType} />
                       {summary.donorType === "auxiliary" && summary.holderName ? (
-                        <span className="text-xs font-medium text-slate-300">
+                        <span className="text-xs font-medium text-[var(--text-soft)]">
                           Titular informativo: {summary.holderName}
                         </span>
                       ) : null}

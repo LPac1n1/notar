@@ -540,7 +540,7 @@ export default function Imports() {
                   </thead>
                   <tbody>
                     {previewData.previewRows.map((row, index) => (
-                      <tr key={index} className="border-b border-[var(--line)]/60">
+                      <tr key={index} className="border-b border-[rgba(255,255,255,0.05)]">
                         {previewData.columns.map((column) => (
                           <td
                             key={`${index}-${column}`}
@@ -644,10 +644,10 @@ export default function Imports() {
                   <span
                     className={`mt-2 inline-flex rounded-md border px-2 py-1 text-xs font-semibold ${
                       item.status === "processed"
-                        ? "border-[color:var(--success)]/50 bg-[color:var(--accent-soft)] text-[var(--success)]"
+                        ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
                         : item.status === "error"
-                          ? "border-[color:var(--danger)]/50 bg-[color:var(--danger-soft)] text-[var(--danger)]"
-                          : "border-[color:var(--warning)]/50 bg-[color:var(--accent-2-soft)] text-[var(--warning)]"
+                          ? "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]"
+                          : "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]"
                     }`}
                   >
                     {item.status === "processed"
@@ -838,7 +838,7 @@ export default function Imports() {
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <StatusBadge status={item.donorType} />
                       {item.donorType === "auxiliary" && item.holderName ? (
-                        <span className="text-xs font-medium text-slate-300">
+                        <span className="text-xs font-medium text-[var(--text-soft)]">
                           Titular informativo: {item.holderName}
                         </span>
                       ) : null}
@@ -863,8 +863,8 @@ export default function Imports() {
                   <span
                     className={`mt-1 inline-flex rounded-md border px-2 py-1 text-xs font-semibold ${
                       item.isRegisteredDonor
-                        ? "border-[color:var(--success)]/50 bg-[color:var(--accent-soft)] text-[var(--success)]"
-                        : "border-[color:var(--danger)]/50 bg-[color:var(--danger-soft)] text-[var(--danger)]"
+                        ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
+                        : "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]"
                     }`}
                   >
                     {item.isRegisteredDonor ? "Vinculado" : "Nao vinculado"}

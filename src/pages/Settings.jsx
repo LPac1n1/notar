@@ -443,11 +443,11 @@ export default function Settings() {
             {trashItems.map((item) => (
               <div
                 key={item.id}
-                className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div>
-                  <p className="font-semibold text-slate-100">{item.label}</p>
-                  <p className="text-sm text-slate-400">
+                  <p className="font-semibold text-[var(--text-main)]">{item.label}</p>
+                  <p className="text-sm text-[var(--muted)]">
                     Tipo: {item.entityType} • Removido em {item.deletedAt}
                   </p>
                 </div>

@@ -78,14 +78,14 @@ export default function MonthInput({
         placeholder={placeholder}
         value={displayValue}
         onChange={handleChange}
-        className={`w-full rounded-md border bg-slate-900/70 px-4 py-3 text-slate-100 outline-none transition-colors duration-150 placeholder:text-slate-500 focus:bg-slate-900 ${
+        className={`w-full rounded-md border bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:bg-[var(--surface-muted)] ${
           hasInvalidFullValue
-            ? "border-red-400/70 focus:border-red-300"
-            : "border-slate-700/80 focus:border-slate-400"
+            ? "border-[color:var(--danger)] focus:border-[color:var(--danger)]"
+            : "border-[var(--line)] focus:border-[var(--accent)]"
         }`}
       />
       {hasInvalidFullValue ? (
-        <p className="mt-1 text-xs text-red-200">
+        <p className="mt-1 text-xs text-[var(--danger)]">
           Informe um mês válido no formato MM/AAAA.
         </p>
       ) : null}

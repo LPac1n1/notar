@@ -4,7 +4,7 @@ export default function TextInput({
 }) {
   return (
     <input
-      className={`w-full rounded-md border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-slate-100 outline-none transition-colors duration-150 placeholder:text-slate-500 focus:border-slate-400 focus:bg-slate-900 ${className}`.trim()}
+      className={`w-full rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] ${className}`.trim()}
       {...props}
     />
   );

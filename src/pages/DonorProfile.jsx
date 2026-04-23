@@ -90,25 +90,25 @@ export default function DonorProfile() {
       </div>
 
       <div className="mb-6 grid gap-3 md:grid-cols-4">
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">Tipo</p>
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Tipo</p>
           <div className="mt-2">
             <StatusBadge status={donor.donorType} />
           </div>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">CPF</p>
-          <p className="mt-1 font-semibold text-slate-100">{donor.cpf}</p>
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">CPF</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">{donor.cpf}</p>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">Demanda</p>
-          <p className="mt-1 font-semibold text-slate-100">
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Demanda</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">
             {donor.demand || "Nao informada"}
           </p>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">Início das doações</p>
-          <p className="mt-1 font-semibold text-slate-100">
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Início das doações</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">
             {donor.donationStartDate || "Nao informado"}
           </p>
         </div>
@@ -120,11 +120,11 @@ export default function DonorProfile() {
             <button
               type="button"
               onClick={() => navigate(`/doadores/${donor.holderDonorId}`)}
-              className="rounded-md border border-slate-700 bg-slate-900/70 p-4 text-left text-slate-100 transition-colors hover:border-slate-500"
+              className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-elevated)] p-4 text-left text-[var(--text-main)] transition-colors hover:border-[var(--accent)]"
             >
-              <p className="text-sm text-slate-400">Titular vinculado</p>
+              <p className="text-sm text-[var(--muted)]">Titular vinculado</p>
               <p className="mt-1 font-semibold">{donor.holderName}</p>
-              <p className="text-sm text-slate-400">{donor.holderCpf}</p>
+              <p className="text-sm text-[var(--muted)]">{donor.holderCpf}</p>
             </button>
           ) : (
             <EmptyState
@@ -151,13 +151,13 @@ export default function DonorProfile() {
                   key={auxiliary.id}
                   type="button"
                   onClick={() => navigate(`/doadores/${auxiliary.id}`)}
-                  className="flex w-full flex-col gap-1 rounded-md border border-slate-800 bg-slate-900/70 p-4 text-left transition-colors hover:border-slate-500 md:flex-row md:items-center md:justify-between"
+                  className="flex w-full flex-col gap-1 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-left transition-colors hover:border-[var(--accent)] md:flex-row md:items-center md:justify-between"
                 >
                   <div>
-                    <p className="font-semibold text-slate-100">
+                    <p className="font-semibold text-[var(--text-main)]">
                       {auxiliary.name}
                     </p>
-                    <p className="text-sm text-slate-400">{auxiliary.cpf}</p>
+                    <p className="text-sm text-[var(--muted)]">{auxiliary.cpf}</p>
                   </div>
                   <StatusBadge status="auxiliary" />
                 </button>
@@ -168,27 +168,27 @@ export default function DonorProfile() {
       )}
 
       <div className="mb-6 grid gap-3 md:grid-cols-4">
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">Notas históricas</p>
-          <p className="mt-1 font-semibold text-slate-100">
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Notas históricas</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">
             {profile.totals.totalNotes}
           </p>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">Total abatido</p>
-          <p className="mt-1 font-semibold text-slate-100">
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Total abatido</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">
             {formatCurrency(profile.totals.totalAbatement)}
           </p>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">Meses com abatimento</p>
-          <p className="mt-1 font-semibold text-slate-100">
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Meses com abatimento</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">
             {profile.totals.monthCount}
           </p>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4">
-          <p className="text-sm text-slate-400">CPFs de doação</p>
-          <p className="mt-1 font-semibold text-slate-100">
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">CPFs de doação</p>
+          <p className="mt-1 font-semibold text-[var(--text-main)]">
             {profile.totals.linkedCpfCount}
           </p>
         </div>
@@ -203,11 +203,11 @@ export default function DonorProfile() {
           {profile.sources.map((source) => (
             <div
               key={source.id}
-              className="rounded-md border border-slate-800 bg-slate-900/70 p-4"
+              className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
             >
-              <p className="font-semibold text-slate-100">{source.name}</p>
-              <p className="text-sm text-slate-400">{source.cpf}</p>
-              <p className="text-sm text-slate-400">
+              <p className="font-semibold text-[var(--text-main)]">{source.name}</p>
+              <p className="text-sm text-[var(--muted)]">{source.cpf}</p>
+              <p className="text-sm text-[var(--muted)]">
                 Início: {source.donationStartDate || "Nao informado"} •{" "}
                 {source.totalNotes} nota(s)
               </p>
@@ -230,28 +230,28 @@ export default function DonorProfile() {
             {profile.monthlyHistory.map((item) => (
               <div
                 key={item.referenceMonth}
-                className="grid gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:grid-cols-4"
+                className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-4"
               >
                 <div>
-                  <p className="text-sm text-slate-400">Mês</p>
-                  <p className="font-medium text-slate-100">
+                  <p className="text-sm text-[var(--muted)]">Mês</p>
+                  <p className="font-medium text-[var(--text-main)]">
                     {formatMonthYear(item.referenceMonth)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-400">Notas</p>
-                  <p className="font-medium text-slate-100">
+                  <p className="text-sm text-[var(--muted)]">Notas</p>
+                  <p className="font-medium text-[var(--text-main)]">
                     {item.notesCount}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-400">Abatimento</p>
-                  <p className="font-medium text-slate-100">
+                  <p className="text-sm text-[var(--muted)]">Abatimento</p>
+                  <p className="font-medium text-[var(--text-main)]">
                     {formatCurrency(item.abatementAmount)}
                   </p>
                 </div>
                 <div>
-                  <p className="mb-1 text-sm text-slate-400">Status</p>
+                  <p className="mb-1 text-sm text-[var(--muted)]">Status</p>
                   <StatusBadge status={item.abatementStatus} />
                 </div>
               </div>

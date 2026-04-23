@@ -1,11 +1,11 @@
 import { getStatusConfig } from "../../utils/status";
 
 const TONE_CLASS_NAMES = {
-  danger: "border-red-400/40 bg-red-400/10 text-red-200",
-  info: "border-slate-400/35 bg-slate-400/10 text-slate-200",
-  neutral: "border-slate-500/35 bg-slate-500/10 text-slate-300",
-  success: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
-  warning: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+  danger: "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--danger)]",
+  info: "border-[color:var(--line-strong)] bg-[color:var(--surface-muted)] text-[color:var(--text-soft)]",
+  neutral: "border-[color:var(--line)] bg-[color:var(--surface-muted)] text-[color:var(--muted-strong)]",
+  success: "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
+  warning: "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[color:var(--warning)]",
 };
 
 export default function StatusBadge({

@@ -106,12 +106,12 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
-        className={`modal-panel relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-slate-800 bg-slate-950 shadow-[0_16px_40px_-26px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
+        className={`modal-panel relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_16px_40px_-26px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)] shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)]">
                 {icon ?? <DefaultModalIcon />}
               </div>
 

@@ -50,14 +50,14 @@ export default function Header() {
     storageInfo && storageInfo.isPersistent && storageInfo.fileName
       ? {
           className:
-            "border-slate-500/55 bg-slate-800/70 text-slate-100",
+            "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
           message: `Arquivo conectado: ${storageInfo.fileName}`,
           label: "Dados salvos",
           icon: ConnectedIcon,
         }
       : {
           className:
-            "border-slate-700 bg-slate-900/80 text-slate-300",
+            "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)]",
           message: "Nenhum arquivo de dados conectado",
           label: "Sessão temporária",
           icon: DisconnectedIcon,
@@ -69,7 +69,7 @@ export default function Header() {
     <header className="flex justify-end">
       <Link
         to="/configuracoes"
-        className={`inline-flex max-w-full items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors hover:border-slate-500 hover:bg-slate-900 ${statusTone.className}`}
+        className={`inline-flex max-w-full items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-muted)] ${statusTone.className}`}
         title={statusTone.message}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-black/12">

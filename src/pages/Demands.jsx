@@ -239,7 +239,7 @@ export default function Demands() {
           {demandsPagination.visibleItems.map((demand) => (
             <li
               key={demand.id}
-              className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
             >
               <p className="font-medium">{demand.name}</p>
               <div className="flex flex-wrap gap-2">

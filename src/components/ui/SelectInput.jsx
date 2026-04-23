@@ -212,9 +212,9 @@ export default function SelectInput({
 
   const toneClassName = {
     default: "",
-    danger: "border-red-400/70 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.22)]",
-    success: "border-emerald-400/70 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.22)]",
-    warning: "border-amber-400/70 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.22)]",
+    danger: "border-[color:var(--danger)]",
+    success: "border-[color:var(--success)]",
+    warning: "border-[color:var(--warning)]",
   }[activeTone] ?? "";
 
   return (
@@ -228,10 +228,10 @@ export default function SelectInput({
         type="button"
         disabled={disabled}
         onClick={toggleMenu}
-        className={`flex w-full items-center justify-between gap-3 rounded-md border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-left outline-none transition-colors duration-150 focus:border-slate-400 focus:bg-slate-900 ${toneClassName} ${
+        className={`flex w-full items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-left outline-none transition-colors duration-150 focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] ${toneClassName} ${
           disabled
-            ? "cursor-not-allowed bg-slate-800/70 text-slate-500"
-            : "text-slate-100 hover:border-slate-500 hover:bg-slate-800"
+            ? "cursor-not-allowed bg-[var(--surface-muted)] text-[var(--muted)]"
+            : "text-[var(--text-main)] hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)]"
         }`}
         aria-expanded={isMenuOpen}
         aria-haspopup="listbox"
@@ -267,11 +267,11 @@ export default function SelectInput({
         <div
           ref={menuRef}
           style={menuStyle ?? undefined}
-          className="fixed z-[140] overflow-hidden rounded-md border border-slate-800 bg-slate-950 shadow-[0_18px_36px_-26px_rgba(0,0,0,0.58)]"
+          className="fixed z-[140] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_36px_-26px_rgba(0,0,0,0.58)]"
         >
           {searchable ? (
-            <div className="border-b border-slate-800 bg-slate-900 p-2.5">
-              <div className="flex items-center gap-2 rounded-md border border-slate-700/80 bg-slate-950 px-3 py-2.5 shadow-[0_8px_20px_-22px_rgba(0,0,0,0.42)]">
+            <div className="border-b border-[var(--line)] bg-[var(--surface-elevated)] p-2.5">
+              <div className="flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
                 <SearchIcon className="h-4 w-4 text-[var(--muted)]" />
                 <input
                   ref={searchInputRef}
@@ -319,7 +319,7 @@ export default function SelectInput({
                         option.disabled
                           ? "cursor-not-allowed text-[var(--muted)]/60"
                           : isSelected
-                            ? `${option.tone === "warning" ? "bg-amber-400/10 text-[var(--warning)]" : option.tone === "success" ? "bg-emerald-400/10 text-[var(--success)]" : "bg-slate-800 text-[var(--text-main)]"}`
+                            ? `${option.tone === "warning" ? "bg-[color:var(--accent-soft)] text-[var(--warning)]" : option.tone === "success" ? "bg-[color:var(--accent-2-soft)] text-[var(--success)]" : "bg-[var(--surface-muted)] text-[var(--text-main)]"}`
                             : `${optionToneTextClassName || "text-[var(--text-soft)]"} hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)]`
                       }`}
                     >

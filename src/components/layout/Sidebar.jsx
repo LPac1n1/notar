@@ -5,9 +5,9 @@ export default function Sidebar() {
   return (
     <>
       <div className="lg:hidden">
-        <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-950/80 p-3 backdrop-blur-xl">
+        <div className="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] p-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-slate-800 text-slate-100">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
               <span className="font-[var(--font-display)] text-xl font-semibold">
                 N
               </span>
@@ -31,8 +31,8 @@ export default function Sidebar() {
                   className={({ isActive }) =>
                     `flex min-w-max items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                       isActive
-                        ? "border-slate-500 bg-slate-800 text-slate-50"
-                        : "border-slate-800 bg-slate-900/70 text-slate-300"
+                        ? "border-[var(--accent)] bg-[var(--accent)] text-[#12151c]"
+                        : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)]"
                     }`
                   }
                 >
@@ -46,16 +46,16 @@ export default function Sidebar() {
       </div>
 
       <aside className="hidden w-72 shrink-0 lg:block">
-        <div className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-950 px-4 py-5 text-slate-100">
+        <div className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-4 py-5 text-[var(--text-main)]">
           <div className="relative">
-            <div className="flex items-center gap-3 rounded-md border border-slate-800 bg-slate-900/60 p-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-slate-800 text-slate-50">
+            <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
                 <span className="font-[var(--font-display)] text-2xl font-semibold">
                   N
                 </span>
               </div>
               <div className="min-w-0">
-                <p className="font-[var(--font-display)] text-2xl font-semibold text-slate-50">
+                <p className="font-[var(--font-display)] text-2xl font-bold text-[var(--text-main)]">
                   Notar
                 </p>
               </div>
@@ -75,8 +75,8 @@ export default function Sidebar() {
                     className={({ isActive }) =>
                       `group relative overflow-hidden rounded-md border px-3 py-3 text-sm transition-colors duration-150 ${
                         isActive
-                          ? "border-slate-600 bg-slate-800 text-slate-50"
-                          : "border-transparent text-slate-400 hover:border-slate-800 hover:bg-slate-900 hover:text-slate-100"
+                          ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
+                          : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
                       }`
                     }
                   >
@@ -85,8 +85,8 @@ export default function Sidebar() {
                         <div
                           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
                             isActive
-                              ? "bg-slate-700 text-slate-50"
-                              : "bg-slate-900 text-slate-500 group-hover:bg-slate-800 group-hover:text-slate-200"
+                              ? "bg-[var(--accent)] text-[#12151c]"
+                              : "bg-[var(--surface-elevated)] text-[var(--muted)] group-hover:bg-[var(--surface-muted)] group-hover:text-[var(--text-main)]"
                           }`}
                         >
                           <Icon className="h-5 w-5" />

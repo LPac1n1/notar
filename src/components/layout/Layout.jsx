@@ -14,7 +14,7 @@ export default function Layout({ children }) {
           <Header />
 
           <main className="min-h-0 flex-1">
-            <div className="page-shell-enter h-full overflow-auto rounded-md border border-slate-800 bg-slate-950/72 p-4 backdrop-blur-xl md:p-5 lg:p-6" key={location.pathname}>
+            <div className="page-shell-enter h-full overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-4 md:p-5 lg:p-6" key={location.pathname}>
               {children}
             </div>
           </main>

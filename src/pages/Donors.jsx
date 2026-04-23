@@ -461,40 +461,40 @@ export default function Donors() {
           {donorsPagination.visibleItems.map((donor) => (
             <li
               key={donor.id}
-              className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/70 p-4 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
             >
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => navigate(`/doadores/${donor.id}`)}
-                    className="text-left font-semibold text-slate-100 underline-offset-4 transition hover:text-slate-50 hover:underline"
+                    className="text-left font-semibold text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--text-main)] hover:underline"
                   >
                     {donor.name}
                   </button>
                   <StatusBadge status={donor.donorType} />
                 </div>
-                <p className="text-sm text-slate-400">CPF: {donor.cpf}</p>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-[var(--muted)]">CPF: {donor.cpf}</p>
+                <p className="text-sm text-[var(--muted)]">
                   Demanda: {donor.demand || "Nao informada"}
                 </p>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-[var(--muted)]">
                   Início: {donor.donationStartDate || "Nao informado"}
                 </p>
                 {donor.donorType === "auxiliary" ? (
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-[var(--text-soft)]">
                     Vinculado informativamente a:{" "}
                     {donor.holderName || "nenhum titular"}
                   </p>
                 ) : donor.auxiliaryDonors.length > 0 ? (
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-[var(--muted)]">
                     Auxiliares:{" "}
                     {donor.auxiliaryDonors
                       .map((auxiliary) => `${auxiliary.name} (${auxiliary.cpf})`)
                       .join(", ")}
                   </p>
                 ) : (
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-[var(--text-main)]0">
                     Sem auxiliares vinculados
                   </p>
                 )}

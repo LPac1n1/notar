@@ -1,29 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #020617;
-  --surface: rgba(15, 23, 42, 0.82);
-  --surface-strong: rgba(15, 23, 42, 0.96);
-  --surface-muted: #1e293b;
-  --surface-elevated: rgba(30, 41, 59, 0.58);
-  --line: rgba(148, 163, 184, 0.16);
-  --line-strong: rgba(148, 163, 184, 0.38);
-  --text-main: #f8fafc;
-  --text-soft: #cbd5e1;
-  --muted: #94a3b8;
-  --muted-strong: #cbd5e1;
-  --accent: #cbd5e1;
-  --accent-strong: #f8fafc;
-  --accent-soft: rgba(148, 163, 184, 0.14);
-  --accent-2: #94a3b8;
-  --accent-2-soft: rgba(148, 163, 184, 0.12);
-  --danger: #f87171;
-  --danger-soft: rgba(248, 113, 113, 0.13);
-  --success: #34d399;
-  --warning: #fbbf24;
+  --app-bg: #09070d;
+  --surface: #12151c;
+  --surface-strong: #151920;
+  --surface-muted: #23262e;
+  --surface-elevated: #181c23;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text-main: #f7f7f4;
+  --text-soft: #c6c7ca;
+  --muted: #8c9098;
+  --muted-strong: #a7abb3;
+  --accent: #ffd24d;
+  --accent-strong: #ffe176;
+  --accent-soft: rgba(255, 210, 77, 0.14);
+  --accent-2: #1ae680;
+  --accent-2-soft: rgba(26, 230, 128, 0.12);
+  --danger: #ff5b5b;
+  --danger-line: rgba(255, 91, 91, 0.45);
+  --danger-soft: rgba(255, 91, 91, 0.14);
+  --success: #1ae680;
+  --success-line: rgba(26, 230, 128, 0.45);
+  --warning: #ffd24d;
+  --warning-line: rgba(255, 210, 77, 0.45);
   --font-sans:
-    "Aptos", "Segoe UI Variable", "Segoe UI", "Trebuchet MS", "Noto Sans",
-    sans-serif;
+    "Montserrat", "Aptos", "Segoe UI Variable", "Segoe UI", "Noto Sans",
+    Arial, sans-serif;
   --font-display: var(--font-sans);
 }
 
@@ -42,7 +45,7 @@ html {
 body {
   font-family: var(--font-sans);
   color: var(--text-main);
-  background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+  background: var(--app-bg);
 }
 
 #root {
@@ -50,8 +53,8 @@ body {
 }
 
 ::selection {
-  background: rgba(203, 213, 225, 0.24);
-  color: #f8fafc;
+  background: rgba(255, 210, 77, 0.28);
+  color: var(--text-main);
 }
 
 button {
