@@ -1,0 +1,103 @@
+import Button from "../../../components/ui/Button";
+import StatusBadge from "../../../components/ui/StatusBadge";
+import {
+  EditIcon,
+  TrashIcon,
+  UserIcon,
+} from "../../../components/ui/icons";
+
+export default function DonorListItem({
+  donor,
+  onEdit,
+  onOpenProfile,
+  onRemove,
+}) {
+  return (
+    <li className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenProfile(donor.id)}
+            className="text-left font-semibold text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--text-main)] hover:underline"
+          >
+            {donor.name}
+          </button>
+          <StatusBadge status={donor.donorType} />
+        </div>
+
+        <p className="text-sm text-[var(--muted)]">CPF: {donor.cpf}</p>
+        <p className="text-sm text-[var(--muted)]">
+          Demanda: {donor.demand || "Nao informada"}
+        </p>
+        <p className="text-sm text-[var(--muted)]">
+          Início: {donor.donationStartDate || "Nao informado"}
+        </p>
+
+        {donor.donorType === "auxiliary" ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-[var(--muted)]">Vinculado a</span>
+            <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1 font-medium text-[var(--text-soft)]">
+              {donor.holderName || "Sem vínculo"}
+            </span>
+            {donor.holderName ? (
+              !donor.holderIsActiveDonor ? (
+                <StatusBadge label="Pessoa de referência" tone="neutral" />
+              ) : (
+                <StatusBadge label="Titular" tone="info" />
+              )
+            ) : null}
+            {donor.holderCpf ? (
+              <span className="text-xs text-[var(--muted)]">
+                {donor.holderCpf}
+              </span>
+            ) : null}
+          </div>
+        ) : donor.auxiliaryDonors.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-[var(--muted)]">
+              {donor.auxiliaryDonors.length} auxiliar(es)
+            </span>
+            {donor.auxiliaryDonors.slice(0, 3).map((auxiliary) => (
+              <span
+                key={`${donor.id}-${auxiliary.cpf}`}
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs text-[var(--text-soft)]"
+              >
+                {auxiliary.name}
+              </span>
+            ))}
+            {donor.auxiliaryDonors.length > 3 ? (
+              <span className="text-xs text-[var(--muted)]">
+                +{donor.auxiliaryDonors.length - 3}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          onClick={() => onOpenProfile(donor.id)}
+          variant="subtle"
+          leftIcon={<UserIcon className="h-4 w-4" />}
+        >
+          Perfil
+        </Button>
+        <Button
+          onClick={() => onEdit(donor)}
+          variant="subtle"
+          leftIcon={<EditIcon className="h-4 w-4" />}
+        >
+          Editar
+        </Button>
+        <Button
+          onClick={() => onRemove(donor)}
+          variant="danger"
+          leftIcon={<TrashIcon className="h-4 w-4" />}
+        >
+          Remover
+        </Button>
+      </div>
+    </li>
+  );
+}

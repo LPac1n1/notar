@@ -20,7 +20,9 @@ import {
   getDatabaseStorageInfo,
   importDatabaseBackup,
   openDatabaseFile,
+  STORAGE_INFO_EVENT,
 } from "../services/db";
+import { reconcileAllImports } from "../services/importService";
 import { getErrorMessage } from "../utils/error";
 
 function formatBackupStats(stats = {}) {
@@ -39,6 +41,7 @@ export default function Settings() {
   const [storageInfo, setStorageInfo] = useState(null);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [operationMessage, setOperationMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [backupInputKey, setBackupInputKey] = useState(0);
@@ -71,9 +74,17 @@ export default function Settings() {
     };
 
     loadSettings();
+    const handleStorageInfoChange = (event) => {
+      if (isMounted && event.detail) {
+        setStorageInfo(event.detail);
+      }
+    };
+
+    window.addEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
 
     return () => {
       isMounted = false;
+      window.removeEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
     };
   }, []);
 
@@ -87,6 +98,7 @@ export default function Settings() {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
+      setOperationMessage("Criando e conectando o arquivo de dados...");
 
       const result = await createDatabaseFile();
       setStorageInfo(result.storageInfo);
@@ -103,6 +115,7 @@ export default function Settings() {
         ),
       );
     } finally {
+      setOperationMessage("");
       setIsSubmitting(false);
     }
   };
@@ -112,8 +125,11 @@ export default function Settings() {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
+      setOperationMessage("Abrindo arquivo de dados e carregando informações...");
 
       const result = await openDatabaseFile();
+      setOperationMessage("Reconciliando importações e resumos mensais...");
+      await reconcileAllImports();
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
         result.usedExistingFile
@@ -128,6 +144,7 @@ export default function Settings() {
         ),
       );
     } finally {
+      setOperationMessage("");
       setIsSubmitting(false);
     }
   };
@@ -137,6 +154,7 @@ export default function Settings() {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
+      setOperationMessage("Desconectando arquivo de dados...");
 
       const result = await disconnectDatabaseFile();
       setStorageInfo(result.storageInfo);
@@ -152,6 +170,7 @@ export default function Settings() {
         ),
       );
     } finally {
+      setOperationMessage("");
       setIsSubmitting(false);
     }
   };
@@ -161,6 +180,7 @@ export default function Settings() {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
+      setOperationMessage("Gerando backup dos dados atuais...");
 
       const backup = await exportDatabaseBackup();
       const blob = new Blob([backup.text], { type: "application/json" });
@@ -185,6 +205,7 @@ export default function Settings() {
         ),
       );
     } finally {
+      setOperationMessage("");
       setIsSubmitting(false);
     }
   };
@@ -209,8 +230,11 @@ export default function Settings() {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
+      setOperationMessage("Lendo e validando o arquivo de backup...");
 
       const result = await importDatabaseBackup(selectedBackupFile);
+      setOperationMessage("Reconciliando importações e resumos mensais...");
+      await reconcileAllImports();
       setStorageInfo(result.storageInfo);
       resetBackupFileSelection();
       setIsImportBackupConfirmOpen(false);
@@ -225,6 +249,7 @@ export default function Settings() {
         ),
       );
     } finally {
+      setOperationMessage("");
       setIsSubmitting(false);
     }
   };
@@ -237,6 +262,11 @@ export default function Settings() {
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
+      <FeedbackMessage
+        message={operationMessage}
+        tone="info"
+        persistent
+      />
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard
@@ -270,16 +300,14 @@ export default function Settings() {
               </div>
             ) : null}
 
-            <FeedbackMessage
-              message={
-                storageInfo.isPersistent
-                  ? "Os dados estao sendo gravados de forma persistente."
-                  : "Sem um arquivo conectado, os dados atuais so existem nesta sessao e podem se perder ao fechar ou recarregar a aplicacao."
-              }
-              tone={storageInfo.isPersistent ? "success" : "warning"}
-              className="mb-0"
-              persistent
-            />
+            {!storageInfo.isPersistent ? (
+              <FeedbackMessage
+                message="Sem um arquivo conectado, os dados atuais so existem nesta sessao e podem se perder ao fechar ou recarregar a aplicacao."
+                tone="warning"
+                className="mb-0"
+                persistent
+              />
+            ) : null}
 
             <div className="flex flex-col gap-3 pt-2 md:flex-row">
               <Button
@@ -382,6 +410,7 @@ export default function Settings() {
             description="Importar um backup vai substituir os dados atuais do sistema. Deseja continuar?"
             confirmLabel="Restaurar backup"
             isLoading={isSubmitting}
+            loadingMessage={operationMessage || "Restaurando backup..."}
             onCancel={() => setIsImportBackupConfirmOpen(false)}
             onConfirm={handleImportBackup}
             tone="danger"

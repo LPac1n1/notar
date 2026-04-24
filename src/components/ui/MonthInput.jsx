@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 function formatDisplayValue(value) {
   const text = String(value ?? "");
@@ -41,14 +41,26 @@ function toIsoMonth(value) {
 
 export default function MonthInput({
   className = "",
+  description = "",
+  hideLabel = false,
+  id,
+  label = "",
   name,
   onChange,
   placeholder = "MM/AAAA",
   value = "",
+  wrapperClassName = "",
 }) {
+  const generatedId = useId();
+  const inputId = id || name || generatedId;
   const [displayValue, setDisplayValue] = useState(formatDisplayValue(value));
   const hasInvalidFullValue =
     displayValue.length === 7 && !toIsoMonth(displayValue);
+  const descriptionId = description ? `${inputId}-description` : "";
+  const errorId = hasInvalidFullValue ? `${inputId}-error` : "";
+  const ariaDescribedBy = [descriptionId, errorId]
+    .filter(Boolean)
+    .join(" ");
 
   useEffect(() => {
     setDisplayValue(formatDisplayValue(value));
@@ -71,21 +83,50 @@ export default function MonthInput({
   };
 
   return (
-    <div className={className}>
+    <div className={`space-y-1.5 ${wrapperClassName} ${className}`.trim()}>
+      {label ? (
+        <label
+          htmlFor={inputId}
+          className={
+            hideLabel
+              ? "sr-only"
+              : "block text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]"
+          }
+        >
+          {label}
+        </label>
+      ) : null}
+
       <input
+        id={inputId}
         inputMode="numeric"
         name={name}
         placeholder={placeholder}
         value={displayValue}
         onChange={handleChange}
+        aria-describedby={ariaDescribedBy || undefined}
+        aria-invalid={hasInvalidFullValue}
         className={`w-full rounded-md border bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:bg-[var(--surface-muted)] ${
           hasInvalidFullValue
             ? "border-[color:var(--danger)] focus:border-[color:var(--danger)]"
             : "border-[var(--line)] focus:border-[var(--accent)]"
         }`}
       />
+
+      {description ? (
+        <p
+          id={descriptionId}
+          className="text-xs leading-5 text-[var(--muted)]"
+        >
+          {description}
+        </p>
+      ) : null}
+
       {hasInvalidFullValue ? (
-        <p className="mt-1 text-xs text-[var(--danger)]">
+        <p
+          id={errorId}
+          className="text-xs leading-5 text-[var(--danger)]"
+        >
           Informe um mês válido no formato MM/AAAA.
         </p>
       ) : null}

@@ -122,6 +122,29 @@ function applySummaryFilters(
   return filteredRows;
 }
 
+function sortSummariesByAbatement(rows, sortDirection = "") {
+  if (!sortDirection) {
+    return rows;
+  }
+
+  const direction = sortDirection === "asc" ? 1 : -1;
+
+  return [...rows].sort((left, right) => {
+    const amountDifference =
+      (Number(left.abatementAmount ?? 0) - Number(right.abatementAmount ?? 0)) *
+      direction;
+
+    if (amountDifference !== 0) {
+      return amountDifference;
+    }
+
+    return String(left.donorName ?? "").localeCompare(
+      String(right.donorName ?? ""),
+      "pt-BR",
+    );
+  });
+}
+
 function buildDonorConditions({
   donorId = "",
   cpf = "",
@@ -161,6 +184,7 @@ async function listMonthlySummariesByMonth({
   demand = "",
   abatementStatus = "all",
   donationActivity = "all",
+  abatementSort = "",
 } = {}) {
   const normalizedReferenceMonth = startOfMonth(referenceMonth);
   const donorConditions = buildDonorConditions({ donorId, cpf, demand });
@@ -343,16 +367,13 @@ async function listMonthlySummariesByMonth({
     }),
   );
 
-  return applySummaryFilters(mergedRows, {
-    abatementStatus,
-    donationActivity,
-  }).sort((left, right) => {
-    if (left.hasDonationsInMonth !== right.hasDonationsInMonth) {
-      return left.hasDonationsInMonth ? -1 : 1;
-    }
-
-    return left.donorName.localeCompare(right.donorName, "pt-BR");
-  });
+  return sortSummariesByAbatement(
+    applySummaryFilters(mergedRows, {
+      abatementStatus,
+      donationActivity,
+    }),
+    abatementSort,
+  );
 }
 
 async function listHistoricalMonthlySummaries({
@@ -362,6 +383,7 @@ async function listHistoricalMonthlySummaries({
   demand = "",
   abatementStatus = "all",
   donationActivity = "all",
+  abatementSort = "",
 } = {}) {
   const conditions = [];
   conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
@@ -483,10 +505,13 @@ async function listHistoricalMonthlySummaries({
     ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
   `);
 
-  return applySummaryFilters(rows.map(mapSummaryRow), {
-    abatementStatus,
-    donationActivity,
-  });
+  return sortSummariesByAbatement(
+    applySummaryFilters(rows.map(mapSummaryRow), {
+      abatementStatus,
+      donationActivity,
+    }),
+    abatementSort,
+  );
 }
 
 export async function listMonthlySummaries({
@@ -496,6 +521,7 @@ export async function listMonthlySummaries({
   demand = "",
   abatementStatus = "all",
   donationActivity = "all",
+  abatementSort = "",
 } = {}) {
   if (referenceMonth) {
     return listMonthlySummariesByMonth({
@@ -505,6 +531,7 @@ export async function listMonthlySummaries({
       demand,
       abatementStatus,
       donationActivity,
+      abatementSort,
     });
   }
 
@@ -515,6 +542,7 @@ export async function listMonthlySummaries({
     demand,
     abatementStatus,
     donationActivity,
+    abatementSort,
   });
 }
 

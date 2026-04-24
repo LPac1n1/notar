@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -14,6 +14,7 @@ import {
   restoreTrashItem,
 } from "../services/trashService";
 import { getErrorMessage } from "../utils/error";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 export default function Trash() {
   const [trashItems, setTrashItems] = useState([]);
@@ -25,31 +26,28 @@ export default function Trash() {
     useState(null);
   const [isClearTrashConfirmOpen, setIsClearTrashConfirmOpen] = useState(false);
 
-  useEffect(() => {
-    const loadTrash = async () => {
-      try {
-        setError("");
-        const trashRows = await listTrashItems();
-        setTrashItems(trashRows);
-      } catch (trashError) {
-        setError(
-          getErrorMessage(
-            trashError,
-            "Nao foi possivel carregar os itens da lixeira.",
-          ),
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadTrash();
+  const refreshTrashItems = useCallback(async () => {
+    try {
+      setError("");
+      const trashRows = await listTrashItems();
+      setTrashItems(trashRows);
+    } catch (trashError) {
+      setError(
+        getErrorMessage(
+          trashError,
+          "Nao foi possivel carregar os itens da lixeira.",
+        ),
+      );
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const refreshTrashItems = async () => {
-    const trashRows = await listTrashItems();
-    setTrashItems(trashRows);
-  };
+  useEffect(() => {
+    refreshTrashItems();
+  }, [refreshTrashItems]);
+
+  useDatabaseChangeEffect(refreshTrashItems);
 
   const handleRestoreTrashItem = async (item) => {
     try {

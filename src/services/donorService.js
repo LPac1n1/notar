@@ -116,6 +116,28 @@ async function findActiveDonorByPersonId(personId) {
     : null;
 }
 
+async function ensurePersonCanBeAuxiliary(personId, { ignoreDonorId = "" } = {}) {
+  if (!personId) {
+    return;
+  }
+
+  const linkedAuxiliaryRows = await query(`
+    SELECT id
+    FROM donors
+    WHERE holder_person_id = '${escapeSqlString(personId)}'
+      AND donor_type = 'auxiliary'
+      AND is_active = TRUE
+      ${ignoreDonorId ? `AND id <> '${escapeSqlString(ignoreDonorId)}'` : ""}
+    LIMIT 1
+  `);
+
+  if (linkedAuxiliaryRows.length > 0) {
+    throw new Error(
+      "Esta pessoa ja possui auxiliares vinculados e nao pode ser cadastrada como auxiliar.",
+    );
+  }
+}
+
 async function resolveHolderPersonIdInput({
   holderPersonId = "",
   holderDonorId = "",
@@ -156,6 +178,25 @@ async function getHolderPersonContext({
 
   if (!person) {
     throw new Error("A pessoa vinculada nao existe mais.");
+  }
+
+  const activeDonorRows = await query(`
+    SELECT
+      id,
+      donor_type,
+      demand
+    FROM donors
+    WHERE person_id = '${escapeSqlString(resolvedHolderPersonId)}'
+      AND is_active = TRUE
+    ORDER BY created_at ASC, id ASC
+    LIMIT 1
+  `);
+  const activeDonor = activeDonorRows[0];
+
+  if (activeDonor && activeDonor.donor_type !== "holder") {
+    throw new Error(
+      "Um auxiliar so pode ser vinculado a um doador titular ou a uma pessoa sem papel de doador.",
+    );
   }
 
   const activeHolderDonorRows = await query(`
@@ -419,6 +460,10 @@ export async function createDonor({
     throw new Error("Esta pessoa ja esta cadastrada como doador.");
   }
 
+  if (normalizedDonorType === "auxiliary") {
+    await ensurePersonCanBeAuxiliary(person.id);
+  }
+
   await ensureDonationCpfIsAvailable(person.cpfValue);
 
   const holderContext =
@@ -554,6 +599,10 @@ export async function updateDonor({
     throw new Error(
       "Ja existe outra pessoa com esse CPF. Use o cadastro existente para evitar duplicidade.",
     );
+  }
+
+  if (normalizedDonorType === "auxiliary") {
+    await ensurePersonCanBeAuxiliary(currentPerson.id, { ignoreDonorId: id });
   }
 
   await ensureDonationCpfIsAvailable(normalizedCpf, { ignoreDonorId: id });

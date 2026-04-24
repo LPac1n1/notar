@@ -1,4 +1,4 @@
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion as Motion } from "framer-motion";
 import { CloseIcon, FileIcon } from "./icons";
@@ -9,6 +9,14 @@ const SIZE_CLASSES = {
   lg: "max-w-4xl",
   xl: "max-w-5xl",
 };
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
 
 let openModalCount = 0;
 let previousBodyOverflow = "";
@@ -53,6 +61,19 @@ function unlockPageScroll() {
   }
 }
 
+function getFocusableElements(container) {
+  if (!container) {
+    return [];
+  }
+
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+    (element) =>
+      element instanceof HTMLElement &&
+      !element.hasAttribute("disabled") &&
+      element.getAttribute("aria-hidden") !== "true",
+  );
+}
+
 export default function Modal({
   children,
   description = "",
@@ -64,21 +85,66 @@ export default function Modal({
   const titleId = useId();
   const descriptionId = useId();
   const canClose = typeof onClose === "function";
+  const dialogRef = useRef(null);
+  const previousActiveElementRef = useRef(null);
 
   useEffect(() => {
+    previousActiveElementRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
     lockPageScroll();
 
-    const handleEscape = (event) => {
+    window.requestAnimationFrame(() => {
+      dialogRef.current?.focus();
+    });
+
+    const handleKeyDown = (event) => {
       if (event.key === "Escape" && canClose) {
         onClose?.();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = getFocusableElements(dialogRef.current);
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+        return;
+      }
+
+      if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       unlockPageScroll();
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleKeyDown);
+
+      if (
+        previousActiveElementRef.current &&
+        document.contains(previousActiveElementRef.current)
+      ) {
+        previousActiveElementRef.current.focus();
+      }
     };
   }, [canClose, onClose]);
 
@@ -103,10 +169,12 @@ export default function Modal({
       />
 
       <Motion.div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
+        tabIndex={-1}
         className={`relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_20px_48px_-28px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
         initial={{ opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}

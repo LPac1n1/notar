@@ -165,14 +165,16 @@ export default function FeedbackMessage({
   message,
   tone = "info",
   className = "",
-  persistent = false,
+  persistent,
   duration = 4000,
 }) {
   if (!message) {
     return null;
   }
 
-  if (persistent) {
+  const shouldPersist = persistent ?? tone === "error";
+
+  if (shouldPersist) {
     return <AlertBox message={message} tone={tone} className={className} />;
   }
 

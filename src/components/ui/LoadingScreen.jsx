@@ -8,6 +8,9 @@ export default function LoadingScreen({
 }) {
   return (
     <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
       className={`rounded-md border border-[var(--line)] bg-[var(--surface-strong)] ${compact ? "p-5" : "min-h-[260px] p-6 md:p-8"}`.trim()}
     >
       <div className={`mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center ${compact ? "gap-3" : "gap-4"}`}>

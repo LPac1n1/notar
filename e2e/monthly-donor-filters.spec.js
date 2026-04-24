@@ -6,7 +6,7 @@ async function selectOption(page, container, name, label) {
   await select.getByRole("button").first().click();
   const listbox = page.getByRole("listbox").last();
   await expect(listbox).toBeVisible();
-  await listbox.getByRole("button", { name: label }).first().click();
+  await listbox.getByRole("option", { name: label }).first().click();
 }
 
 test("monthly management shows donors with and without donations", async ({ page }) => {

@@ -39,6 +39,8 @@ export default function PaginationControls({
             name="pageSize"
             value={String(pageSize)}
             onChange={onPageSizeChange}
+            label="Itens por página"
+            hideLabel
             options={PAGE_SIZE_OPTIONS.map((option) => ({
               value: String(option),
               label: `${option} por página`,

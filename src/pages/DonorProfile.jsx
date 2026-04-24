@@ -12,6 +12,7 @@ import { getDonorProfile } from "../services/donorService";
 import { formatMonthYear } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency } from "../utils/format";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 export default function DonorProfile() {
   const { donorId = "" } = useParams();
@@ -40,6 +41,8 @@ export default function DonorProfile() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  useDatabaseChangeEffect(loadProfile);
 
   if (isLoading && !profile && !error) {
     return (

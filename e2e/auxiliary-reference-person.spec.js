@@ -6,7 +6,7 @@ async function selectOption(page, container, name, label) {
   await select.getByRole("button").first().click();
   const listbox = page.getByRole("listbox").last();
   await expect(listbox).toBeVisible();
-  await listbox.getByRole("button", { name: label }).first().click();
+  await listbox.getByRole("option", { name: label }).first().click();
 }
 
 test("auxiliary donor can link to a reference person who is not an active donor", async ({ page }) => {

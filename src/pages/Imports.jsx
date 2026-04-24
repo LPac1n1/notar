@@ -1,24 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
-import EmptyState from "../components/ui/EmptyState";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import Modal from "../components/ui/Modal";
-import MonthInput from "../components/ui/MonthInput";
-import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
-import SectionCard from "../components/ui/SectionCard";
-import SelectInput from "../components/ui/SelectInput";
-import StatusBadge from "../components/ui/StatusBadge";
-import TextInput from "../components/ui/TextInput";
-import {
-  DownloadIcon,
-  PlusIcon,
-  TrashIcon,
-} from "../components/ui/icons";
+import { PlusIcon } from "../components/ui/icons";
+import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDetailsModal";
+import CpfSummarySection from "../features/imports/components/CpfSummarySection";
+import ImportHistorySection from "../features/imports/components/ImportHistorySection";
+import ImportUploadModal from "../features/imports/components/ImportUploadModal";
 import { releaseRegisteredFile } from "../services/db";
 import {
   exportImportCpfSummaryCsv,
@@ -31,12 +23,13 @@ import {
   prepareImportPreview,
   processImportedFile,
 } from "../services/importService";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
-import { formatCurrency } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 const INITIAL_IMPORT_FILTERS = {
   importId: "",
@@ -74,6 +67,8 @@ export default function Imports() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isImportHistoryRefreshing, setIsImportHistoryRefreshing] = useState(false);
+  const [isCpfSummaryRefreshing, setIsCpfSummaryRefreshing] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -89,6 +84,11 @@ export default function Imports() {
   const cpfSummaryPagination = usePagination(cpfSummary, {
     initialPageSize: 25,
   });
+  const debouncedImportFilters = useDebouncedValue(importFilters, 180);
+  const debouncedCpfFilters = useDebouncedValue(cpfFilters, 180);
+  const importHistoryRequestIdRef = useRef(0);
+  const cpfSummaryRequestIdRef = useRef(0);
+  const hasInitializedRef = useRef(false);
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
@@ -192,35 +192,139 @@ export default function Imports() {
     [cpfSummary],
   );
 
-  const loadData = useCallback(async () => {
+  const loadAvailableImports = useCallback(async () => {
+    const availableImportRows = await listImports();
+    setAvailableImports(availableImportRows);
+  }, []);
+
+  const loadImportHistory = useCallback(async (currentFilters, { showRefreshing = false } = {}) => {
+    const requestId = importHistoryRequestIdRef.current + 1;
+    importHistoryRequestIdRef.current = requestId;
+
     try {
+      if (showRefreshing) {
+        setIsImportHistoryRefreshing(true);
+      }
+
       setError("");
-      const availableImportRows = await listImports();
-      const importRows = await listImports(importFilters);
-      const cpfRows = await listImportCpfSummary(cpfFilters);
-      setAvailableImports(availableImportRows);
+      const importRows = await listImports(currentFilters);
+
+      if (requestId !== importHistoryRequestIdRef.current) {
+        return;
+      }
+
       setImports(importRows);
-      setCpfSummary(cpfRows);
     } catch (err) {
+      if (requestId !== importHistoryRequestIdRef.current) {
+        return;
+      }
+
       console.error(
         "Erro ao carregar importacoes:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError("Nao foi possivel carregar os dados de importacao.");
     } finally {
-      setIsLoading(false);
+      if (requestId === importHistoryRequestIdRef.current) {
+        setIsImportHistoryRefreshing(false);
+      }
     }
-  }, [cpfFilters, importFilters]);
+  }, []);
+
+  const loadCpfSummary = useCallback(async (currentFilters, { showRefreshing = false } = {}) => {
+    const requestId = cpfSummaryRequestIdRef.current + 1;
+    cpfSummaryRequestIdRef.current = requestId;
+
+    try {
+      if (showRefreshing) {
+        setIsCpfSummaryRefreshing(true);
+      }
+
+      setError("");
+      const cpfRows = await listImportCpfSummary(currentFilters);
+
+      if (requestId !== cpfSummaryRequestIdRef.current) {
+        return;
+      }
+
+      setCpfSummary(cpfRows);
+    } catch (err) {
+      if (requestId !== cpfSummaryRequestIdRef.current) {
+        return;
+      }
+
+      console.error(
+        "Erro ao carregar importacoes:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError("Nao foi possivel carregar os dados de importacao.");
+    } finally {
+      if (requestId === cpfSummaryRequestIdRef.current) {
+        setIsCpfSummaryRefreshing(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    (async () => {
+      try {
+        setIsLoading(true);
+        setError("");
+        await Promise.all([
+          loadAvailableImports(),
+          loadImportHistory({ ...INITIAL_IMPORT_FILTERS }),
+          loadCpfSummary({ ...INITIAL_CPF_FILTERS }),
+        ]);
+      } catch (err) {
+        console.error(
+          "Erro ao carregar importacoes:",
+          getErrorMessage(err, "Erro desconhecido."),
+        );
+        setError("Nao foi possivel carregar os dados de importacao.");
+      } finally {
+        setIsLoading(false);
+        hasInitializedRef.current = true;
+      }
+    })();
+  }, [loadAvailableImports, loadCpfSummary, loadImportHistory]);
+
+  useEffect(() => {
+    if (!hasInitializedRef.current) {
+      return;
+    }
+
+    loadImportHistory(debouncedImportFilters, { showRefreshing: true });
+  }, [debouncedImportFilters, loadImportHistory]);
+
+  useEffect(() => {
+    if (!hasInitializedRef.current) {
+      return;
+    }
+
+    loadCpfSummary(debouncedCpfFilters, { showRefreshing: true });
+  }, [debouncedCpfFilters, loadCpfSummary]);
 
   useEffect(() => () => {
     if (previewData?.registeredFileName) {
       releaseRegisteredFile(previewData.registeredFileName).catch(() => null);
     }
   }, [previewData]);
+
+  const refreshImports = useCallback(async () => {
+    await Promise.all([
+      loadAvailableImports(),
+      loadImportHistory(importFilters, { showRefreshing: true }),
+      loadCpfSummary(cpfFilters, { showRefreshing: true }),
+    ]);
+  }, [
+    cpfFilters,
+    importFilters,
+    loadAvailableImports,
+    loadCpfSummary,
+    loadImportHistory,
+  ]);
+
+  useDatabaseChangeEffect(refreshImports);
 
   const handleImportFilterChange = (event) => {
     const { name, value } = event.target;
@@ -331,7 +435,11 @@ export default function Imports() {
         valuePerNote: uploadForm.valuePerNote,
         cpfColumn: uploadForm.cpfColumn,
       });
-      await loadData();
+      await Promise.all([
+        loadAvailableImports(),
+        loadImportHistory(importFilters),
+        loadCpfSummary(cpfFilters),
+      ]);
       await resetImportSelection();
       setUploadForm({
         referenceMonth: "",
@@ -361,7 +469,11 @@ export default function Imports() {
       setSuccessMessage("");
       setDeletingImportId(importPendingRemoval.id);
       await deleteImport(importPendingRemoval.id);
-      await loadData();
+      await Promise.all([
+        loadAvailableImports(),
+        loadImportHistory(importFilters),
+        loadCpfSummary(cpfFilters),
+      ]);
       setImportPendingRemoval(null);
       setSuccessMessage("Importacao enviada para a lixeira com sucesso.");
     } catch (err) {
@@ -460,530 +572,61 @@ export default function Imports() {
 
       <AnimatePresence>
         {isImportModalOpen ? (
-          <Modal
-            title="Nova importação"
-            description="CSV, TXT ou XLSX da Nota Fiscal Paulista."
+          <ImportUploadModal
+            fileInputKey={fileInputKey}
+            isImporting={isImporting}
+            isPreviewLoading={isPreviewLoading}
+            onChange={handleUploadChange}
             onClose={handleCloseImportModal}
-            size="xl"
-          >
-            <div className="mb-5 grid gap-3 md:grid-cols-4">
-              <TextInput
-                key={fileInputKey}
-                type="file"
-                accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={handlePreviewImport}
-              />
-
-              <MonthInput
-                name="referenceMonth"
-                value={uploadForm.referenceMonth}
-                onChange={handleUploadChange}
-              />
-
-              <TextInput
-                type="number"
-                name="valuePerNote"
-                min="0.01"
-                step="0.01"
-                placeholder="Valor por nota (R$)"
-                value={uploadForm.valuePerNote}
-                onChange={handleUploadChange}
-              />
-
-              <SelectInput
-                name="cpfColumn"
-                value={uploadForm.cpfColumn}
-                onChange={handleUploadChange}
-                options={previewColumnOptions}
-                placeholder="Selecione a coluna de CPF"
-                searchable={previewColumnOptions.length > 8}
-                searchPlaceholder="Buscar coluna..."
-                disabled={!previewData}
-              />
-            </div>
-
-            <Button
-              onClick={handleProcessImport}
-              disabled={isImporting || !previewData || !uploadForm.valuePerNote}
-            >
-              {isImporting ? "Processando..." : "Processar importação"}
-            </Button>
-
-            {previewData ? (
-              <div className="mt-6">
-                <h3 className="mb-3 font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
-                  Pré-visualização
-                </h3>
-                <p className="mb-3 break-all text-sm text-[var(--muted)]">
-                  Arquivo: {previewData.originalFileName}
-                </p>
-                {previewData.sourceType === "excel" ? (
-                  <FeedbackMessage
-                    tone="info"
-                    message={
-                      previewData.worksheetCount > 1
-                        ? `Aba utilizada: ${previewData.worksheetName}.`
-                        : `Aba utilizada: ${previewData.worksheetName}.`
-                    }
-                    persistent
-                  />
-                ) : null}
-                {previewData.previewRows.length === 0 ? (
-                  <EmptyState
-                    title="Planilha sem linhas visíveis"
-                    description="Confira se o arquivo possui cabeçalho e dados para importar."
-                  />
-                ) : (
-                  <div className="overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface-elevated)]">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-[color:var(--surface-muted)]">
-                        <tr>
-                          {previewData.columns.map((column) => (
-                            <th
-                              key={column}
-                              className="border-b border-[var(--line)] px-3 py-2 text-left font-medium text-[var(--text-soft)]"
-                            >
-                              {column}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewData.previewRows.map((row, index) => (
-                          <tr key={index} className="border-b border-[rgba(255,255,255,0.05)]">
-                            {previewData.columns.map((column) => (
-                              <td
-                                key={`${index}-${column}`}
-                                className="px-3 py-2 text-[var(--text-soft)]"
-                              >
-                                {String(row[column] ?? "")}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            ) : isPreviewLoading ? (
-              <div className="mt-6">
-                <LoadingScreen
-                  compact
-                  title="Lendo a planilha"
-                  description="Analisando colunas e montando a pré-visualização."
-                />
-              </div>
-            ) : null}
-          </Modal>
+            onPreviewImport={handlePreviewImport}
+            onProcessImport={handleProcessImport}
+            previewColumnOptions={previewColumnOptions}
+            previewData={previewData}
+            uploadForm={uploadForm}
+          />
         ) : null}
       </AnimatePresence>
 
-      <SectionCard title="Histórico de importações" className="mb-8">
-        <div className="mb-4 flex flex-wrap gap-3">
-          <Button
-            variant="subtle"
-            onClick={handleExportImports}
-            disabled={isExportingImports}
-            leftIcon={<DownloadIcon className="h-4 w-4" />}
-          >
-            {isExportingImports ? "Exportando..." : "Exportar histórico CSV"}
-          </Button>
-          <Button
-            variant="subtle"
-            onClick={handleClearImportFilters}
-          >
-            Limpar filtros
-          </Button>
-        </div>
+      <ImportHistorySection
+        deletingImportId={deletingImportId}
+        filters={importFilters}
+        imports={imports}
+        isExporting={isExportingImports}
+        isRefreshing={isImportHistoryRefreshing}
+        onClearFilters={handleClearImportFilters}
+        onDelete={setImportPendingRemoval}
+        onExport={handleExportImports}
+        onFilterChange={handleImportFilterChange}
+        options={importHistoryOptions}
+        pagination={importsPagination}
+        statusOptions={importStatusOptions}
+      />
 
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <SelectInput
-            name="importId"
-            value={importFilters.importId}
-            onChange={handleImportFilterChange}
-            options={importHistoryOptions}
-            placeholder="Todos os arquivos"
-            searchable
-            searchPlaceholder="Buscar arquivo..."
-          />
-
-          <MonthInput
-            name="referenceMonth"
-            value={importFilters.referenceMonth}
-            onChange={handleImportFilterChange}
-          />
-
-          <SelectInput
-            name="status"
-            value={importFilters.status}
-            onChange={handleImportFilterChange}
-            options={importStatusOptions}
-            placeholder="Todos os status"
-          />
-        </div>
-
-        {imports.length === 0 ? (
-          <EmptyState
-            title="Nenhuma importação cadastrada"
-            description="Quando você importar uma planilha da Nota Fiscal Paulista, o histórico aparecerá aqui."
-          />
-        ) : (
-          <div className="space-y-3">
-            <PaginationControls
-              endItem={importsPagination.endItem}
-              onPageChange={importsPagination.setPage}
-              onPageSizeChange={importsPagination.handlePageSizeChange}
-              page={importsPagination.page}
-              pageSize={importsPagination.pageSize}
-              totalItems={importsPagination.totalItems}
-              totalPages={importsPagination.totalPages}
-            />
-
-            {importsPagination.visibleItems.map((item) => (
-              <div
-                key={item.id}
-                className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-6"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm text-[var(--muted)]">Arquivo</p>
-                  <p
-                    className="break-all font-medium"
-                    title={item.fileName}
-                  >
-                    {item.fileName}
-                  </p>
-                  <span
-                    className={`mt-2 inline-flex rounded-md border px-2 py-1 text-xs font-semibold ${
-                      item.status === "processed"
-                        ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
-                        : item.status === "error"
-                          ? "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]"
-                          : "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]"
-                    }`}
-                  >
-                    {item.status === "processed"
-                      ? "Processada"
-                      : item.status === "error"
-                        ? "Com erro"
-                        : "Pendente"}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Mês</p>
-                  <p className="font-medium">
-                    {formatMonthYear(item.referenceMonth)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Valor por nota</p>
-                  <p className="font-medium">
-                    {formatCurrency(item.valuePerNote)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Linhas</p>
-                  <p className="font-medium">{item.totalRows}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Linhas compatíveis</p>
-                  <p className="font-medium">{item.matchedRows}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
-                  <p className="font-medium">{item.matchedDonors}</p>
-                </div>
-                <div className="md:col-span-6">
-                  <Button
-                    variant="danger"
-                    onClick={() => setImportPendingRemoval(item)}
-                    disabled={deletingImportId === item.id}
-                    leftIcon={<TrashIcon className="h-4 w-4" />}
-                  >
-                    {deletingImportId === item.id
-                      ? "Excluindo..."
-                      : "Excluir importação"}
-                  </Button>
-                </div>
-              </div>
-            ))}
-
-            <PaginationControls
-              endItem={importsPagination.endItem}
-              onPageChange={importsPagination.setPage}
-              onPageSizeChange={importsPagination.handlePageSizeChange}
-              page={importsPagination.page}
-              pageSize={importsPagination.pageSize}
-              totalItems={importsPagination.totalItems}
-              totalPages={importsPagination.totalPages}
-            />
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard title="CPFs encontrados">
-        <div className="mb-4 flex flex-wrap gap-3">
-          <Button
-            variant="subtle"
-            onClick={handleExportCpfSummary}
-            disabled={isExportingCpfSummary}
-            leftIcon={<DownloadIcon className="h-4 w-4" />}
-          >
-            {isExportingCpfSummary ? "Exportando..." : "Exportar CSV"}
-          </Button>
-          <Button
-            variant="subtle"
-            onClick={handleClearCpfFilters}
-          >
-            Limpar filtros
-          </Button>
-        </div>
-
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <SelectInput
-            name="importId"
-            value={cpfFilters.importId}
-            onChange={handleCpfFilterChange}
-            options={cpfSummaryImportOptions}
-            placeholder="Todas as importações"
-            searchable
-            searchPlaceholder="Buscar importação..."
-          />
-
-          <MonthInput
-            name="referenceMonth"
-            value={cpfFilters.referenceMonth}
-            onChange={handleCpfFilterChange}
-          />
-
-          <SelectInput
-            name="registrationFilter"
-            value={cpfFilters.registrationFilter}
-            onChange={handleCpfFilterChange}
-            options={registrationFilterOptions}
-            placeholder="Todos"
-          />
-        </div>
-
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <SelectInput
-            name="cpf"
-            value={cpfFilters.cpf}
-            onChange={handleCpfFilterChange}
-            options={cpfOptions}
-            placeholder="Todos os CPFs"
-            searchable
-            searchPlaceholder="Buscar CPF..."
-          />
-
-          <SelectInput
-            name="donorId"
-            value={cpfFilters.donorId}
-            onChange={handleCpfFilterChange}
-            options={donorOptions}
-            placeholder="Todos os doadores"
-            searchable
-            searchPlaceholder="Buscar doador..."
-          />
-
-          <SelectInput
-            name="demand"
-            value={cpfFilters.demand}
-            onChange={handleCpfFilterChange}
-            options={demandOptions}
-            placeholder="Todas as demandas"
-            searchable
-            searchPlaceholder="Buscar demanda..."
-          />
-        </div>
-
-        {cpfSummary.length === 0 ? (
-          <EmptyState
-            title="Nenhum CPF encontrado"
-            description="Os CPFs identificados nas importações aparecerão aqui, junto com a indicação de cadastro no sistema."
-          />
-        ) : (
-          <div className="space-y-3">
-            <PaginationControls
-              endItem={cpfSummaryPagination.endItem}
-              onPageChange={cpfSummaryPagination.setPage}
-              onPageSizeChange={cpfSummaryPagination.handlePageSizeChange}
-              page={cpfSummaryPagination.page}
-              pageSize={cpfSummaryPagination.pageSize}
-              totalItems={cpfSummaryPagination.totalItems}
-              totalPages={cpfSummaryPagination.totalPages}
-            />
-
-            {cpfSummaryPagination.visibleItems.map((item) => (
-              <div
-                key={item.id}
-                className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_120px_160px_1fr]"
-              >
-                <div>
-                  <p className="font-medium">{formatCpf(item.cpf)}</p>
-                  {item.isRegisteredDonor ? (
-                    <button
-                      type="button"
-                      onClick={() => openDonorProfile(item.matchedDonorId)}
-                      className="text-left text-sm text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                    >
-                      {item.sourceName || "CPF vinculado"}
-                    </button>
-                  ) : (
-                    <p className="text-sm text-[var(--muted)]">
-                      CPF ainda nao vinculado
-                    </p>
-                  )}
-                  {item.isRegisteredDonor ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openDonorProfile(item.matchedDonorId)}
-                        className="text-sm font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                      >
-                        {item.donorName}
-                      </button>
-                      <StatusBadge status={item.donorType} />
-                      {item.donorType === "auxiliary" && item.holderName ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
-                            Vinculado a: {item.holderName}
-                          </span>
-                          {!item.holderIsActiveDonor ? (
-                            <StatusBadge
-                              label="Pessoa de referência"
-                              tone="neutral"
-                            />
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <p className="text-sm text-[var(--muted)]">
-                    Demanda: {item.demand || "Nao informada"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Total de notas</p>
-                  <p className="font-medium">{item.notesCount}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Status</p>
-                  <span
-                    className={`mt-1 inline-flex rounded-md border px-2 py-1 text-xs font-semibold ${
-                      item.isRegisteredDonor
-                        ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
-                        : "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]"
-                    }`}
-                  >
-                    {item.isRegisteredDonor ? "Vinculado" : "Nao vinculado"}
-                  </span>
-                  {item.sourceType ? (
-                    <p className="text-xs text-[var(--muted)]">
-                      {item.donorType === "auxiliary" ? "Auxiliar" : "Titular"}
-                    </p>
-                  ) : null}
-                </div>
-                <div>
-                  <p className="text-sm text-[var(--muted)]">Meses</p>
-                  <p className="font-medium">
-                    {item.monthCount} {item.monthCount === 1 ? "mês" : "meses"}
-                  </p>
-                </div>
-                <div className="md:col-span-4">
-                  <Button
-                    variant="subtle"
-                    onClick={() => setSelectedCpfSummaryDetails(item)}
-                  >
-                    Ver meses e arquivos
-                  </Button>
-                </div>
-              </div>
-            ))}
-
-            <PaginationControls
-              endItem={cpfSummaryPagination.endItem}
-              onPageChange={cpfSummaryPagination.setPage}
-              onPageSizeChange={cpfSummaryPagination.handlePageSizeChange}
-              page={cpfSummaryPagination.page}
-              pageSize={cpfSummaryPagination.pageSize}
-              totalItems={cpfSummaryPagination.totalItems}
-              totalPages={cpfSummaryPagination.totalPages}
-            />
-          </div>
-        )}
-      </SectionCard>
+      <CpfSummarySection
+        cpfOptions={cpfOptions}
+        cpfSummary={cpfSummary}
+        demandOptions={demandOptions}
+        donorOptions={donorOptions}
+        filters={cpfFilters}
+        importOptions={cpfSummaryImportOptions}
+        isExporting={isExportingCpfSummary}
+        isRefreshing={isCpfSummaryRefreshing}
+        onClearFilters={handleClearCpfFilters}
+        onExport={handleExportCpfSummary}
+        onFilterChange={handleCpfFilterChange}
+        onOpenDetails={setSelectedCpfSummaryDetails}
+        onOpenDonorProfile={openDonorProfile}
+        pagination={cpfSummaryPagination}
+        registrationFilterOptions={registrationFilterOptions}
+      />
 
       <AnimatePresence>
         {selectedCpfSummaryDetails ? (
-          <Modal
-            title="Meses e arquivos do CPF"
-            description={`${formatCpf(selectedCpfSummaryDetails.cpf)} • ${selectedCpfSummaryDetails.sourceName || "CPF ainda nao vinculado"}`}
+          <CpfSummaryDetailsModal
+            details={selectedCpfSummaryDetails}
             onClose={() => setSelectedCpfSummaryDetails(null)}
-            size="lg"
-          >
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Total de notas</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {selectedCpfSummaryDetails.notesCount}
-                  </p>
-                </div>
-                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Meses encontrados</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {selectedCpfSummaryDetails.monthCount}
-                  </p>
-                </div>
-                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                  <p className="text-sm text-[var(--muted)]">Demanda</p>
-                  <p className="mt-1 font-semibold text-[var(--text-main)]">
-                    {selectedCpfSummaryDetails.demand || "Nao informada"}
-                  </p>
-                </div>
-              </div>
-
-              {selectedCpfSummaryDetails.isRegisteredDonor ? (
-                <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
-                  <p>
-                    Este CPF está vinculado ao doador{" "}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openDonorProfile(selectedCpfSummaryDetails.matchedDonorId)
-                      }
-                      className="font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                    >
-                      {selectedCpfSummaryDetails.sourceName}
-                    </button>
-                    {selectedCpfSummaryDetails.holderName
-                      ? `, vinculado a ${selectedCpfSummaryDetails.holderName}${selectedCpfSummaryDetails.holderIsActiveDonor ? "." : " (pessoa de referência)."}`
-                      : "."}
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="space-y-3">
-                {selectedCpfSummaryDetails.appearances.map((appearance) => (
-                  <div
-                    key={`${selectedCpfSummaryDetails.id}-${appearance.referenceMonth}`}
-                    className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-                  >
-                    <p className="font-medium text-[var(--text-main)]">
-                      {formatMonthYear(appearance.referenceMonth)}
-                    </p>
-                    <p className="mt-1 text-sm text-[var(--muted)]">
-                      Notas no mês: {appearance.notesCount}
-                    </p>
-                    <p className="mt-2 break-all text-sm text-[var(--muted)]">
-                      Arquivo(s): {appearance.fileNames.join(", ")}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Modal>
+            onOpenDonorProfile={openDonorProfile}
+          />
         ) : null}
       </AnimatePresence>
 

@@ -23,6 +23,7 @@ import {
 } from "../services/demandService";
 import { getErrorMessage } from "../utils/error";
 import { usePagination } from "../hooks/usePagination";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 const INITIAL_DEMAND_FILTERS = {
   name: "",
@@ -66,6 +67,8 @@ export default function Demands() {
   useEffect(() => {
     loadDemands();
   }, [loadDemands]);
+
+  useDatabaseChangeEffect(loadDemands);
 
   const handleAdd = async () => {
     if (!name.trim()) return;

@@ -21,6 +21,7 @@ const MVP_BUNDLE = {
   mainWorker: duckdbMvpWorker,
 };
 export const STORAGE_INFO_EVENT = "notar:storage-info-changed";
+export const DATA_CHANGED_EVENT = "notar:data-changed";
 const DEFAULT_STORAGE_INFO = {
   mode: "unknown",
   isPersistent: false,
@@ -30,6 +31,7 @@ const DEFAULT_STORAGE_INFO = {
   fileName: "",
 };
 let storageInfo = { ...DEFAULT_STORAGE_INFO };
+let dataChangeVersion = 0;
 
 const RESTORE_TABLE_COLUMNS = {
   demands: ["id", "name", "is_active", "created_at", "updated_at"],
@@ -124,6 +126,21 @@ function updateStorageInfo(nextStorageInfo) {
     window.dispatchEvent(
       new CustomEvent(STORAGE_INFO_EVENT, {
         detail: { ...storageInfo },
+      }),
+    );
+  }
+}
+
+export function notifyDatabaseChanged(detail = {}) {
+  dataChangeVersion += 1;
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(DATA_CHANGED_EVENT, {
+        detail: {
+          version: dataChangeVersion,
+          source: detail.source ?? "database",
+        },
       }),
     );
   }
@@ -983,6 +1000,7 @@ export async function execute(sql, { flush = true } = {}) {
 
   if (flush && transactionDepth === 0) {
     await flushOpenFiles();
+    notifyDatabaseChanged();
   }
 }
 
@@ -1011,7 +1029,10 @@ export async function flushDatabase() {
   await flushOpenFiles();
 }
 
-export async function runInTransaction(callback) {
+export async function runInTransaction(
+  callback,
+  { emitChange = true, changeSource = "transaction" } = {},
+) {
   await initDB();
 
   if (transactionDepth > 0) {
@@ -1025,6 +1046,9 @@ export async function runInTransaction(callback) {
     const result = await callback();
     await conn.query("COMMIT");
     await flushOpenFiles();
+    if (emitChange) {
+      notifyDatabaseChanged({ source: changeSource });
+    }
     return result;
   } catch (error) {
     await conn.query("ROLLBACK").catch(() => null);
@@ -1242,36 +1266,40 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
     ["trash_items", normalizedSnapshot.trashItems],
   ];
 
-  await runInTransaction(async () => {
-    for (const tableName of tableOrderToClear) {
-      await execute(`DELETE FROM ${tableName}`);
-    }
-
-    for (const [tableName, rows] of tableEntriesToInsert) {
-      for (const row of rows) {
-        const allowedColumns = RESTORE_TABLE_COLUMNS[tableName] ?? [];
-        const columns = Object.keys(row).filter((columnName) =>
-          allowedColumns.includes(columnName),
-        );
-
-        if (columns.length === 0) {
-          continue;
-        }
-
-        const values = columns.map((columnName) =>
-          serializeSqlValue(row[columnName]),
-        );
-
-        await execute(`
-          INSERT INTO ${tableName} (${columns.join(", ")})
-          VALUES (${values.join(", ")})
-        `);
+  await runInTransaction(
+    async () => {
+      for (const tableName of tableOrderToClear) {
+        await execute(`DELETE FROM ${tableName}`);
       }
-    }
-  });
+
+      for (const [tableName, rows] of tableEntriesToInsert) {
+        for (const row of rows) {
+          const allowedColumns = RESTORE_TABLE_COLUMNS[tableName] ?? [];
+          const columns = Object.keys(row).filter((columnName) =>
+            allowedColumns.includes(columnName),
+          );
+
+          if (columns.length === 0) {
+            continue;
+          }
+
+          const values = columns.map((columnName) =>
+            serializeSqlValue(row[columnName]),
+          );
+
+          await execute(`
+            INSERT INTO ${tableName} (${columns.join(", ")})
+            VALUES (${values.join(", ")})
+          `);
+        }
+      }
+    },
+    { emitChange: false },
+  );
 
   await initSchema({ structural: false });
   await flushOpenFiles();
+  notifyDatabaseChanged({ source: "restore" });
 }
 
 async function readSnapshotFromFileHandle(handle) {

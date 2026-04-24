@@ -1,211 +1,56 @@
 # Notar
 
-Sistema web local e portátil para apoiar a gestão dos abatimentos da Nota Fiscal Paulista em uma ONG que atua com demandas de moradia.
+Sistema web local para apoiar a gestão de doadores, importações da Nota Fiscal Paulista e abatimentos mensais de uma ONG ligada a demandas de moradia.
 
-O foco do projeto é reduzir trabalho manual, evitar erros operacionais, manter histórico confiável e facilitar a conferência mensal dos valores que devem ser abatidos para cada doador cadastrado.
+O Notar reduz conferências manuais ao centralizar cadastros, importar planilhas, cruzar CPFs, calcular abatimentos por mês e acompanhar o status do que já foi realizado.
 
-## Contexto do projeto
+## Sumário
 
-A ONG trabalha com pessoas vinculadas a demandas de moradia e recebe doações de notas fiscais por meio da Nota Fiscal Paulista. Para incentivar a participação, cada doador cadastrado pode receber abatimentos calculados a partir da quantidade de notas fiscais doadas em determinado mês.
+- [Funcionalidades](#funcionalidades)
+- [Tecnologias](#tecnologias)
+- [Como Rodar](#como-rodar)
+- [Configuração](#configuração)
+- [Uso do Sistema](#uso-do-sistema)
+- [Estrutura de Pastas](#estrutura-de-pastas)
+- [Padrões do Projeto](#padrões-do-projeto)
+- [Scripts](#scripts)
+- [Testes](#testes)
+- [Contribuição](#contribuição)
+- [Licença](#licença)
 
-O sistema diferencia titulares e auxiliares. Titulares representam os cadastros principais vinculados diretamente a uma demanda. Auxiliares também têm cadastro, CPF e abatimento próprios, mas podem ficar vinculados informativamente a um titular para manter o contexto operacional da ONG. Esse vínculo não transfere nem soma abatimentos: cada doador mantém seu próprio resumo mensal.
+## Funcionalidades
 
-O sistema foi pensado para uso local, simples e portátil, sem depender de instalação complexa ou infraestrutura de servidor. A proposta é que ele possa funcionar em qualquer computador, mantendo os dados armazenados localmente e com possibilidade de evolução futura para exportações, backups, auditoria e integração com outros sistemas.
+- Cadastro de pessoas, doadores titulares, doadores auxiliares e demandas.
+- Separação entre pessoas sem papel de doador e doadores ativos.
+- Vínculo de doador auxiliar a um titular ou a uma pessoa de referência.
+- Importação de arquivos `CSV`, `TXT` e `XLSX` da Nota Fiscal Paulista.
+- Pré-visualização da planilha e seleção da coluna de CPF.
+- Conciliação de CPFs importados com os doadores cadastrados.
+- Gestão mensal com cálculo de abatimento, filtros e status `pendente` ou `realizado`.
+- Dashboard com indicadores operacionais.
+- Backup, restauração e persistência em arquivo local.
+- Exportações em CSV nas principais áreas.
 
-## Objetivo
-
-O objetivo do Notar é centralizar o fluxo operacional de:
-
-- cadastro de titulares, auxiliares e demandas;
-- importação mensal das planilhas da Nota Fiscal Paulista;
-- cruzamento automático dos CPFs importados com os CPFs dos doadores cadastrados;
-- cálculo do valor de abatimento com base na quantidade de notas e no valor por nota informado na própria importação;
-- acompanhamento mensal do que está pendente ou já foi realizado no sistema externo de abatimento.
-
-## Como o sistema funciona hoje
-
-O fluxo principal atual é este:
-
-1. cadastrar as demandas existentes;
-2. cadastrar os titulares com nome, CPF, demanda e mês/ano de início das doações;
-3. opcionalmente, cadastrar auxiliares com seus próprios CPFs e vinculá-los informativamente a um titular;
-4. importar uma planilha mensal da Nota Fiscal Paulista em formato `CSV`, `TXT` ou `XLSX`;
-5. informar o mês de referência e o valor por nota daquele arquivo;
-6. escolher a coluna de CPF após a pré-visualização da planilha;
-7. deixar o sistema consolidar as notas por CPF, identificar quais CPFs pertencem a doadores cadastrados e gerar o resumo mensal;
-8. acompanhar na tela de gestão mensal o valor a ser abatido por doador e marcar manualmente se o abatimento está `pendente` ou `realizado`.
-
-Ponto importante:
-
-- o `valor por nota` não é mais controlado por uma tabela de regras históricas;
-- ele é definido diretamente no momento da importação;
-- depois disso, o valor daquele mês fica fechado no histórico da importação e do resumo mensal.
-
-Se houver erro no valor informado, o caminho correto é:
-
-1. excluir a importação;
-2. importar novamente a planilha com o valor correto.
-
-Isso simplifica bastante o sistema e evita recalcular meses antigos de forma confusa.
-
-## Arquitetura atual
-
-### Frontend
+## Tecnologias
 
 - React 19
 - Vite 8
 - React Router DOM 7
 - Tailwind CSS 4
-- ESLint 9
+- DuckDB WASM
+- ExcelJS
+- Framer Motion
+- Lucide React
+- ESLint
+- Node Test Runner
+- Playwright
 
-### Dados e processamento
-
-- DuckDB WASM no navegador como motor local de processamento;
-- leitura e agregação local das planilhas;
-- persistência em arquivo local `JSON` conectado manualmente;
-- backup e restauração em `JSON`;
-- sem Zustand no fluxo atual.
-
-## Estrutura principal
-
-```text
-src/
-  components/
-    layout/
-    ui/
-  pages/
-  routes/
-  services/
-  styles/
-  utils/
-```
-
-## Módulos do sistema
-
-### Doadores, titulares e auxiliares
-
-Permite:
-
-- cadastrar titulares;
-- cadastrar auxiliares com abatimento próprio;
-- formatar CPF no padrão brasileiro;
-- vincular cada titular a uma demanda já cadastrada;
-- vincular auxiliares informativamente a titulares;
-- informar o início das doações por mês e ano;
-- abrir um perfil completo do doador;
-- visualizar histórico mensal e totais de cada titular ou auxiliar;
-- buscar por nome, CPF e demanda;
-- reconciliar importações antigas quando um novo titular ou auxiliar é cadastrado.
-
-Quando um CPF que já apareceu em importações anteriores passa a pertencer a um doador cadastrado, o sistema revisa as importações e atualiza os resumos mensais correspondentes.
-
-### Demandas
-
-Permite:
-
-- cadastrar demandas;
-- listar e filtrar demandas;
-- usar a demanda como seleção obrigatória no cadastro de titulares.
-
-### Importações
-
-Permite:
-
-- importar arquivos `CSV`, `TXT` ou `XLSX`;
-- visualizar as primeiras linhas antes do processamento;
-- detectar e selecionar a coluna de CPF;
-- informar o mês de referência;
-- informar o valor por nota daquele arquivo;
-- consolidar a quantidade de notas por CPF;
-- registrar quais CPFs já pertencem a doadores cadastrados e quais ainda não estão vinculados.
-
-Além disso, a tela mostra:
-
-- histórico das importações;
-- valor por nota usado em cada importação;
-- total de linhas processadas;
-- total de linhas compatíveis com CPFs vinculados;
-- total de doadores encontrados;
-- destaque visual para CPFs ainda não vinculados.
-
-### Gestão Mensal
-
-Permite:
-
-- visualizar o resumo mensal consolidado;
-- filtrar por mês, doador, CPF de origem, demanda e status;
-- ver quantidade de notas, valor por nota e valor total de abatimento;
-- marcar o abatimento como `pendente` ou `realizado`.
-
-O valor exibido nessa tela é sempre o valor salvo na importação correspondente. Titulares e auxiliares aparecem com abatimentos separados. Quando um auxiliar está vinculado a um titular, esse vínculo aparece apenas como informação de contexto.
-
-### Dashboard
-
-Mostra indicadores reais do sistema, incluindo doadores, demandas, importações, último mês importado, rankings, distribuição por demanda e pontos para revisar.
-
-### Configurações
-
-Hoje concentra os recursos de armazenamento e segurança operacional, como:
-
-- conexão com arquivo local de dados;
-- exportação de backup em `JSON`;
-- importação de backup;
-- base para evoluções futuras, como auditoria e preferências.
-
-## Modelo de dados atual
-
-As tabelas principais do projeto hoje são:
-
-- `demands`
-- `donors`
-- `donor_cpf_links`
-- `imports`
-- `import_cpf_summary`
-- `monthly_donor_summary`
-- `trash_items`
-
-Resumo do papel de cada uma:
-
-- `demands`: guarda os grupos ou demandas da ONG;
-- `donors`: guarda titulares e auxiliares cadastrados, incluindo o vínculo informativo entre auxiliar e titular;
-- `donor_cpf_links`: guarda os CPFs usados na conciliação de notas para cada doador;
-- `imports`: registra cada planilha importada, incluindo `mês de referência` e `valor por nota`;
-- `import_cpf_summary`: guarda os CPFs encontrados em cada importação e a quantidade de notas por CPF;
-- `monthly_donor_summary`: guarda o consolidado mensal por doador, com quantidade de notas, valor por nota, valor de abatimento e status manual;
-- `trash_items`: guarda itens removidos que podem ser restaurados.
-
-## Estado atual do projeto
-
-Hoje o sistema já possui:
-
-- layout principal com sidebar e cabeçalho;
-- roteamento funcionando;
-- persistência local com DuckDB e arquivo de dados em `JSON`;
-- cadastro real de demandas, titulares e auxiliares;
-- importação real de planilhas `CSV`, `TXT` e `XLSX`;
-- reconciliação retroativa entre CPFs vinculados e importações antigas;
-- filtros separados e combináveis nas principais telas;
-- resumo mensal com valor fechado por importação;
-- perfil do doador com vínculo informativo, histórico e totais;
-- marcação manual de status do abatimento;
-- exportação e importação de backup;
-- estados vazios e feedbacks visuais nas abas.
-
-## Funcionalidades em evolução
-
-Ainda há bastante espaço para crescimento. Entre os próximos passos possíveis:
-
-- relatórios em `CSV` ou `Excel`;
-- histórico de ações e auditoria;
-- melhorias de usabilidade para conferência mensal;
-- futura integração com sistemas externos de abatimento.
-
-## Como rodar localmente
+## Como Rodar
 
 ### Pré-requisitos
 
-- Node.js 20+ recomendado
-- npm
+- Node.js 20 ou superior.
+- npm.
 
 ### Instalação
 
@@ -213,11 +58,15 @@ Ainda há bastante espaço para crescimento. Entre os próximos passos possívei
 npm install
 ```
 
-### Ambiente de desenvolvimento
+O `postinstall` prepara automaticamente o worker local do DuckDB WASM.
+
+### Desenvolvimento
 
 ```bash
 npm run dev
 ```
+
+Depois, acesse a URL exibida pelo Vite no terminal.
 
 ### Build de produção
 
@@ -231,23 +80,129 @@ npm run build
 npm run preview
 ```
 
-### Lint
+## Configuração
+
+O projeto não exige variáveis de ambiente para rodar localmente no estado atual.
+
+Se futuramente alguma configuração sensível for necessária:
+
+1. Crie um arquivo `.env` local.
+2. Documente as chaves esperadas em um `.env.example`.
+3. Use o prefixo `VITE_` apenas para valores que podem ser expostos ao frontend.
+4. Nunca versionar segredos, tokens ou arquivos reais de dados.
+
+A persistência principal é feita pela própria aplicação, em `Configurações`, ao conectar um arquivo local de dados em JSON. Sem arquivo conectado, os dados existem apenas na sessão atual do navegador.
+
+## Uso do Sistema
+
+Fluxo básico:
+
+1. Cadastre as demandas.
+2. Cadastre pessoas de referência, quando necessário.
+3. Cadastre doadores titulares e auxiliares.
+4. Importe a planilha mensal da Nota Fiscal Paulista.
+5. Informe o mês de referência, o valor por nota e a coluna de CPF.
+6. Confira os CPFs encontrados e os vínculos com doadores.
+7. Acompanhe os abatimentos em `Gestão Mensal`.
+8. Marque cada abatimento como `pendente` ou `realizado`.
+9. Use `Configurações` para conectar arquivo local, exportar backup ou restaurar dados.
+
+Observações importantes:
+
+- Titulares e auxiliares têm abatimentos próprios.
+- O vínculo de um auxiliar é informativo e não soma abatimentos ao titular.
+- O valor por nota fica salvo na importação daquele mês.
+- Para corrigir uma importação com valor errado, exclua a importação e importe novamente.
+
+## Estrutura de Pastas
+
+```text
+src/
+  assets/        # arquivos estáticos usados pela aplicação
+  components/    # componentes compartilhados de layout e UI
+  features/      # componentes organizados por domínio/tela
+  hooks/         # hooks reutilizáveis
+  pages/         # páginas e orquestração de estado dos fluxos
+  routes/        # configuração de rotas
+  services/      # regras de dados, persistência, importação e exportação
+  styles/        # estilos globais
+  utils/         # funções utilitárias puras
+  vendor/        # arquivos de terceiros versionados quando necessário
+```
+
+Outras pastas relevantes:
+
+```text
+e2e/      # testes end-to-end com Playwright
+tests/    # testes unitários com node:test
+scripts/  # scripts auxiliares do projeto
+public/   # arquivos públicos servidos pelo Vite
+```
+
+## Padrões do Projeto
+
+- Páginas em `src/pages` devem priorizar estado, carregamento de dados e handlers.
+- Componentes específicos de domínio devem ficar em `src/features/<domínio>/components`.
+- Componentes reutilizáveis e genéricos devem ficar em `src/components/ui`.
+- Regras de negócio e acesso a dados devem ficar em `src/services`.
+- Funções puras e formatações devem ficar em `src/utils`.
+- Hooks reutilizáveis devem ficar em `src/hooks`.
+- Evite misturar lógica de negócio em componentes visuais.
+- Preserve os padrões visuais já existentes antes de criar novos componentes.
+- Use nomes claros e consistentes para arquivos, componentes e handlers.
+- Não adicionar dependências sem necessidade real.
+
+## Scripts
+
+| Script | Descrição |
+| --- | --- |
+| `npm run dev` | Inicia o servidor local de desenvolvimento. |
+| `npm run build` | Gera a build de produção com Vite. |
+| `npm run preview` | Serve localmente a build gerada. |
+| `npm run lint` | Executa o ESLint no projeto. |
+| `npm run test` | Executa os testes unitários com `node --test`. |
+| `npm run test:e2e` | Executa os testes end-to-end com Playwright. |
+| `npm run prepare:duckdb-worker` | Prepara o worker local do DuckDB WASM. |
+| `npm run postinstall` | Executa automaticamente a preparação do DuckDB após instalar dependências. |
+
+## Testes
+
+Execute a validação principal com:
 
 ```bash
 npm run lint
-```
-
-### Testes automatizados
-
-```bash
 npm run test
+npm run build
+npm run test:e2e
 ```
 
-## Observações importantes
+Os testes e2e sobem o servidor de desenvolvimento automaticamente na porta configurada pelo Playwright.
 
-- o projeto roda localmente e usa DuckDB WASM para processar dados no navegador;
-- a persistência principal depende de conectar um arquivo de dados local em `Configurações`;
-- a importação real atual está preparada para `CSV`, `TXT` e `XLSX`;
-- o valor por nota é informado no momento da importação e passa a fazer parte do histórico daquele mês;
-- titulares e auxiliares têm abatimentos separados; o vínculo do auxiliar com um titular é apenas informativo;
-- para corrigir uma importação, o fluxo recomendado é excluir e importar novamente.
+## Contribuição
+
+Fluxo recomendado:
+
+1. Crie uma branch a partir da base principal.
+2. Faça mudanças pequenas e focadas.
+3. Mantenha compatibilidade com os dados e fluxos existentes.
+4. Rode lint, testes unitários e build antes de abrir a contribuição.
+5. Inclua testes quando alterar regras de negócio, importações, cálculos ou fluxos críticos.
+
+Padrão simples de commits:
+
+```text
+tipo: descrição curta
+```
+
+Exemplos:
+
+```text
+feat: adiciona filtro de abatimento mensal
+fix: corrige vínculo de doador auxiliar
+refactor: extrai componentes de importações
+docs: reorganiza readme
+```
+
+## Licença
+
+Este projeto ainda não possui um arquivo de licença definido. Antes de distribuição pública ou uso por terceiros, adicione uma licença apropriada ao repositório.

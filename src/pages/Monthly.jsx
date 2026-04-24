@@ -9,13 +9,15 @@ import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
-import StatusBadge from "../components/ui/StatusBadge";
 import {
   DonorIcon,
   DownloadIcon,
   MonthlyIcon,
   WarningIcon,
 } from "../components/ui/icons";
+import GroupSection from "../features/monthly/components/GroupSection";
+import MonthlySummaryRow from "../features/monthly/components/MonthlySummaryRow";
+import OverviewMetric from "../features/monthly/components/OverviewMetric";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { listImports } from "../services/importService";
 import {
@@ -24,14 +26,11 @@ import {
 } from "../services/monthlyService";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
-import {
-  formatDatePtBR,
-  formatMonthYear,
-  hasDonationStartConflict,
-} from "../utils/date";
+import { formatDatePtBR, formatMonthYear } from "../utils/date";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 const INITIAL_MONTHLY_FILTERS = {
   referenceMonth: "",
@@ -40,323 +39,8 @@ const INITIAL_MONTHLY_FILTERS = {
   demand: "",
   donationActivity: "all",
   abatementStatus: "all",
+  abatementSort: "",
 };
-
-function StatusToggle({
-  disabled = false,
-  isLoading = false,
-  onChange,
-  value,
-}) {
-  const options = [
-    {
-      value: "pending",
-      label: "Pendente",
-      className:
-        "border-[var(--warning-line)] bg-[var(--accent-soft)] text-[var(--warning)]",
-    },
-    {
-      value: "applied",
-      label: "Realizado",
-      className:
-        "border-[var(--success-line)] bg-[var(--accent-2-soft)] text-[var(--success)]",
-    },
-  ];
-
-  return (
-    <div className="grid w-[220px] grid-cols-2 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-1">
-      {options.map((option) => {
-        const isActive = value === option.value;
-
-        return (
-          <button
-            key={option.value}
-            type="button"
-            disabled={disabled || isLoading}
-            onClick={() => onChange?.(option.value)}
-            className={`min-h-9 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-              isActive
-                ? option.className
-                : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
-            } ${disabled || isLoading ? "cursor-not-allowed opacity-60" : ""}`.trim()}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function OverviewMetric({
-  icon: Icon,
-  label,
-  value,
-  helper = "",
-  tone = "default",
-}) {
-  const toneClassName = {
-    default:
-      "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--text-soft)]",
-    success:
-      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
-    warning:
-      "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
-  }[tone];
-
-  return (
-    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm text-[var(--muted)]">{label}</p>
-          <p className="mt-2 text-xl font-semibold text-[var(--text-main)]">
-            {value}
-          </p>
-          {helper ? (
-            <p className="mt-2 text-xs text-[var(--muted)]">{helper}</p>
-          ) : null}
-        </div>
-
-        {Icon ? (
-          <span
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ${toneClassName}`}
-          >
-            <Icon className="h-4 w-4" />
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function GroupSection({
-  icon,
-  title,
-  description,
-  countLabel,
-  tone = "default",
-  children,
-}) {
-  const toneClassName = {
-    default:
-      "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--text-soft)]",
-    success:
-      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
-    warning:
-      "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
-  }[tone];
-
-  return (
-    <section className="space-y-3">
-      <div className="flex flex-col gap-3 border-b border-[var(--line)] pb-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3">
-          {icon ? (
-            <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ${toneClassName}`}
-            >
-              {icon}
-            </span>
-          ) : null}
-          <div>
-            <h4 className="font-semibold text-[var(--text-main)]">{title}</h4>
-            {description ? (
-              <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
-            ) : null}
-          </div>
-        </div>
-
-        {countLabel ? (
-          <span
-            className={`inline-flex w-fit items-center rounded-md border px-3 py-1.5 text-xs font-medium ${toneClassName}`}
-          >
-            {countLabel}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function MetricField({
-  label,
-  value,
-  helper = "",
-  valueClassName = "",
-}) {
-  return (
-    <div className="min-w-0">
-      <p className="text-sm text-[var(--muted)]">{label}</p>
-      <p className={`mt-1 font-semibold text-[var(--text-main)] ${valueClassName}`.trim()}>
-        {value}
-      </p>
-      {helper ? (
-        <p className="mt-1 text-xs text-[var(--muted)]">{helper}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function MonthlySummaryRow({
-  summary,
-  isUpdating = false,
-  onNavigate,
-  onStatusChange,
-  showReferenceMonth = false,
-}) {
-  const hasStartDateConflict =
-    summary.hasDonationsInMonth &&
-    (summary.sourceStartConflictCount > 0 ||
-      hasDonationStartConflict(
-        summary.donationStartDate,
-        summary.referenceMonth,
-      ));
-
-  return (
-    <article
-      className={`rounded-md border p-4 ${
-        hasStartDateConflict
-          ? "border-[var(--warning-line)] bg-[var(--surface-elevated)]"
-          : !summary.hasDonationsInMonth
-            ? "border-[var(--line)] bg-[var(--surface-strong)]"
-            : "border-[var(--line)] bg-[var(--surface-elevated)]"
-      }`}
-    >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] xl:items-start">
-        <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onNavigate?.(summary.donorId)}
-            className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-          >
-            {summary.donorName}
-          </button>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            <StatusBadge status={summary.donorType} />
-            <StatusBadge
-              label={
-                summary.hasDonationsInMonth
-                  ? "Doou no mês"
-                  : "Não doou no mês"
-              }
-              tone={summary.hasDonationsInMonth ? "success" : "neutral"}
-            />
-          </div>
-
-          {summary.donorType === "auxiliary" && summary.holderName ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
-                Vinculado a: {summary.holderName}
-              </span>
-              {!summary.holderIsActiveDonor ? (
-                <StatusBadge label="Pessoa de referência" tone="neutral" />
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-[var(--muted)]">
-            <span>CPF: {formatCpf(summary.cpf)}</span>
-            <span>Demanda: {summary.demand || "Nao informada"}</span>
-          </div>
-
-          {summary.sources.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {summary.sources.map((source) => (
-                <span
-                  key={`${summary.id}-${source.cpf}`}
-                  className={`rounded-md border px-2 py-1 text-xs ${
-                    source.type === "auxiliary"
-                      ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
-                      : "border-[var(--line)] bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
-                  }`}
-                  title={`${source.name} • ${formatCpf(source.cpf)} • ${source.notesCount} nota(s)`}
-                >
-                  {source.type === "auxiliary"
-                    ? `Auxiliar: ${source.name}`
-                    : "CPF principal"}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          {hasStartDateConflict ? (
-            <p className="mt-2 text-sm text-[var(--warning)]">
-              Atencao: {summary.sourceStartConflictCount || 1} CPF(s)
-              vinculado(s) apareceram antes do início de doação informado.
-            </p>
-          ) : null}
-        </div>
-
-        <div
-          className={`grid gap-x-5 gap-y-3 ${
-            showReferenceMonth ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"
-          }`}
-        >
-          {showReferenceMonth ? (
-            <MetricField
-              label="Mês"
-              value={formatMonthYear(summary.referenceMonth)}
-            />
-          ) : null}
-
-          <MetricField
-            label="Notas"
-            value={formatInteger(summary.notesCount)}
-            helper={
-              summary.hasDonationsInMonth
-                ? `${formatInteger(summary.sourceCpfCount)} CPF(s) com notas`
-                : `${formatInteger(summary.sourceCpfCount)} CPF(s) cadastrados`
-            }
-          />
-
-          <MetricField
-            label="Valor por nota"
-            value={formatCurrency(summary.valuePerNote)}
-          />
-
-          <MetricField
-            label="Abatimento"
-            value={formatCurrency(summary.abatementAmount)}
-            valueClassName={
-              summary.hasDonationsInMonth
-                ? summary.abatementStatus === "applied"
-                  ? "text-[var(--success)]"
-                  : "text-[var(--warning)]"
-                : "text-[var(--text-soft)]"
-            }
-          />
-        </div>
-
-        <div className="flex w-full flex-col gap-2 xl:w-[220px] xl:items-end">
-          {summary.canUpdateAbatement ? (
-            <StatusToggle
-              value={summary.abatementStatus}
-              disabled={isUpdating}
-              isLoading={isUpdating}
-              onChange={(nextStatus) =>
-                onStatusChange?.(summary.id, nextStatus)
-              }
-            />
-          ) : (
-            <div className="flex min-h-10 w-full items-center rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-3 text-sm font-medium text-[var(--muted)] xl:w-[220px]">
-              Sem doações no mês
-            </div>
-          )}
-
-          <p className="text-xs text-[var(--muted)] xl:text-right">
-            {summary.abatementMarkedAt
-              ? `Marcado em ${summary.abatementMarkedAt}`
-              : summary.canUpdateAbatement
-                ? "Ainda nao marcado"
-                : "Nenhum abatimento gerado"}
-          </p>
-        </div>
-      </div>
-    </article>
-  );
-}
 
 export default function Monthly() {
   const [summaries, setSummaries] = useState([]);
@@ -429,6 +113,15 @@ export default function Monthly() {
     [],
   );
 
+  const abatementSortOptions = useMemo(
+    () => [
+      { value: "", label: "Sem ordenação por abatimento" },
+      { value: "desc", label: "Maior abatimento primeiro" },
+      { value: "asc", label: "Menor abatimento primeiro" },
+    ],
+    [],
+  );
+
   const loadSummaries = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -452,6 +145,8 @@ export default function Monthly() {
   useEffect(() => {
     loadSummaries();
   }, [loadSummaries]);
+
+  useDatabaseChangeEffect(loadSummaries);
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
@@ -529,6 +224,7 @@ export default function Monthly() {
       demand: "",
       donationActivity: "all",
       abatementStatus: "all",
+      abatementSort: "",
     }));
   };
 
@@ -539,6 +235,8 @@ export default function Monthly() {
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
   );
+  const isRefreshingMonthlyData =
+    isLoading && (availableImports.length > 0 || summaries.length > 0);
   const monthlyPagination = usePagination(summaries, {
     initialPageSize: 25,
   });
@@ -632,6 +330,15 @@ export default function Monthly() {
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
+      <FeedbackMessage
+        message={
+          isRefreshingMonthlyData
+            ? "Atualizando a gestão mensal com os dados mais recentes..."
+            : ""
+        }
+        tone="info"
+        persistent
+      />
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard
@@ -770,7 +477,7 @@ export default function Monthly() {
           </p>
         ) : null}
 
-        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <MonthInput
             name="referenceMonth"
             value={filters.referenceMonth}
@@ -803,6 +510,14 @@ export default function Monthly() {
             options={abatementStatusOptions}
             placeholder="Todos os status"
             disabled={isNotDonatedFilterActive}
+          />
+
+          <SelectInput
+            name="abatementSort"
+            value={filters.abatementSort}
+            onChange={handleFilterChange}
+            options={abatementSortOptions}
+            placeholder="Ordenar por abatimento"
           />
         </div>
 

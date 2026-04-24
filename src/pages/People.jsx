@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { nanoid } from "nanoid";
-import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
@@ -11,14 +10,12 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import PaginationControls from "../components/ui/PaginationControls";
 import SectionCard from "../components/ui/SectionCard";
-import SelectInput from "../components/ui/SelectInput";
 import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
 import {
   EditIcon,
   PlusIcon,
   TrashIcon,
-  UserIcon,
 } from "../components/ui/icons";
 import {
   createPerson,
@@ -26,9 +23,11 @@ import {
   listPeople,
   updatePerson,
 } from "../services/personService";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { usePagination } from "../hooks/usePagination";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 const EMPTY_PERSON_FORM = {
   name: "",
@@ -38,15 +37,7 @@ const EMPTY_PERSON_FORM = {
 const INITIAL_FILTERS = {
   name: "",
   cpf: "",
-  role: "",
 };
-
-const ROLE_OPTIONS = [
-  { value: "", label: "Todos os papéis" },
-  { value: "holder", label: "Doadores titulares" },
-  { value: "auxiliary", label: "Doadores auxiliares" },
-  { value: "reference", label: "Pessoas de referência" },
-];
 
 export default function People() {
   const [people, setPeople] = useState([]);
@@ -57,32 +48,75 @@ export default function People() {
   const [personPendingRemoval, setPersonPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const navigate = useNavigate();
   const peoplePagination = usePagination(people, { initialPageSize: 25 });
+  const debouncedFilters = useDebouncedValue(filters, 180);
+  const peopleRequestIdRef = useRef(0);
+  const hasInitializedRef = useRef(false);
 
-  const loadPeople = useCallback(async (currentFilters = filters) => {
+  const loadPeople = useCallback(async (currentFilters, { showLoading = false } = {}) => {
+    const requestId = peopleRequestIdRef.current + 1;
+    peopleRequestIdRef.current = requestId;
+
     try {
+      if (showLoading) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+
       setError("");
-      const personRows = await listPeople(currentFilters);
+      const personRows = await listPeople({
+        ...currentFilters,
+        role: "reference",
+      });
+
+      if (requestId !== peopleRequestIdRef.current) {
+        return;
+      }
+
       setPeople(personRows);
     } catch (err) {
+      if (requestId !== peopleRequestIdRef.current) {
+        return;
+      }
+
       console.error(
         "Erro ao carregar pessoas:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError("Nao foi possivel carregar as pessoas.");
     } finally {
-      setIsLoading(false);
+      if (requestId === peopleRequestIdRef.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
-  }, [filters]);
+  }, []);
 
   useEffect(() => {
-    loadPeople();
+    loadPeople({ ...INITIAL_FILTERS }, { showLoading: true }).then(() => {
+      hasInitializedRef.current = true;
+    });
   }, [loadPeople]);
+
+  useEffect(() => {
+    if (!hasInitializedRef.current) {
+      return;
+    }
+
+    loadPeople(debouncedFilters);
+  }, [debouncedFilters, loadPeople]);
+
+  const refreshPeople = useCallback(() => {
+    loadPeople(filters);
+  }, [filters, loadPeople]);
+
+  useDatabaseChangeEffect(refreshPeople);
 
   const handleFormChange = (setter) => (event) => {
     const { name, value } = event.target;
@@ -93,20 +127,16 @@ export default function People() {
     }));
   };
 
-  const handleFilterChange = async (event) => {
+  const handleFilterChange = (event) => {
     const { name, value } = event.target;
-    const nextFilters = {
-      ...filters,
+    setFilters((current) => ({
+      ...current,
       [name]: name === "cpf" ? formatCpf(value) : value,
-    };
-    setFilters(nextFilters);
-    await loadPeople(nextFilters);
+    }));
   };
 
-  const handleClearFilters = async () => {
-    const nextFilters = { ...INITIAL_FILTERS };
-    setFilters(nextFilters);
-    await loadPeople(nextFilters);
+  const handleClearFilters = () => {
+    setFilters({ ...INITIAL_FILTERS });
   };
 
   const handleAdd = async () => {
@@ -119,7 +149,7 @@ export default function People() {
         name: createForm.name,
         cpf: createForm.cpf,
       });
-      await loadPeople();
+      await loadPeople(filters);
       setIsCreateModalOpen(false);
       setCreateForm({ ...EMPTY_PERSON_FORM });
       setSuccessMessage("Pessoa cadastrada com sucesso.");
@@ -148,7 +178,7 @@ export default function People() {
         name: editForm.name,
         cpf: editForm.cpf,
       });
-      await loadPeople();
+      await loadPeople(filters);
       setEditingPerson(null);
       setEditForm({ ...EMPTY_PERSON_FORM });
       setSuccessMessage("Pessoa atualizada com sucesso.");
@@ -173,7 +203,7 @@ export default function People() {
       setSuccessMessage("");
       setIsDeleting(true);
       await deletePerson(personPendingRemoval.id);
-      await loadPeople();
+      await loadPeople(filters);
       setPersonPendingRemoval(null);
       setSuccessMessage("Pessoa enviada para a lixeira com sucesso.");
     } catch (err) {
@@ -192,7 +222,7 @@ export default function People() {
       <div>
         <PageHeader
           title="Pessoas"
-          subtitle="Referências e pessoas vinculadas aos doadores."
+          subtitle="Pessoas sem papel de doador."
           className="mb-6"
         />
         <LoadingScreen
@@ -207,7 +237,7 @@ export default function People() {
     <div>
       <PageHeader
         title="Pessoas"
-        subtitle={`${people.length} pessoa(s) encontrada(s).`}
+        subtitle={`${people.length} pessoa(s) sem papel de doador.`}
         className="mb-6"
       />
 
@@ -226,32 +256,32 @@ export default function People() {
       </div>
 
       <SectionCard title="Buscar pessoas" className="mb-4">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <TextInput
+            label="Nome"
             name="name"
             placeholder="Filtrar por nome"
             value={filters.name}
             onChange={handleFilterChange}
           />
           <TextInput
+            label="CPF"
             name="cpf"
             placeholder="Filtrar por CPF"
             value={filters.cpf}
             onChange={handleFilterChange}
           />
-          <SelectInput
-            name="role"
-            value={filters.role}
-            onChange={handleFilterChange}
-            options={ROLE_OPTIONS}
-            placeholder="Todos os papéis"
-          />
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button variant="subtle" onClick={handleClearFilters}>
             Limpar filtros
           </Button>
+          <p className="text-xs text-[var(--muted)]">
+            {isRefreshing
+              ? "Atualizando resultados..."
+              : `${people.length} resultado(s) na lista.`}
+          </p>
         </div>
       </SectionCard>
 
@@ -260,8 +290,8 @@ export default function People() {
 
       {!isLoading && people.length === 0 ? (
         <EmptyState
-          title="Nenhuma pessoa cadastrada"
-          description="Cadastre uma pessoa de referência ou promova um cadastro a doador quando precisar."
+          title="Nenhuma pessoa sem papel de doador"
+          description="Cadastre pessoas que possam ser usadas como referência em vínculos de auxiliares."
         />
       ) : !isLoading ? (
         <ul className="space-y-2">
@@ -287,63 +317,41 @@ export default function People() {
                   <p className="font-semibold text-[var(--text-main)]">
                     {person.name}
                   </p>
-                  <StatusBadge
-                    label={person.roleLabel}
-                    tone={person.roleTone}
-                  />
+                  <StatusBadge label="Pessoa de referência" tone="neutral" />
                 </div>
 
                 <p className="text-sm text-[var(--muted)]">CPF: {person.cpf}</p>
 
-                {person.donorId ? (
-                  <p className="text-sm text-[var(--muted)]">
-                    Demanda: {person.demand || "Nao informada"} • Início:{" "}
-                    {person.donationStartDate || "Nao informado"}
-                  </p>
-                ) : (
-                  <p className="text-sm text-[var(--muted)]">
-                    {person.referencedByAuxiliaries > 0
-                      ? `Vinculada a ${person.referencedByAuxiliaries} auxiliar(es).`
-                      : "Sem papel de doador ativo."}
-                  </p>
-                )}
+                <p className="text-sm text-[var(--muted)]">
+                  {person.referencedByAuxiliaries > 0
+                    ? `Referência de ${person.referencedByAuxiliaries} auxiliar(es).`
+                    : "Disponível para vínculo com auxiliar."}
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {person.donorId ? (
-                  <Button
-                    variant="subtle"
-                    onClick={() => navigate(`/doadores/${person.donorId}`)}
-                    leftIcon={<UserIcon className="h-4 w-4" />}
-                  >
-                    Abrir doador
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="subtle"
-                      onClick={() => {
-                        setError("");
-                        setSuccessMessage("");
-                        setEditingPerson(person);
-                        setEditForm({
-                          name: person.name,
-                          cpf: person.cpf,
-                        });
-                      }}
-                      leftIcon={<EditIcon className="h-4 w-4" />}
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => setPersonPendingRemoval(person)}
-                      leftIcon={<TrashIcon className="h-4 w-4" />}
-                    >
-                      Remover
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="subtle"
+                  onClick={() => {
+                    setError("");
+                    setSuccessMessage("");
+                    setEditingPerson(person);
+                    setEditForm({
+                      name: person.name,
+                      cpf: person.cpf,
+                    });
+                  }}
+                  leftIcon={<EditIcon className="h-4 w-4" />}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => setPersonPendingRemoval(person)}
+                  leftIcon={<TrashIcon className="h-4 w-4" />}
+                >
+                  Remover
+                </Button>
               </div>
             </li>
           ))}
@@ -366,7 +374,7 @@ export default function People() {
         {isCreateModalOpen ? (
           <FormModal
             title="Adicionar pessoa"
-            description="Cadastre uma pessoa para uso como referência ou vínculo informativo."
+            description="Cadastre uma pessoa para uso como referência de um auxiliar."
             confirmLabel="Adicionar pessoa"
             isLoading={isSubmitting}
             onClose={() => {
@@ -377,12 +385,14 @@ export default function People() {
           >
             <div className="grid gap-3 md:grid-cols-2">
               <TextInput
+                label="Nome"
                 name="name"
                 placeholder="Nome da pessoa"
                 value={createForm.name}
                 onChange={handleFormChange(setCreateForm)}
               />
               <TextInput
+                label="CPF"
                 name="cpf"
                 placeholder="CPF"
                 value={createForm.cpf}
@@ -408,12 +418,14 @@ export default function People() {
           >
             <div className="grid gap-3 md:grid-cols-2">
               <TextInput
+                label="Nome"
                 name="name"
                 placeholder="Nome da pessoa"
                 value={editForm.name}
                 onChange={handleFormChange(setEditForm)}
               />
               <TextInput
+                label="CPF"
                 name="cpf"
                 placeholder="CPF"
                 value={editForm.cpf}

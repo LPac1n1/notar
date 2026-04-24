@@ -1,4 +1,4 @@
-import { Children, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
@@ -15,48 +15,14 @@ import {
   SearchIcon,
   WarningIcon,
 } from "../components/ui/icons";
+import DetailList from "../features/dashboard/components/DetailList";
+import MetricCard from "../features/dashboard/components/MetricCard";
+import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { getDashboardOverview } from "../services/dashboardService";
 import { formatCpf } from "../utils/cpf";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
-
-function MetricCard({ helper = "", label, onClick, value }) {
-  const sharedClassName =
-    "rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4 text-left transition-colors duration-150";
-
-  const content = (
-    <>
-      <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
-      <p className="mt-2 font-[var(--font-display)] text-3xl font-semibold text-[var(--text-main)]">{value}</p>
-      {helper ? <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{helper}</p> : null}
-    </>
-  );
-
-  if (!onClick) {
-    return <div className={sharedClassName}>{content}</div>;
-  }
-
-  return (
-    <button
-      type="button"
-      className={`${sharedClassName} hover:border-[var(--line-strong)] hover:bg-[var(--surface-elevated)]`}
-      onClick={onClick}
-    >
-      {content}
-    </button>
-  );
-}
-
-function DetailList({ children, emptyMessage = "Nenhum detalhe disponível." }) {
-  return Children.count(children) ? (
-    <div className="space-y-3">{children}</div>
-  ) : (
-    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
-      {emptyMessage}
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const [dashboard, setDashboard] = useState(null);
@@ -96,6 +62,8 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  useDatabaseChangeEffect(loadDashboard);
 
   const totals = dashboard?.totals ?? {
     donorCount: 0,
