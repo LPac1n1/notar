@@ -11,7 +11,10 @@ export default function Layout({ children }) {
           <Header />
 
           <main className="min-h-0 flex-1">
-            <div className="h-full overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-4 md:p-5 lg:p-6">
+            <div
+              id="app-scroll-container"
+              className="h-full overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-4 md:p-5 lg:p-6"
+            >
               {children}
             </div>
           </main>

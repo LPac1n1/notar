@@ -1,4 +1,5 @@
 export default function StatusToggle({
+  compact = false,
   disabled = false,
   isLoading = false,
   onChange,
@@ -20,7 +21,9 @@ export default function StatusToggle({
   ];
 
   return (
-    <div className="grid w-[220px] grid-cols-2 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-1">
+    <div
+      className={`grid grid-cols-2 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-1 ${compact ? "w-full md:w-[190px]" : "w-[220px]"}`}
+    >
       {options.map((option) => {
         const isActive = value === option.value;
 

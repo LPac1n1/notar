@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import CopyableValue from "../components/ui/CopyableValue";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -24,17 +25,61 @@ import { formatDatePtBR, formatMonthYear } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
 
+function CopyableDonorName({ className = "", name, onClick }) {
+  return (
+    <CopyableValue
+      copyLabel="Copiar nome"
+      value={name}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline ${className}`.trim()}
+      >
+        {name}
+      </button>
+    </CopyableValue>
+  );
+}
+
+function CopyableCpf({ className = "", value }) {
+  const formattedCpf = formatCpf(value);
+
+  return (
+    <CopyableValue
+      className={className}
+      copyLabel="Copiar CPF"
+      value={formattedCpf}
+    >
+      <span>{formattedCpf}</span>
+    </CopyableValue>
+  );
+}
+
 export default function Dashboard() {
+  const location = useLocation();
   const [dashboard, setDashboard] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeModal, setActiveModal] = useState("");
   const dashboardRequestIdRef = useRef(0);
+  const restoredScrollTopRef = useRef(location.state?.dashboardScrollTop ?? null);
   const navigate = useNavigate();
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
-      navigate(`/doadores/${encodeURIComponent(donorId)}`);
+      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+        state: {
+          from: {
+            label: "Voltar para dashboard",
+            pathname: "/",
+            state: {
+              dashboardScrollTop:
+                document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+            },
+          },
+        },
+      });
     }
   };
 
@@ -79,6 +124,21 @@ export default function Dashboard() {
   }, [loadDashboard]);
 
   useDatabaseChangeEffect(loadDashboard);
+
+  useEffect(() => {
+    if (isLoading || restoredScrollTopRef.current === null) {
+      return;
+    }
+
+    const scrollTop = restoredScrollTopRef.current;
+    restoredScrollTopRef.current = null;
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("app-scroll-container")
+        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+    });
+  }, [isLoading]);
 
   const totals = dashboard?.totals ?? {
     donorCount: 0,
@@ -128,15 +188,13 @@ export default function Dashboard() {
                 key={donor.donorId}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <button
-                  type="button"
+                <CopyableDonorName
+                  name={donor.donorName}
                   onClick={() => openDonorProfile(donor.donorId)}
-                  className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                >
-                  {donor.donorName}
-                </button>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(donor.cpf)} • Demanda: {donor.demand || "Nao informada"}
+                />
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <CopyableCpf value={donor.cpf} />
+                  <span>• Demanda: {donor.demand || "Nao informada"}</span>
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Início: {donor.donationStartDate ? formatMonthYear(donor.donationStartDate) : "Nao informado"}
@@ -279,15 +337,13 @@ export default function Dashboard() {
                 key={item.donorId}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <button
-                  type="button"
+                <CopyableDonorName
+                  name={item.donorName}
                   onClick={() => openDonorProfile(item.donorId)}
-                  className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                >
-                  {item.donorName}
-                </button>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(item.cpf)} • {item.demand}
+                />
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <CopyableCpf value={item.cpf} />
+                  <span>• {item.demand}</span>
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {formatInteger(item.notesCount)} nota(s) • {formatCurrency(item.abatementAmount)}
@@ -315,7 +371,9 @@ export default function Dashboard() {
                   key={item.cpf}
                   className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
                 >
-                  <p className="font-medium text-[var(--text-main)]">{formatCpf(item.cpf)}</p>
+                  <p className="font-medium text-[var(--text-main)]">
+                    <CopyableCpf value={item.cpf} />
+                  </p>
                   <p className="mt-1 text-sm text-[var(--muted)]">
                     {formatInteger(item.notesCount)} nota(s) no mês
                   </p>
@@ -341,16 +399,19 @@ export default function Dashboard() {
                 key={`${item.cpf}-${item.referenceMonth}`}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{item.sourceName}</p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(item.cpf)} • Vinculado ao doador{" "}
-                  <button
-                    type="button"
+                <p className="font-medium text-[var(--text-main)]">
+                  <CopyableValue copyLabel="Copiar nome" value={item.sourceName}>
+                    <span>{item.sourceName}</span>
+                  </CopyableValue>
+                </p>
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <CopyableCpf value={item.cpf} />
+                  <span>• Vinculado ao doador</span>
+                  <CopyableDonorName
+                    className="text-[var(--text-soft)]"
+                    name={item.donorName}
                     onClick={() => openDonorProfile(item.donorId)}
-                    className="font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                  >
-                    {item.donorName}
-                  </button>
+                  />
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Apareceu em {formatMonthYear(item.referenceMonth)}, mas o início é {formatMonthYear(item.donationStartDate)}.
@@ -376,14 +437,13 @@ export default function Dashboard() {
                 key={item.donorId}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <button
-                  type="button"
+                <CopyableDonorName
+                  name={item.donorName}
                   onClick={() => openDonorProfile(item.donorId)}
-                  className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                >
-                  {item.donorName}
-                </button>
-                <p className="mt-1 text-sm text-[var(--muted)]">{formatCpf(item.cpf)}</p>
+                />
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  <CopyableCpf value={item.cpf} />
+                </p>
               </div>
             ))}
           </DetailList>
@@ -405,19 +465,22 @@ export default function Dashboard() {
                 key={item.sourceId}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
-                <p className="font-medium text-[var(--text-main)]">{item.sourceName}</p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {formatCpf(item.cpf)} • {item.sourceType === "holder" ? "Titular" : "Auxiliar"}
+                <p className="font-medium text-[var(--text-main)]">
+                  <CopyableValue copyLabel="Copiar nome" value={item.sourceName}>
+                    <span>{item.sourceName}</span>
+                  </CopyableValue>
+                </p>
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <CopyableCpf value={item.cpf} />
+                  <span>• {item.sourceType === "holder" ? "Titular" : "Auxiliar"}</span>
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Doador{" "}
-                  <button
-                    type="button"
+                  <CopyableDonorName
+                    className="text-[var(--text-soft)]"
+                    name={item.donorName}
                     onClick={() => openDonorProfile(item.donorId)}
-                    className="font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                  >
-                    {item.donorName}
-                  </button>
+                  />
                   {" "}• Demanda: {item.demand || "Nao informada"}
                 </p>
               </div>
@@ -640,13 +703,11 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-[var(--text-main)]">
-                          <button
-                            type="button"
+                          <CopyableDonorName
+                            className="font-medium"
+                            name={donor.donorName}
                             onClick={() => openDonorProfile(donor.donorId)}
-                            className="text-left underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-                          >
-                            {donor.donorName}
-                          </button>
+                          />
                         </p>
                         <p className="text-sm text-[var(--muted)]">
                           Demanda: {donor.demand}

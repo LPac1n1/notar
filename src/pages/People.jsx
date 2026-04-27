@@ -3,6 +3,7 @@ import { AnimatePresence } from "framer-motion";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import CopyableValue from "../components/ui/CopyableValue";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import FormModal from "../components/ui/FormModal";
@@ -23,6 +24,7 @@ import {
   listPeople,
   updatePerson,
 } from "../services/personService";
+import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
@@ -53,6 +55,7 @@ export default function People() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const peoplePagination = usePagination(people, { initialPageSize: 25 });
   const debouncedFilters = useDebouncedValue(filters, 180);
   const peopleRequestIdRef = useRef(0);
@@ -118,6 +121,26 @@ export default function People() {
 
   useDatabaseChangeEffect(refreshPeople);
 
+  const handleRestoreDeletedPerson = useCallback(
+    async (trashItemId) => {
+      try {
+        setError("");
+        setSuccessMessage("");
+        setSuccessAction(null);
+        await restoreTrashItem(trashItemId);
+        await loadPeople(filters);
+        setSuccessMessage("Pessoa restaurada com sucesso.");
+      } catch (err) {
+        console.error(
+          "Erro ao restaurar pessoa:",
+          getErrorMessage(err, "Erro desconhecido."),
+        );
+        setError(getErrorMessage(err, "Nao foi possivel restaurar a pessoa."));
+      }
+    },
+    [filters, loadPeople],
+  );
+
   const handleFormChange = (setter) => (event) => {
     const { name, value } = event.target;
 
@@ -143,16 +166,17 @@ export default function People() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsSubmitting(true);
       await createPerson({
         id: nanoid(),
         name: createForm.name,
         cpf: createForm.cpf,
       });
-      await loadPeople(filters);
       setIsCreateModalOpen(false);
       setCreateForm({ ...EMPTY_PERSON_FORM });
       setSuccessMessage("Pessoa cadastrada com sucesso.");
+      await loadPeople(filters);
     } catch (err) {
       console.error(
         "Erro ao adicionar pessoa:",
@@ -172,16 +196,17 @@ export default function People() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsSubmitting(true);
       await updatePerson({
         id: editingPerson.id,
         name: editForm.name,
         cpf: editForm.cpf,
       });
-      await loadPeople(filters);
       setEditingPerson(null);
       setEditForm({ ...EMPTY_PERSON_FORM });
       setSuccessMessage("Pessoa atualizada com sucesso.");
+      await loadPeople(filters);
     } catch (err) {
       console.error(
         "Erro ao atualizar pessoa:",
@@ -201,11 +226,18 @@ export default function People() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsDeleting(true);
-      await deletePerson(personPendingRemoval.id);
+      const trashItemId = await deletePerson(personPendingRemoval.id);
       await loadPeople(filters);
       setPersonPendingRemoval(null);
       setSuccessMessage("Pessoa enviada para a lixeira com sucesso.");
+      if (trashItemId) {
+        setSuccessAction({
+          label: "Desfazer",
+          onAction: () => handleRestoreDeletedPerson(trashItemId),
+        });
+      }
     } catch (err) {
       console.error(
         "Erro ao remover pessoa:",
@@ -246,6 +278,7 @@ export default function People() {
           onClick={() => {
             setError("");
             setSuccessMessage("");
+            setSuccessAction(null);
             setCreateForm({ ...EMPTY_PERSON_FORM });
             setIsCreateModalOpen(true);
           }}
@@ -285,8 +318,16 @@ export default function People() {
         </div>
       </SectionCard>
 
-      <FeedbackMessage message={error} tone="error" />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        message={isCreateModalOpen || editingPerson || personPendingRemoval ? "" : error}
+        tone="error"
+      />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       {!isLoading && people.length === 0 ? (
         <EmptyState
@@ -314,15 +355,28 @@ export default function People() {
             >
               <div className="min-w-0 flex-1">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-[var(--text-main)]">
-                    {person.name}
-                  </p>
+                  <CopyableValue
+                    copyLabel="Copiar nome"
+                    value={person.name}
+                  >
+                    <span className="font-semibold text-[var(--text-main)]">
+                      {person.name}
+                    </span>
+                  </CopyableValue>
                   <StatusBadge label="Pessoa de referência" tone="neutral" />
                 </div>
 
-                <p className="text-sm text-[var(--muted)]">CPF: {person.cpf}</p>
+                <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <span>CPF:</span>
+                  <CopyableValue
+                    copyLabel="Copiar CPF"
+                    value={person.cpf}
+                  >
+                    <span>{person.cpf}</span>
+                  </CopyableValue>
+                </div>
 
-                <p className="text-sm text-[var(--muted)]">
+                <p className="mt-1 text-sm text-[var(--muted)]">
                   {person.referencedByAuxiliaries > 0
                     ? `Referência de ${person.referencedByAuxiliaries} auxiliar(es).`
                     : "Disponível para vínculo com auxiliar."}
@@ -335,6 +389,7 @@ export default function People() {
                   onClick={() => {
                     setError("");
                     setSuccessMessage("");
+                    setSuccessAction(null);
                     setEditingPerson(person);
                     setEditForm({
                       name: person.name,
@@ -376,6 +431,7 @@ export default function People() {
             title="Adicionar pessoa"
             description="Cadastre uma pessoa para uso como referência de um auxiliar."
             confirmLabel="Adicionar pessoa"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onClose={() => {
               setIsCreateModalOpen(false);
@@ -409,6 +465,7 @@ export default function People() {
             title="Editar pessoa"
             description="Atualize os dados da pessoa de referência."
             confirmLabel="Salvar alterações"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onClose={() => {
               setEditingPerson(null);
@@ -442,6 +499,7 @@ export default function People() {
             title="Remover pessoa"
             description={`Tem certeza de que deseja remover ${personPendingRemoval.name}?`}
             confirmLabel="Remover pessoa"
+            feedbackMessage={error}
             isLoading={isDeleting}
             onCancel={() => setPersonPendingRemoval(null)}
             onConfirm={handleDelete}

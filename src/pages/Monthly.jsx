@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -20,7 +20,9 @@ import {
   DONATION_ACTIVITY_OPTIONS,
   INITIAL_MONTHLY_FILTERS,
 } from "../features/monthly/constants";
+import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
 import GroupSection from "../features/monthly/components/GroupSection";
+import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
 import MonthlySummaryRow from "../features/monthly/components/MonthlySummaryRow";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
 import { exportMonthlySummariesCsv } from "../services/exportService";
@@ -29,30 +31,37 @@ import { listImports } from "../services/importService";
 import {
   listMonthlySummaries,
   updateAbatementStatus,
+  updateAbatementStatuses,
 } from "../services/monthlyService";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
-import { formatDatePtBR, formatMonthYear } from "../utils/date";
+import { formatMonthYear } from "../utils/date";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useAsync } from "../hooks/useAsync";
+import { useDelayedLoading } from "../hooks/useDelayedLoading";
 
 export default function Monthly() {
+  const location = useLocation();
   const [summaries, setSummaries] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
   const [filters, setFilters] = useState({
     ...INITIAL_MONTHLY_FILTERS,
+    ...(location.state?.monthlyFilters ?? {}),
   });
   const [isLoading, setIsLoading] = useState(true);
   const [updatingSummaryId, setUpdatingSummaryId] = useState("");
+  const [updatingDonorId, setUpdatingDonorId] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
   const summariesRequestIdRef = useRef(0);
+  const restoredScrollTopRef = useRef(location.state?.monthlyScrollTop ?? null);
   const monthlyOperation = useAsync({ reportGlobal: true });
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
   const isNotDonatedFilterActive =
@@ -98,13 +107,20 @@ export default function Monthly() {
   const loadSummaries = useCallback(async () => {
     const requestId = summariesRequestIdRef.current + 1;
     summariesRequestIdRef.current = requestId;
+    const effectiveFilters = filters.referenceMonth
+      ? filters
+      : {
+          ...filters,
+          donationActivity: "all",
+          abatementStatus: "all",
+        };
 
     try {
       setIsLoading(true);
       setError("");
       const [importRows, monthlyRows] = await Promise.all([
         listImports({ status: "processed" }),
-        listMonthlySummaries(filters),
+        listMonthlySummaries(effectiveFilters),
       ]);
 
       if (requestId !== summariesRequestIdRef.current) {
@@ -136,6 +152,45 @@ export default function Monthly() {
 
   useDatabaseChangeEffect(loadSummaries);
 
+  useEffect(() => {
+    if (isLoading || restoredScrollTopRef.current === null) {
+      return;
+    }
+
+    const scrollTop = restoredScrollTopRef.current;
+    restoredScrollTopRef.current = null;
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("app-scroll-container")
+        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+    });
+  }, [isLoading]);
+
+  const getMonthlyNavigationState = useCallback(
+    () => ({
+      from: {
+        label: "Voltar para gestão mensal",
+        pathname: "/mensal",
+        state: {
+          monthlyFilters: filters,
+          monthlyScrollTop:
+            document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+        },
+      },
+    }),
+    [filters],
+  );
+
+  const handleOpenDonorProfile = useCallback(
+    (donorId) => {
+      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+        state: getMonthlyNavigationState(),
+      });
+    },
+    [getMonthlyNavigationState, navigate],
+  );
+
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
     setFilters((current) => ({
@@ -145,7 +200,12 @@ export default function Monthly() {
             donorId: "",
             cpf: "",
             demand: "",
-            ...(!value ? { donationActivity: "all" } : {}),
+            ...(!value
+              ? {
+                  abatementStatus: "all",
+                  donationActivity: "all",
+                }
+              : {}),
           }
         : {}),
       ...(name === "donationActivity" && value === "not-donated"
@@ -157,14 +217,85 @@ export default function Monthly() {
     }));
   };
 
+  const applyStatusChanges = useCallback(async (changes = []) => {
+    const changesByStatus = new Map();
+
+    for (const change of changes) {
+      if (!change.summaryId) {
+        continue;
+      }
+
+      const normalizedStatus = change.status === "applied" ? "applied" : "pending";
+      const summaryIds = changesByStatus.get(normalizedStatus) ?? [];
+      summaryIds.push(change.summaryId);
+      changesByStatus.set(normalizedStatus, summaryIds);
+    }
+
+    for (const [status, summaryIds] of changesByStatus.entries()) {
+      await updateAbatementStatuses({ summaryIds, status });
+    }
+  }, []);
+
+  const handleUndoStatusChanges = useCallback(
+    async ({
+      changes = [],
+      donorId = "",
+      summaryId = "",
+      message = "Alteracao desfeita.",
+    } = {}) => {
+      try {
+        setError("");
+        setSuccessMessage("");
+        setSuccessAction(null);
+        setUpdatingDonorId(donorId);
+        setUpdatingSummaryId(summaryId);
+        await applyStatusChanges(changes);
+        await loadSummaries();
+        setSuccessMessage(message);
+      } catch (err) {
+        console.error(
+          "Erro ao desfazer status do abatimento:",
+          getErrorMessage(err, "Erro desconhecido."),
+        );
+        setError(getErrorMessage(err, "Nao foi possivel desfazer a alteracao."));
+      } finally {
+        setUpdatingDonorId("");
+        setUpdatingSummaryId("");
+      }
+    },
+    [applyStatusChanges, loadSummaries],
+  );
+
   const handleStatusChange = async (summaryId, status) => {
+    const currentSummary = summaries.find((summary) => summary.id === summaryId);
+
+    if (!currentSummary || currentSummary.abatementStatus === status) {
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setUpdatingSummaryId(summaryId);
       await updateAbatementStatus({ summaryId, status });
       await loadSummaries();
-      setSuccessMessage("Status do abatimento atualizado.");
+      const message = "Status do abatimento atualizado.";
+      setSuccessMessage(message);
+      setSuccessAction({
+        label: "Desfazer",
+        onAction: () =>
+          handleUndoStatusChanges({
+            changes: [
+              {
+                summaryId,
+                status: currentSummary.abatementStatus,
+              },
+            ],
+            summaryId,
+            message: "Status anterior restaurado.",
+          }),
+      });
     } catch (err) {
       console.error(
         "Erro ao atualizar status do abatimento:",
@@ -178,7 +309,59 @@ export default function Monthly() {
     }
   };
 
+  const handleConsolidatedDonorStatusChange = async (donor, status) => {
+    if (!donor || status !== "applied") {
+      return;
+    }
+
+    const changedMonths = donor.months.filter(
+      (month) => month.abatementStatus !== status,
+    );
+
+    if (changedMonths.length === 0) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setUpdatingDonorId(donor.donorId);
+      await updateAbatementStatuses({
+        summaryIds: changedMonths.map((month) => month.id),
+        status,
+      });
+      await loadSummaries();
+      const message = `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como realizado.`;
+      setSuccessMessage(message);
+      setSuccessAction({
+        label: "Desfazer",
+        onAction: () =>
+          handleUndoStatusChanges({
+            changes: changedMonths.map((month) => ({
+              summaryId: month.id,
+              status: month.abatementStatus,
+            })),
+            donorId: donor.donorId,
+            message: "Abatimentos do doador restaurados como pendentes.",
+          }),
+      });
+    } catch (err) {
+      console.error(
+        "Erro ao atualizar abatimentos do doador:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(
+        getErrorMessage(err, "Nao foi possivel atualizar os abatimentos do doador."),
+      );
+    } finally {
+      setUpdatingDonorId("");
+    }
+  };
+
   const handleExport = async () => {
+    setSuccessAction(null);
+
     if (!hasSelectedReferenceMonth) {
       setSuccessMessage(
         "Exportando a visão geral. Se quiser um mês específico, selecione um mês antes.",
@@ -188,6 +371,7 @@ export default function Monthly() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsExporting(true);
       const result = await monthlyOperation.run(
         () => exportMonthlySummariesCsv(filters),
@@ -213,12 +397,12 @@ export default function Monthly() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsExportingPdf(true);
       const result = await monthlyOperation.run(
         () => exportDonationReportPdf(filters),
         {
           loadingMessage: "Gerando PDFs por demanda...",
-          successMessage: "PDFs gerados com sucesso.",
         },
       );
       if (result.archiveName) {
@@ -253,15 +437,76 @@ export default function Monthly() {
     }));
   };
 
+  const handleSelectImportedMonth = (referenceMonth) => {
+    if (!referenceMonth) {
+      setFilters({ ...INITIAL_MONTHLY_FILTERS });
+      return;
+    }
+
+    setFilters((current) => ({
+      ...current,
+      referenceMonth,
+      donorId: "",
+      cpf: "",
+      demand: "",
+    }));
+  };
+
   const totalAbatement = summaries.reduce(
     (accumulator, item) => accumulator + item.abatementAmount,
     0,
   );
+  const pendingSummaries = useMemo(
+    () =>
+      summaries.filter(
+        (summary) =>
+          summary.hasDonationsInMonth && summary.abatementStatus !== "applied",
+      ),
+    [summaries],
+  );
+  const totalPendingAbatement = pendingSummaries.reduce(
+    (accumulator, item) => accumulator + item.abatementAmount,
+    0,
+  );
+  const consolidatedPendingDonors = useMemo(() => {
+    const donorsById = new Map();
+
+    for (const summary of pendingSummaries) {
+      const current = donorsById.get(summary.donorId) ?? {
+        donorId: summary.donorId,
+        donorName: summary.donorName,
+        donorType: summary.donorType,
+        cpf: summary.cpf,
+        demand: summary.demand,
+        months: [],
+        totalPending: 0,
+      };
+
+      current.months.push({
+        id: summary.id,
+        referenceMonth: summary.referenceMonth,
+        abatementAmount: summary.abatementAmount,
+        abatementStatus: summary.abatementStatus,
+      });
+      current.totalPending += summary.abatementAmount;
+      donorsById.set(summary.donorId, current);
+    }
+
+    return Array.from(donorsById.values())
+      .map((donor) => ({
+        ...donor,
+        months: donor.months.sort((left, right) =>
+          left.referenceMonth.localeCompare(right.referenceMonth),
+        ),
+      }))
+      .sort((left, right) => right.totalPending - left.totalPending);
+  }, [pendingSummaries]);
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
   );
   const isRefreshingMonthlyData =
     isLoading && (availableImports.length > 0 || summaries.length > 0);
+  const showRefreshingMonthlyData = useDelayedLoading(isRefreshingMonthlyData);
   const monthlyPagination = usePagination(summaries, {
     initialPageSize: 25,
   });
@@ -293,9 +538,13 @@ export default function Monthly() {
       },
       {
         icon: MonthlyIcon,
-        label: "Total filtrado",
-        value: formatCurrency(totalAbatement),
-        helper: "Somatório dos abatimentos exibidos abaixo.",
+        label: hasSelectedReferenceMonth ? "Total filtrado" : "Total pendente",
+        value: formatCurrency(
+          hasSelectedReferenceMonth ? totalAbatement : totalPendingAbatement,
+        ),
+        helper: hasSelectedReferenceMonth
+          ? "Somatório dos abatimentos exibidos abaixo."
+          : "Soma dos abatimentos ainda pendentes em todos os meses.",
       },
     ];
 
@@ -329,6 +578,7 @@ export default function Monthly() {
     notDonatedCount,
     summaries.length,
     totalAbatement,
+    totalPendingAbatement,
   ]);
 
   if (isLoading && !availableImports.length && !error) {
@@ -357,14 +607,19 @@ export default function Monthly() {
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage
         message={
-          isRefreshingMonthlyData
+          showRefreshingMonthlyData
             ? "Atualizando a gestão mensal com os dados mais recentes..."
             : ""
         }
         tone="info"
         persistent
       />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       <SectionCard
         title="Resumo mensal"
@@ -378,89 +633,11 @@ export default function Monthly() {
             />
           </div>
         ) : (
-          <div className="mb-5 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-            <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text-main)]">
-                  Meses importados
-                </p>
-              </div>
-              <p className="text-xs text-[var(--muted)]">
-                {availableImports.length} mês(es) com planilha processada
-              </p>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {availableImports.map((item) => {
-                const isSelected =
-                  item.referenceMonth.slice(0, 7) === filters.referenceMonth;
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      if (isSelected) {
-                        setFilters({ ...INITIAL_MONTHLY_FILTERS });
-                        return;
-                      }
-
-                      setFilters((current) => ({
-                        ...current,
-                        referenceMonth: item.referenceMonth.slice(0, 7),
-                        donorId: "",
-                        cpf: "",
-                        demand: "",
-                      }));
-                    }}
-                    className={`rounded-md border p-4 text-left transition ${
-                      isSelected
-                        ? "border-[var(--accent)] bg-[var(--surface-elevated)]"
-                        : "border-[var(--line)] bg-[var(--surface-strong)] hover:border-[var(--line-strong)]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-[var(--text-main)]">
-                          {formatMonthYear(item.referenceMonth)}
-                        </p>
-                        <p className="mt-1 text-sm text-[var(--muted)]">
-                          {item.matchedDonors} doador(es) que doaram
-                        </p>
-                      </div>
-                      <span
-                        className={`rounded-md px-2 py-1 text-xs font-medium ${
-                          isSelected
-                            ? "bg-[color:var(--accent-soft)] text-[var(--accent)]"
-                            : "bg-[color:var(--surface-muted)] text-[var(--text-soft)]"
-                        }`}
-                      >
-                        {isSelected ? "Fechar" : "Ver"}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 space-y-1 text-sm text-[var(--muted)]">
-                      <p className="break-all">
-                        Arquivo: <span className="font-medium">{item.fileName}</span>
-                      </p>
-                      <p>
-                        Valor por nota:{" "}
-                        <span className="font-medium">
-                          {formatCurrency(item.valuePerNote)}
-                        </span>
-                      </p>
-                      <p>
-                        Importado em{" "}
-                        <span className="font-medium">
-                          {formatDatePtBR(item.importedAt)}
-                        </span>
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ImportedMonthsCarousel
+            imports={availableImports}
+            selectedReferenceMonth={filters.referenceMonth}
+            onSelectMonth={handleSelectImportedMonth}
+          />
         )}
 
         <MonthlySummaryToolbar
@@ -480,7 +657,11 @@ export default function Monthly() {
           </p>
         ) : null}
 
-        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div
+          className={`mb-5 grid gap-3 md:grid-cols-2 ${
+            hasSelectedReferenceMonth ? "xl:grid-cols-5" : "xl:grid-cols-3"
+          }`}
+        >
           <MonthInput
             name="referenceMonth"
             value={filters.referenceMonth}
@@ -497,23 +678,26 @@ export default function Monthly() {
             searchPlaceholder="Buscar doador..."
           />
 
-          <SelectInput
-            name="donationActivity"
-            value={filters.donationActivity}
-            onChange={handleFilterChange}
-            options={DONATION_ACTIVITY_OPTIONS}
-            placeholder="Todos os doadores"
-            disabled={!hasSelectedReferenceMonth}
-          />
+          {hasSelectedReferenceMonth ? (
+            <SelectInput
+              name="donationActivity"
+              value={filters.donationActivity}
+              onChange={handleFilterChange}
+              options={DONATION_ACTIVITY_OPTIONS}
+              placeholder="Todos os doadores"
+            />
+          ) : null}
 
-          <SelectInput
-            name="abatementStatus"
-            value={filters.abatementStatus}
-            onChange={handleFilterChange}
-            options={ABATEMENT_STATUS_OPTIONS}
-            placeholder="Todos os status"
-            disabled={isNotDonatedFilterActive}
-          />
+          {hasSelectedReferenceMonth ? (
+            <SelectInput
+              name="abatementStatus"
+              value={filters.abatementStatus}
+              onChange={handleFilterChange}
+              options={ABATEMENT_STATUS_OPTIONS}
+              placeholder="Todos os status"
+              disabled={isNotDonatedFilterActive}
+            />
+          ) : null}
 
           <SelectInput
             name="abatementSort"
@@ -546,7 +730,16 @@ export default function Monthly() {
           />
         </div>
 
-        {isRefreshingMonthlyData && summaries.length === 0 ? (
+        {!hasSelectedReferenceMonth ? (
+          <ConsolidatedPendingDonors
+            donors={consolidatedPendingDonors}
+            onOpenDonor={handleOpenDonorProfile}
+            onStatusChange={handleConsolidatedDonorStatusChange}
+            updatingDonorId={updatingDonorId}
+          />
+        ) : null}
+
+        {!hasSelectedReferenceMonth ? null : showRefreshingMonthlyData && summaries.length === 0 ? (
           <SkeletonRows rows={4} className="mb-5" />
         ) : summaries.length === 0 ? (
           <EmptyState
@@ -582,9 +775,7 @@ export default function Monthly() {
                     key={summary.id}
                     summary={summary}
                     isUpdating={updatingSummaryId === summary.id}
-                    onNavigate={(donorId) =>
-                      navigate(`/doadores/${encodeURIComponent(donorId)}`)
-                    }
+                    onNavigate={handleOpenDonorProfile}
                     onStatusChange={handleStatusChange}
                     showReferenceMonth={!hasSelectedReferenceMonth}
                   />
@@ -605,9 +796,7 @@ export default function Monthly() {
                     key={summary.id}
                     summary={summary}
                     isUpdating={updatingSummaryId === summary.id}
-                    onNavigate={(donorId) =>
-                      navigate(`/doadores/${encodeURIComponent(donorId)}`)
-                    }
+                    onNavigate={handleOpenDonorProfile}
                     onStatusChange={handleStatusChange}
                     showReferenceMonth={!hasSelectedReferenceMonth}
                   />

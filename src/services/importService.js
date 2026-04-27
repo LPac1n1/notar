@@ -663,6 +663,7 @@ export async function deleteImport(importId) {
     FROM monthly_donor_summary
     WHERE import_id = '${escapeSqlString(importId)}'
   `);
+  const trashItemId = nanoid();
 
   await runInTransaction(async () => {
     await execute(`
@@ -675,7 +676,7 @@ export async function deleteImport(importId) {
         deleted_at
       )
       VALUES (
-        '${escapeSqlString(nanoid())}',
+        '${escapeSqlString(trashItemId)}',
         'import',
         '${escapeSqlString(importId)}',
         '${escapeSqlString(importRows[0].file_name)}',
@@ -703,6 +704,8 @@ export async function deleteImport(importId) {
       WHERE id = '${escapeSqlString(importId)}'
     `);
   });
+
+  return trashItemId;
 }
 
 export async function reconcileImport(importId, { emitChange = true } = {}) {

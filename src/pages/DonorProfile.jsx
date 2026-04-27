@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Button from "../components/ui/Button";
+import CopyableValue from "../components/ui/CopyableValue";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -16,6 +17,7 @@ import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
 export default function DonorProfile() {
   const { donorId = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +61,22 @@ export default function DonorProfile() {
 
   useDatabaseChangeEffect(loadProfile);
 
+  const backTarget = location.state?.from ?? {
+    label: "Voltar para doadores",
+    pathname: "/doadores",
+    state: null,
+  };
+  const handleBack = () => {
+    navigate(backTarget.pathname, {
+      state: backTarget.state ?? null,
+    });
+  };
+  const navigateToRelatedDonor = (nextDonorId) => {
+    navigate(`/doadores/${encodeURIComponent(nextDonorId)}`, {
+      state: location.state,
+    });
+  };
+
   if (isLoading && !profile && !error) {
     return (
       <div>
@@ -84,8 +102,8 @@ export default function DonorProfile() {
           className="mb-6"
         />
         <FeedbackMessage message={error} tone="error" />
-        <Button variant="subtle" onClick={() => navigate("/doadores")}>
-          Voltar para doadores
+        <Button variant="subtle" onClick={handleBack}>
+          {backTarget.label}
         </Button>
       </div>
     );
@@ -96,7 +114,15 @@ export default function DonorProfile() {
   return (
     <div>
       <PageHeader
-        title={donor.name}
+        title={
+          <CopyableValue
+            className="flex-wrap"
+            copyLabel="Copiar nome"
+            value={donor.name}
+          >
+            <span>{donor.name}</span>
+          </CopyableValue>
+        }
         subtitle="Perfil completo do doador, com abatimentos separados e vínculos informativos."
         className="mb-6"
       />
@@ -105,10 +131,10 @@ export default function DonorProfile() {
       <div className="mb-6 flex flex-wrap gap-3">
         <Button
           variant="subtle"
-          onClick={() => navigate("/doadores")}
+          onClick={handleBack}
           leftIcon={<BackIcon className="h-4 w-4" />}
         >
-          Voltar para doadores
+          {backTarget.label}
         </Button>
       </div>
 
@@ -121,7 +147,14 @@ export default function DonorProfile() {
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">CPF</p>
-          <p className="mt-1 font-semibold text-[var(--text-main)]">{donor.cpf}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <CopyableValue
+              copyLabel="Copiar CPF"
+              value={donor.cpf}
+            >
+              <span className="font-semibold text-[var(--text-main)]">{donor.cpf}</span>
+            </CopyableValue>
+          </div>
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Demanda</p>
@@ -140,29 +173,59 @@ export default function DonorProfile() {
       {donor.donorType === "auxiliary" ? (
         <SectionCard title="Vinculado a" className="mb-6">
           {donor.holderDonorId ? (
-            <button
-              type="button"
-              onClick={() => navigate(`/doadores/${donor.holderDonorId}`)}
-              className="grid w-full gap-3 rounded-md border border-[var(--line-strong)] bg-[var(--surface-elevated)] p-4 text-left text-[var(--text-main)] transition-colors hover:border-[var(--accent)] md:grid-cols-[1fr_auto]"
-            >
+            <div className="grid gap-3 rounded-md border border-[var(--line-strong)] bg-[var(--surface-elevated)] p-4 text-[var(--text-main)] md:grid-cols-[1fr_auto]">
               <div>
                 <p className="text-sm text-[var(--muted)]">Titular</p>
-                <p className="mt-1 font-semibold">{donor.holderName}</p>
-                <p className="text-sm text-[var(--muted)]">{donor.holderCpf}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <CopyableValue
+                    copyLabel="Copiar nome"
+                    value={donor.holderName}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigateToRelatedDonor(donor.holderDonorId)}
+                      className="text-left font-semibold underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                    >
+                      {donor.holderName}
+                    </button>
+                  </CopyableValue>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <CopyableValue
+                    copyLabel="Copiar CPF"
+                    value={donor.holderCpf}
+                  >
+                    <span>{donor.holderCpf}</span>
+                  </CopyableValue>
+                </div>
               </div>
               <div className="flex items-start md:justify-end">
                 <StatusBadge status="holder" />
               </div>
-            </button>
+            </div>
           ) : donor.holderName ? (
             <div className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_auto]">
               <div>
                 <p className="text-sm text-[var(--muted)]">Pessoa vinculada</p>
-                <p className="mt-1 font-semibold text-[var(--text-main)]">
-                  {donor.holderName}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <CopyableValue
+                    copyLabel="Copiar nome"
+                    value={donor.holderName}
+                  >
+                    <span className="font-semibold text-[var(--text-main)]">
+                      {donor.holderName}
+                    </span>
+                  </CopyableValue>
+                </div>
                 {donor.holderCpf ? (
-                  <p className="text-sm text-[var(--muted)]">{donor.holderCpf}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                    <CopyableValue
+                      copyLabel="Copiar CPF"
+                      value={donor.holderCpf}
+                    >
+                      <span>{donor.holderCpf}</span>
+                    </CopyableValue>
+                  </div>
                 ) : null}
                 <p className="mt-2 text-sm text-[var(--muted)]">
                   Esta pessoa foi cadastrada apenas para referência e ainda não
@@ -193,20 +256,34 @@ export default function DonorProfile() {
           ) : (
             <div className="space-y-3">
               {profile.auxiliaryDonors.map((auxiliary) => (
-                <button
+                <div
                   key={auxiliary.id}
-                  type="button"
-                  onClick={() => navigate(`/doadores/${auxiliary.id}`)}
-                  className="grid w-full gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-left transition-colors hover:border-[var(--accent)] md:grid-cols-[1fr_auto]"
+                  className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_auto]"
                 >
                   <div>
-                    <p className="font-semibold text-[var(--text-main)]">
-                      {auxiliary.name}
-                    </p>
-                    <p className="text-sm text-[var(--muted)]">{auxiliary.cpf}</p>
+                    <CopyableValue
+                      copyLabel="Copiar nome"
+                      value={auxiliary.name}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => navigateToRelatedDonor(auxiliary.id)}
+                        className="text-left font-semibold text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+                      >
+                        {auxiliary.name}
+                      </button>
+                    </CopyableValue>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                      <CopyableValue
+                        copyLabel="Copiar CPF"
+                        value={auxiliary.cpf}
+                      >
+                        <span>{auxiliary.cpf}</span>
+                      </CopyableValue>
+                    </div>
                   </div>
                   <StatusBadge status="auxiliary" />
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -251,8 +328,20 @@ export default function DonorProfile() {
               key={source.id}
               className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
             >
-              <p className="font-semibold text-[var(--text-main)]">{source.name}</p>
-              <p className="text-sm text-[var(--muted)]">{source.cpf}</p>
+              <CopyableValue
+                copyLabel="Copiar nome"
+                value={source.name}
+              >
+                <span className="font-semibold text-[var(--text-main)]">{source.name}</span>
+              </CopyableValue>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <CopyableValue
+                  copyLabel="Copiar CPF"
+                  value={source.cpf}
+                >
+                  <span>{source.cpf}</span>
+                </CopyableValue>
+              </div>
               <p className="text-sm text-[var(--muted)]">
                 Início: {source.donationStartDate || "Nao informado"} •{" "}
                 {source.totalNotes} nota(s)

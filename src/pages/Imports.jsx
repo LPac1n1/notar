@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -23,6 +23,7 @@ import {
   prepareImportPreview,
   processImportedFile,
 } from "../services/importService";
+import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useAsync } from "../hooks/useAsync";
 import { formatCpf } from "../utils/cpf";
@@ -48,6 +49,7 @@ const INITIAL_CPF_FILTERS = {
 };
 
 export default function Imports() {
+  const location = useLocation();
   const [imports, setImports] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
   const [cpfSummary, setCpfSummary] = useState([]);
@@ -61,12 +63,15 @@ export default function Imports() {
   const [fileInputKey, setFileInputKey] = useState(0);
   const [importFilters, setImportFilters] = useState({
     ...INITIAL_IMPORT_FILTERS,
+    ...(location.state?.importFilters ?? {}),
   });
   const [cpfFilters, setCpfFilters] = useState({
     ...INITIAL_CPF_FILTERS,
+    ...(location.state?.cpfFilters ?? {}),
   });
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportHistoryRefreshing, setIsImportHistoryRefreshing] = useState(false);
   const [isCpfSummaryRefreshing, setIsCpfSummaryRefreshing] = useState(false);
@@ -89,12 +94,28 @@ export default function Imports() {
   const debouncedCpfFilters = useDebouncedValue(cpfFilters, 180);
   const importHistoryRequestIdRef = useRef(0);
   const cpfSummaryRequestIdRef = useRef(0);
+  const restoredScrollTopRef = useRef(location.state?.importsScrollTop ?? null);
+  const initialImportFiltersRef = useRef(importFilters);
+  const initialCpfFiltersRef = useRef(cpfFilters);
   const hasInitializedRef = useRef(false);
   const importOperation = useAsync({ reportGlobal: true });
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
-      navigate(`/doadores/${encodeURIComponent(donorId)}`);
+      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+        state: {
+          from: {
+            label: "Voltar para importações",
+            pathname: "/importacoes",
+            state: {
+              importFilters,
+              cpfFilters,
+              importsScrollTop:
+                document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+            },
+          },
+        },
+      });
     }
   };
 
@@ -274,8 +295,8 @@ export default function Imports() {
         setError("");
         await Promise.all([
           loadAvailableImports(),
-          loadImportHistory({ ...INITIAL_IMPORT_FILTERS }),
-          loadCpfSummary({ ...INITIAL_CPF_FILTERS }),
+          loadImportHistory(initialImportFiltersRef.current),
+          loadCpfSummary(initialCpfFiltersRef.current),
         ]);
       } catch (err) {
         console.error(
@@ -328,6 +349,41 @@ export default function Imports() {
 
   useDatabaseChangeEffect(refreshImports);
 
+  const handleRestoreDeletedImport = useCallback(
+    async (trashItemId) => {
+      try {
+        setError("");
+        setSuccessMessage("");
+        setSuccessAction(null);
+        await restoreTrashItem(trashItemId);
+        await refreshImports();
+        setSuccessMessage("Importacao restaurada com sucesso.");
+      } catch (err) {
+        console.error(
+          "Erro ao restaurar importacao:",
+          getErrorMessage(err, "Erro desconhecido."),
+        );
+        setError(getErrorMessage(err, "Nao foi possivel restaurar a importacao."));
+      }
+    },
+    [refreshImports],
+  );
+
+  useEffect(() => {
+    if (isLoading || restoredScrollTopRef.current === null) {
+      return;
+    }
+
+    const scrollTop = restoredScrollTopRef.current;
+    restoredScrollTopRef.current = null;
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("app-scroll-container")
+        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+    });
+  }, [isLoading]);
+
   const handleImportFilterChange = (event) => {
     const { name, value } = event.target;
     setImportFilters((current) => ({
@@ -368,11 +424,13 @@ export default function Imports() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsPreviewLoading(true);
       const preview = await importOperation.run(
         () => prepareImportPreview(file),
         {
           loadingMessage: "Lendo planilha de importacao...",
+          reportGlobal: false,
         },
       );
       setSelectedFile(file);
@@ -434,6 +492,7 @@ export default function Imports() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsImporting(true);
       await importOperation.run(
         () =>
@@ -446,7 +505,6 @@ export default function Imports() {
           }),
         {
           loadingMessage: "Processando importacao e conciliando CPFs...",
-          successMessage: "Importacao processada e telas atualizadas.",
         },
       );
       await Promise.all([
@@ -481,12 +539,12 @@ export default function Imports() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setDeletingImportId(importPendingRemoval.id);
-      await importOperation.run(
+      const trashItemId = await importOperation.run(
         () => deleteImport(importPendingRemoval.id),
         {
           loadingMessage: "Enviando importacao para a lixeira...",
-          successMessage: "Importacao enviada para a lixeira.",
         },
       );
       await Promise.all([
@@ -496,6 +554,12 @@ export default function Imports() {
       ]);
       setImportPendingRemoval(null);
       setSuccessMessage("Importacao enviada para a lixeira com sucesso.");
+      if (trashItemId) {
+        setSuccessAction({
+          label: "Desfazer",
+          onAction: () => handleRestoreDeletedImport(trashItemId),
+        });
+      }
     } catch (err) {
       console.error(
         "Erro ao excluir importacao:",
@@ -511,6 +575,7 @@ export default function Imports() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsExportingImports(true);
       const result = await importOperation.run(
         () => exportImportsCsv(importFilters),
@@ -536,6 +601,7 @@ export default function Imports() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsExportingCpfSummary(true);
       const result = await importOperation.run(
         () => exportImportCpfSummaryCsv(cpfFilters),
@@ -588,12 +654,25 @@ export default function Imports() {
         subtitle="Planilhas importadas e CPFs encontrados."
         className="mb-6"
       />
-      <FeedbackMessage message={error} tone="error" />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        message={isImportModalOpen || importPendingRemoval ? "" : error}
+        tone="error"
+      />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       <div className="mb-6">
         <Button
-          onClick={() => setIsImportModalOpen(true)}
+          onClick={() => {
+            setError("");
+            setSuccessMessage("");
+            setSuccessAction(null);
+            setIsImportModalOpen(true);
+          }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
           Nova importação
@@ -603,6 +682,7 @@ export default function Imports() {
       <AnimatePresence>
         {isImportModalOpen ? (
           <ImportUploadModal
+            errorMessage={error}
             fileInputKey={fileInputKey}
             isImporting={isImporting}
             isPreviewLoading={isPreviewLoading}
@@ -666,6 +746,7 @@ export default function Imports() {
             title="Excluir importação"
             description={`Tem certeza de que deseja excluir a importação ${importPendingRemoval.fileName}? Ela ficará disponível na lixeira para restauração.`}
             confirmLabel="Excluir importação"
+            feedbackMessage={error}
             isLoading={deletingImportId === importPendingRemoval.id}
             onCancel={() => setImportPendingRemoval(null)}
             onConfirm={handleDeleteImport}

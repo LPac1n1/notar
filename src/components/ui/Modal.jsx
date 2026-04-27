@@ -86,7 +86,12 @@ export default function Modal({
   const descriptionId = useId();
   const canClose = typeof onClose === "function";
   const dialogRef = useRef(null);
+  const onCloseRef = useRef(onClose);
   const previousActiveElementRef = useRef(null);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     previousActiveElementRef.current =
@@ -102,7 +107,7 @@ export default function Modal({
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && canClose) {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
 
@@ -146,7 +151,7 @@ export default function Modal({
         previousActiveElementRef.current.focus();
       }
     };
-  }, [canClose, onClose]);
+  }, [canClose]);
 
   return createPortal(
     <Motion.div

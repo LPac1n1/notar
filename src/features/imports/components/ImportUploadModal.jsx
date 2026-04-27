@@ -1,6 +1,5 @@
 import Button from "../../../components/ui/Button";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
-import LoadingScreen from "../../../components/ui/LoadingScreen";
 import Modal from "../../../components/ui/Modal";
 import MonthInput from "../../../components/ui/MonthInput";
 import SelectInput from "../../../components/ui/SelectInput";
@@ -8,9 +7,9 @@ import TextInput from "../../../components/ui/TextInput";
 import ImportPreviewTable from "./ImportPreviewTable";
 
 export default function ImportUploadModal({
+  errorMessage = "",
   fileInputKey,
   isImporting,
-  isPreviewLoading,
   onChange,
   onClose,
   onPreviewImport,
@@ -66,11 +65,15 @@ export default function ImportUploadModal({
         />
       </div>
 
+      <FeedbackMessage
+        tone="error"
+        message={errorMessage}
+        persistent
+      />
+
       <Button
         onClick={onProcessImport}
         disabled={isImporting || !previewData || !uploadForm.valuePerNote}
-        isLoading={isImporting}
-        loadingLabel="Processando..."
       >
         Processar importação
       </Button>
@@ -91,14 +94,6 @@ export default function ImportUploadModal({
             />
           ) : null}
           <ImportPreviewTable previewData={previewData} />
-        </div>
-      ) : isPreviewLoading ? (
-        <div className="mt-6">
-          <LoadingScreen
-            compact
-            title="Lendo a planilha"
-            description="Analisando colunas e montando a pré-visualização."
-          />
         </div>
       ) : null}
     </Modal>

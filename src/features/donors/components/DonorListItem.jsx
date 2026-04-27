@@ -1,4 +1,5 @@
 import Button from "../../../components/ui/Button";
+import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import {
   EditIcon,
@@ -16,17 +17,30 @@ export default function DonorListItem({
     <li className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0 flex-1">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenProfile(donor.id)}
-            className="text-left font-semibold text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--text-main)] hover:underline"
+          <CopyableValue
+            copyLabel="Copiar nome"
+            value={donor.name}
           >
-            {donor.name}
-          </button>
+            <button
+              type="button"
+              onClick={() => onOpenProfile(donor.id)}
+              className="text-left font-semibold text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--text-main)] hover:underline"
+            >
+              {donor.name}
+            </button>
+          </CopyableValue>
           <StatusBadge status={donor.donorType} />
         </div>
 
-        <p className="text-sm text-[var(--muted)]">CPF: {donor.cpf}</p>
+        <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+          <span>CPF:</span>
+          <CopyableValue
+            copyLabel="Copiar CPF"
+            value={donor.cpf}
+          >
+            <span>{donor.cpf}</span>
+          </CopyableValue>
+        </div>
         <p className="text-sm text-[var(--muted)]">
           Demanda: {donor.demand || "Nao informada"}
         </p>
@@ -38,7 +52,16 @@ export default function DonorListItem({
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-[var(--muted)]">Vinculado a</span>
             <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1 font-medium text-[var(--text-soft)]">
-              {donor.holderName || "Sem vínculo"}
+              {donor.holderName ? (
+                <CopyableValue
+                  copyLabel="Copiar nome"
+                  value={donor.holderName}
+                >
+                  <span>{donor.holderName}</span>
+                </CopyableValue>
+              ) : (
+                "Sem vínculo"
+              )}
             </span>
             {donor.holderName ? (
               !donor.holderIsActiveDonor ? (
@@ -48,9 +71,13 @@ export default function DonorListItem({
               )
             ) : null}
             {donor.holderCpf ? (
-              <span className="text-xs text-[var(--muted)]">
-                {donor.holderCpf}
-              </span>
+              <CopyableValue
+                className="text-xs text-[var(--muted)]"
+                copyLabel="Copiar CPF"
+                value={donor.holderCpf}
+              >
+                <span>{donor.holderCpf}</span>
+              </CopyableValue>
             ) : null}
           </div>
         ) : donor.auxiliaryDonors.length > 0 ? (
@@ -63,7 +90,12 @@ export default function DonorListItem({
                 key={`${donor.id}-${auxiliary.cpf}`}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs text-[var(--text-soft)]"
               >
-                {auxiliary.name}
+                <CopyableValue
+                  copyLabel="Copiar nome"
+                  value={auxiliary.name}
+                >
+                  <span>{auxiliary.name}</span>
+                </CopyableValue>
               </span>
             ))}
             {donor.auxiliaryDonors.length > 3 ? (

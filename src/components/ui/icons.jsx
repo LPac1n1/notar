@@ -7,6 +7,7 @@ export {
   ChevronRight as ChevronRightIcon,
   CircleAlert as DisconnectedIcon,
   CircleCheckBig as ConnectedIcon,
+  Copy as CopyIcon,
   Database as StorageIcon,
   Download as DownloadIcon,
   FileSpreadsheet as ImportIcon,

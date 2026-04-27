@@ -14,6 +14,7 @@ const INITIAL_STATE = {
 export function useAsync({
   errorMessage = "A operacao nao foi concluida.",
   loadingMessage = "Processando",
+  reportFinal = false,
   reportGlobal = false,
   successMessage = "",
 } = {}) {
@@ -29,6 +30,7 @@ export function useAsync({
       const nextLoadingMessage = options.loadingMessage ?? loadingMessage;
       const nextSuccessMessage = options.successMessage ?? successMessage;
       const nextErrorMessage = options.errorMessage ?? errorMessage;
+      const shouldReportFinal = options.reportFinal ?? reportFinal;
       const operationId = nextReportGlobal
         ? startAsyncOperation({
             label: nextLoadingMessage,
@@ -53,7 +55,7 @@ export function useAsync({
 
         if (operationId) {
           finishAsyncOperation(operationId, {
-            message: nextSuccessMessage,
+            message: shouldReportFinal ? nextSuccessMessage : "",
             status: "success",
           });
         }
@@ -70,7 +72,7 @@ export function useAsync({
 
         if (operationId) {
           finishAsyncOperation(operationId, {
-            message,
+            message: shouldReportFinal ? message : "",
             status: "error",
           });
         }
@@ -78,7 +80,7 @@ export function useAsync({
         throw error;
       }
     },
-    [errorMessage, loadingMessage, reportGlobal, successMessage],
+    [errorMessage, loadingMessage, reportFinal, reportGlobal, successMessage],
   );
 
   return {

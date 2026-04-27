@@ -166,7 +166,7 @@ export async function deleteDemand(id) {
     throw new Error("Nao e possivel remover uma demanda vinculada a doadores.");
   }
 
-  await createTrashItem({
+  const trashItemId = await createTrashItem({
     entityType: "demand",
     entityId: id,
     label: demandRows[0].name,
@@ -179,4 +179,6 @@ export async function deleteDemand(id) {
     DELETE FROM demands
     WHERE id = '${escapeSqlString(id)}'
   `);
+
+  return trashItemId;
 }

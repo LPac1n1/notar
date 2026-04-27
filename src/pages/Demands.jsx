@@ -22,6 +22,7 @@ import {
   listDemands,
   updateDemand,
 } from "../services/demandService";
+import { restoreTrashItem } from "../services/trashService";
 import {
   DEFAULT_DEMAND_COLOR,
   getContrastTextColor,
@@ -54,6 +55,7 @@ export default function Demands() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const demandsRequestIdRef = useRef(0);
   const demandsPagination = usePagination(demands, {
     initialPageSize: 25,
@@ -106,6 +108,26 @@ export default function Demands() {
 
   useDatabaseChangeEffect(refreshDemands);
 
+  const handleRestoreDeletedDemand = useCallback(
+    async (trashItemId) => {
+      try {
+        setError("");
+        setSuccessMessage("");
+        setSuccessAction(null);
+        await restoreTrashItem(trashItemId);
+        await loadDemands(filters);
+        setSuccessMessage("Demanda restaurada com sucesso.");
+      } catch (err) {
+        console.error(
+          "Erro ao restaurar demanda:",
+          getErrorMessage(err, "Erro desconhecido."),
+        );
+        setError(getErrorMessage(err, "Nao foi possivel restaurar a demanda."));
+      }
+    },
+    [filters, loadDemands],
+  );
+
   const handleFormChange = (setter) => (event) => {
     const { name: fieldName, value } = event.target;
 
@@ -121,12 +143,13 @@ export default function Demands() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsSubmitting(true);
       await createDemand(createForm);
       setCreateForm({ ...EMPTY_DEMAND_FORM });
-      await loadDemands(filters);
       setIsCreateModalOpen(false);
       setSuccessMessage("Demanda cadastrada com sucesso.");
+      await loadDemands(filters);
     } catch (err) {
       console.error(
         "Erro ao adicionar demanda:",
@@ -143,6 +166,7 @@ export default function Demands() {
   const handleOpenEditModal = (demand) => {
     setError("");
     setSuccessMessage("");
+    setSuccessAction(null);
     setEditingDemand(demand);
     setEditForm({
       name: demand.name,
@@ -163,14 +187,15 @@ export default function Demands() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsSubmitting(true);
       await updateDemand({
         id: editingDemand.id,
         ...editForm,
       });
-      await loadDemands(filters);
       handleCloseEditModal();
       setSuccessMessage("Demanda atualizada com sucesso.");
+      await loadDemands(filters);
     } catch (err) {
       console.error(
         "Erro ao atualizar demanda:",
@@ -192,14 +217,21 @@ export default function Demands() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsDeleting(true);
-      await deleteDemand(demandPendingRemoval.id);
+      const trashItemId = await deleteDemand(demandPendingRemoval.id);
       await loadDemands(filters);
       if (editingDemand?.id === demandPendingRemoval.id) {
         handleCloseEditModal();
       }
       setDemandPendingRemoval(null);
       setSuccessMessage("Demanda enviada para a lixeira com sucesso.");
+      if (trashItemId) {
+        setSuccessAction({
+          label: "Desfazer",
+          onAction: () => handleRestoreDeletedDemand(trashItemId),
+        });
+      }
     } catch (err) {
       console.error(
         "Erro ao remover demanda:",
@@ -253,6 +285,9 @@ export default function Demands() {
       <div className="mb-6">
         <Button
           onClick={() => {
+            setError("");
+            setSuccessMessage("");
+            setSuccessAction(null);
             setCreateForm({ ...EMPTY_DEMAND_FORM });
             setIsCreateModalOpen(true);
           }}
@@ -280,8 +315,16 @@ export default function Demands() {
         </div>
       </SectionCard>
 
-      <FeedbackMessage message={error} tone="error" />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        message={isCreateModalOpen || editingDemand || demandPendingRemoval ? "" : error}
+        tone="error"
+      />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       {!isLoading && demands.length === 0 ? (
         <EmptyState
@@ -363,6 +406,7 @@ export default function Demands() {
             title="Adicionar demanda"
             description="Cadastre o nome da demanda."
             confirmLabel="Adicionar demanda"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onClose={() => {
               setCreateForm({ ...EMPTY_DEMAND_FORM });
@@ -396,6 +440,7 @@ export default function Demands() {
             onClose={handleCloseEditModal}
             onSubmit={handleSaveEdit}
             confirmLabel="Salvar alterações"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             size="md"
           >
@@ -422,6 +467,7 @@ export default function Demands() {
             title="Remover demanda"
             description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Ela ficará disponível na lixeira para restauração.`}
             confirmLabel="Remover demanda"
+            feedbackMessage={error}
             isLoading={isDeleting}
             onCancel={() => setDemandPendingRemoval(null)}
             onConfirm={handleConfirmRemove}

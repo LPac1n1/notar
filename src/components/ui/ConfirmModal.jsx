@@ -1,5 +1,6 @@
 import { CircleCheckBig, TriangleAlert } from "lucide-react";
 import Button from "./Button";
+import FeedbackMessage from "./FeedbackMessage";
 import Modal from "./Modal";
 import { LoadingIcon } from "./icons";
 
@@ -14,6 +15,9 @@ function ConfirmModalIcon({ tone }) {
 export default function ConfirmModal({
   confirmLabel = "Confirmar",
   description,
+  isDisabled = false,
+  feedbackMessage = "",
+  feedbackTone = "error",
   isLoading = false,
   loadingMessage = "",
   onCancel,
@@ -21,6 +25,8 @@ export default function ConfirmModal({
   title,
   tone = "danger",
 }) {
+  const areActionsDisabled = isDisabled || isLoading;
+
   return (
     <Modal
       title={title}
@@ -29,6 +35,12 @@ export default function ConfirmModal({
       onClose={isLoading ? undefined : onCancel}
       size="sm"
     >
+      <FeedbackMessage
+        message={feedbackMessage}
+        tone={feedbackTone}
+        persistent
+      />
+
       {isLoading && loadingMessage ? (
         <div
           role="status"
@@ -41,10 +53,10 @@ export default function ConfirmModal({
       ) : null}
 
       <div className="flex flex-wrap justify-end gap-3">
-        <Button variant="subtle" onClick={onCancel} disabled={isLoading}>
+        <Button variant="subtle" onClick={onCancel} disabled={areActionsDisabled}>
           Cancelar
         </Button>
-        <Button variant={tone} onClick={onConfirm} disabled={isLoading}>
+        <Button variant={tone} onClick={onConfirm} disabled={areActionsDisabled}>
           {isLoading ? "Confirmando..." : confirmLabel}
         </Button>
       </div>

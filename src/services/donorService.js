@@ -736,9 +736,10 @@ export async function deleteDonor(id) {
     FROM donor_cpf_links
     WHERE donor_id = '${escapeSqlString(id)}'
   `);
+  let trashItemId = "";
 
   await runInTransaction(async () => {
-    await createTrashItem({
+    trashItemId = await createTrashItem({
       entityType: "donor",
       entityId: id,
       label: donorRows[0].name,
@@ -779,6 +780,8 @@ export async function deleteDonor(id) {
 
   await syncAuxiliaryHolderDonorIds([donor.person_id]);
   await reconcileCpfChanges(cpfRows.map((row) => row.cpf));
+
+  return trashItemId;
 }
 
 export async function listDonorCpfLinks(donorId) {

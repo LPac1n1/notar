@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -25,6 +25,7 @@ import {
 } from "../services/donorService";
 import { exportDonorsCsv } from "../services/exportService";
 import { listPeople } from "../services/personService";
+import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
@@ -60,6 +61,7 @@ const DONOR_FORM_TYPE_OPTIONS = [
 ];
 
 export default function Donors() {
+  const location = useLocation();
   const [donors, setDonors] = useState([]);
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
@@ -68,7 +70,10 @@ export default function Donors() {
   const [editingDonor, setEditingDonor] = useState(null);
   const [donorPendingRemoval, setDonorPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [filters, setFilters] = useState({ ...INITIAL_DONOR_FILTERS });
+  const [filters, setFilters] = useState({
+    ...INITIAL_DONOR_FILTERS,
+    ...(location.state?.donorFilters ?? {}),
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,11 +81,33 @@ export default function Donors() {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
   const donorsPagination = usePagination(donors, { initialPageSize: 25 });
   const debouncedFilters = useDebouncedValue(filters, 180);
   const donorsRequestIdRef = useRef(0);
+  const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
+  const initialFiltersRef = useRef(filters);
   const hasInitializedRef = useRef(false);
+
+  const openDonorProfile = useCallback(
+    (donorId) => {
+      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+        state: {
+          from: {
+            label: "Voltar para doadores",
+            pathname: "/doadores",
+            state: {
+              donorFilters: filters,
+              donorScrollTop:
+                document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+            },
+          },
+        },
+      });
+    },
+    [filters, navigate],
+  );
 
   const donorFormDemandOptions = useMemo(
     () =>
@@ -199,7 +226,7 @@ export default function Donors() {
         setIsLoading(true);
         await Promise.all([
           loadSupportingData(),
-          loadDonors({ ...INITIAL_DONOR_FILTERS }, { showLoading: true }),
+          loadDonors(initialFiltersRef.current, { showLoading: true }),
         ]);
       } finally {
         hasInitializedRef.current = true;
@@ -223,6 +250,41 @@ export default function Donors() {
   }, [filters, loadDonors, loadSupportingData]);
 
   useDatabaseChangeEffect(refreshDonors);
+
+  const handleRestoreDeletedDonor = useCallback(
+    async (trashItemId) => {
+      try {
+        setError("");
+        setSuccessMessage("");
+        setSuccessAction(null);
+        await restoreTrashItem(trashItemId);
+        await refreshDonors();
+        setSuccessMessage("Doador restaurado com sucesso.");
+      } catch (err) {
+        console.error(
+          "Erro ao restaurar doador:",
+          getErrorMessage(err, "Erro desconhecido."),
+        );
+        setError(getErrorMessage(err, "Nao foi possivel restaurar o doador."));
+      }
+    },
+    [refreshDonors],
+  );
+
+  useEffect(() => {
+    if (isLoading || restoredScrollTopRef.current === null) {
+      return;
+    }
+
+    const scrollTop = restoredScrollTopRef.current;
+    restoredScrollTopRef.current = null;
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("app-scroll-container")
+        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+    });
+  }, [isLoading]);
 
   const handleFormChange = (setter) => (event) => {
     const { name, value } = event.target;
@@ -256,6 +318,7 @@ export default function Donors() {
   const handleOpenCreateModal = () => {
     setError("");
     setSuccessMessage("");
+    setSuccessAction(null);
     setCreateForm({ ...EMPTY_DONOR_FORM });
     setIsCreateModalOpen(true);
   };
@@ -269,6 +332,7 @@ export default function Donors() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsSubmitting(true);
       await createDonor({
         id: nanoid(),
@@ -279,14 +343,14 @@ export default function Donors() {
         donorType: createForm.donorType,
         holderPersonId: createForm.holderPersonId,
       });
-      await Promise.all([
-        loadSupportingData(),
-        loadDonors(filters),
-      ]);
       handleCloseCreateModal();
       setSuccessMessage(
         "Doador cadastrado e reconciliado com as importacoes existentes.",
       );
+      await Promise.all([
+        loadSupportingData(),
+        loadDonors(filters),
+      ]);
     } catch (err) {
       console.error(
         "Erro ao adicionar doador:",
@@ -301,6 +365,7 @@ export default function Donors() {
   const handleOpenEditModal = (donor) => {
     setError("");
     setSuccessMessage("");
+    setSuccessAction(null);
     setEditingDonor(donor);
     setEditForm({
       name: donor.name,
@@ -325,6 +390,7 @@ export default function Donors() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsSubmitting(true);
       await updateDonor({
         id: editingDonor.id,
@@ -335,14 +401,14 @@ export default function Donors() {
         donorType: editForm.donorType,
         holderPersonId: editForm.holderPersonId,
       });
-      await Promise.all([
-        loadSupportingData(),
-        loadDonors(filters),
-      ]);
       handleCloseEditModal();
       setSuccessMessage(
         "Doador atualizado e reconciliado com as importacoes existentes.",
       );
+      await Promise.all([
+        loadSupportingData(),
+        loadDonors(filters),
+      ]);
     } catch (err) {
       console.error(
         "Erro ao atualizar doador:",
@@ -362,14 +428,21 @@ export default function Donors() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsDeleting(true);
-      await deleteDonor(donorPendingRemoval.id);
+      const trashItemId = await deleteDonor(donorPendingRemoval.id);
       await Promise.all([
         loadSupportingData(),
         loadDonors(filters),
       ]);
       setDonorPendingRemoval(null);
       setSuccessMessage("Doador enviado para a lixeira com sucesso.");
+      if (trashItemId) {
+        setSuccessAction({
+          label: "Desfazer",
+          onAction: () => handleRestoreDeletedDonor(trashItemId),
+        });
+      }
     } catch (err) {
       console.error(
         "Erro ao remover doador:",
@@ -385,6 +458,7 @@ export default function Donors() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsExporting(true);
       const result = await exportDonorsCsv(filters);
       setSuccessMessage(`${result.rowCount} doador(es) exportado(s) em CSV.`);
@@ -492,8 +566,16 @@ export default function Donors() {
         </div>
       </SectionCard>
 
-      <FeedbackMessage message={error} tone="error" />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        message={isCreateModalOpen || editingDonor || donorPendingRemoval ? "" : error}
+        tone="error"
+      />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       {!isLoading && donors.length === 0 ? (
         <EmptyState
@@ -519,7 +601,7 @@ export default function Donors() {
               key={donor.id}
               donor={donor}
               onEdit={handleOpenEditModal}
-              onOpenProfile={(donorId) => navigate(`/doadores/${donorId}`)}
+              onOpenProfile={openDonorProfile}
               onRemove={setDonorPendingRemoval}
             />
           ))}
@@ -544,6 +626,7 @@ export default function Donors() {
             title="Adicionar doador"
             description="Cadastre titulares ou auxiliares com abatimento próprio."
             confirmLabel="Adicionar doador"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onClose={handleCloseCreateModal}
             onSubmit={handleAdd}
@@ -566,6 +649,7 @@ export default function Donors() {
             title="Editar doador"
             description="Atualize os dados do doador e seu vínculo informativo."
             confirmLabel="Salvar alterações"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onClose={handleCloseEditModal}
             onSubmit={handleSaveEdit}
@@ -588,6 +672,7 @@ export default function Donors() {
             title="Remover doador"
             description={`Tem certeza de que deseja remover ${donorPendingRemoval.name}? As importações ligadas ao CPF serão recalculadas.`}
             confirmLabel="Remover doador"
+            feedbackMessage={error}
             isLoading={isDeleting}
             onCancel={() => setDonorPendingRemoval(null)}
             onConfirm={handleConfirmRemove}

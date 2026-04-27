@@ -1,17 +1,37 @@
 import { motion as Motion } from "framer-motion";
+import { useDelayedLoading } from "../../hooks/useDelayedLoading";
 import { LoadingIcon } from "./icons";
 
 export default function LoadingScreen({
   title = "Carregando dados",
   description = "Preparando as informações do sistema para você.",
   compact = false,
+  delayMs = 420,
 }) {
+  const shouldShowLoader = useDelayedLoading(true, { delayMs });
+  const containerClassName = `rounded-md border border-[var(--line)] bg-[var(--surface-strong)] ${compact ? "p-5" : "min-h-[260px] p-6 md:p-8"}`.trim();
+
+  if (!shouldShowLoader) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className={`${containerClassName} opacity-0`}
+      />
+    );
+  }
+
   return (
-    <div
+    <Motion.div
       role="status"
       aria-live="polite"
       aria-busy="true"
-      className={`rounded-md border border-[var(--line)] bg-[var(--surface-strong)] ${compact ? "p-5" : "min-h-[260px] p-6 md:p-8"}`.trim()}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+      className={containerClassName}
     >
       <div className={`mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center ${compact ? "gap-3" : "gap-4"}`}>
         <div className="flex h-12 w-12 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)]">
@@ -48,6 +68,6 @@ export default function LoadingScreen({
           ))}
         </div>
       </div>
-    </div>
+    </Motion.div>
   );
 }

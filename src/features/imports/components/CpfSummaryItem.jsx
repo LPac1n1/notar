@@ -1,4 +1,5 @@
 import Button from "../../../components/ui/Button";
+import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { formatCpf } from "../../../utils/cpf";
 
@@ -10,15 +11,27 @@ export default function CpfSummaryItem({
   return (
     <div className="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_120px_160px_1fr]">
       <div>
-        <p className="font-medium">{formatCpf(item.cpf)}</p>
+        <CopyableValue
+          copyLabel="Copiar CPF"
+          value={formatCpf(item.cpf)}
+        >
+          <span className="font-medium">{formatCpf(item.cpf)}</span>
+        </CopyableValue>
         {item.isRegisteredDonor ? (
-          <button
-            type="button"
-            onClick={() => onOpenDonorProfile(item.matchedDonorId)}
-            className="mt-2 text-left text-sm font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
-          >
-            {item.donorName || item.sourceName || "CPF vinculado"}
-          </button>
+          <div className="mt-2">
+            <CopyableValue
+              copyLabel="Copiar nome"
+              value={item.donorName || item.sourceName || "CPF vinculado"}
+            >
+              <button
+                type="button"
+                onClick={() => onOpenDonorProfile(item.matchedDonorId)}
+                className="text-left text-sm font-medium text-[var(--text-soft)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+              >
+                {item.donorName || item.sourceName || "CPF vinculado"}
+              </button>
+            </CopyableValue>
+          </div>
         ) : (
           <p className="mt-2 text-sm text-[var(--muted)]">
             CPF ainda nao vinculado
@@ -30,13 +43,25 @@ export default function CpfSummaryItem({
             <StatusBadge status={item.donorType} />
             {item.sourceName && item.sourceName !== item.donorName ? (
               <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
-                CPF de {item.sourceName}
+                CPF de{" "}
+                <CopyableValue
+                  copyLabel="Copiar nome"
+                  value={item.sourceName}
+                >
+                  <span>{item.sourceName}</span>
+                </CopyableValue>
               </span>
             ) : null}
             {item.donorType === "auxiliary" && item.holderName ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
-                  Vinculado a: {item.holderName}
+                  Vinculado a:{" "}
+                  <CopyableValue
+                    copyLabel="Copiar nome"
+                    value={item.holderName}
+                  >
+                    <span>{item.holderName}</span>
+                  </CopyableValue>
                 </span>
                 {!item.holderIsActiveDonor ? (
                   <StatusBadge label="Pessoa de referência" tone="neutral" />

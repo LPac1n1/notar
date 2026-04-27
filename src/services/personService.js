@@ -339,7 +339,7 @@ export async function deletePerson(id) {
     throw new Error("Esta pessoa esta vinculada a auxiliares e nao pode ser removida agora.");
   }
 
-  await createTrashItem({
+  const trashItemId = await createTrashItem({
     entityType: "person",
     entityId: id,
     label: rows[0].name,
@@ -352,4 +352,6 @@ export async function deletePerson(id) {
     DELETE FROM people
     WHERE id = '${escapeSqlString(id)}'
   `);
+
+  return trashItemId;
 }

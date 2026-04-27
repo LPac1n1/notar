@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 
 function formatDisplayValue(value) {
   const text = String(value ?? "");
@@ -53,7 +53,9 @@ export default function MonthInput({
 }) {
   const generatedId = useId();
   const inputId = id || name || generatedId;
-  const [displayValue, setDisplayValue] = useState(formatDisplayValue(value));
+  const [draftValue, setDraftValue] = useState(formatDisplayValue(value));
+  const [isEditing, setIsEditing] = useState(false);
+  const displayValue = isEditing ? draftValue : formatDisplayValue(value);
   const hasInvalidFullValue =
     displayValue.length === 7 && !toIsoMonth(displayValue);
   const descriptionId = description ? `${inputId}-description` : "";
@@ -62,13 +64,9 @@ export default function MonthInput({
     .filter(Boolean)
     .join(" ");
 
-  useEffect(() => {
-    setDisplayValue(formatDisplayValue(value));
-  }, [value]);
-
   const handleChange = (event) => {
     const nextDisplayValue = maskMonth(event.target.value);
-    setDisplayValue(nextDisplayValue);
+    setDraftValue(nextDisplayValue);
 
     if (!nextDisplayValue) {
       onChange?.({ target: { name, value: "" } });
@@ -103,7 +101,15 @@ export default function MonthInput({
         name={name}
         placeholder={placeholder}
         value={displayValue}
+        onBlur={() => {
+          setIsEditing(false);
+          setDraftValue(formatDisplayValue(value));
+        }}
         onChange={handleChange}
+        onFocus={() => {
+          setIsEditing(true);
+          setDraftValue(formatDisplayValue(value));
+        }}
         aria-describedby={ariaDescribedBy || undefined}
         aria-invalid={hasInvalidFullValue}
         className={`w-full rounded-md border bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:bg-[var(--surface-muted)] ${

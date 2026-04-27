@@ -146,7 +146,12 @@ export default function Trash() {
         subtitle={`${trashItems.length} item(ns) disponível(is) para restauração.`}
         className="mb-6"
       />
-      <FeedbackMessage message={error} tone="error" />
+      <FeedbackMessage
+        message={
+          isClearTrashConfirmOpen || trashItemPendingPermanentDelete ? "" : error
+        }
+        tone="error"
+      />
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard title="Itens removidos">
@@ -207,6 +212,7 @@ export default function Trash() {
             title="Apagar tudo"
             description="Todos os itens da lixeira serão removidos permanentemente. Deseja continuar?"
             confirmLabel="Apagar tudo"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onCancel={() => setIsClearTrashConfirmOpen(false)}
             onConfirm={handleClearTrash}
@@ -221,6 +227,7 @@ export default function Trash() {
             title="Excluir permanentemente"
             description={`Esta ação remove ${trashItemPendingPermanentDelete.label} da lixeira e não poderá ser desfeita.`}
             confirmLabel="Excluir permanentemente"
+            feedbackMessage={error}
             isLoading={isSubmitting}
             onCancel={() => setTrashItemPendingPermanentDelete(null)}
             onConfirm={handlePermanentDeleteTrashItem}

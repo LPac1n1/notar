@@ -1,4 +1,5 @@
 import Button from "./Button";
+import FeedbackMessage from "./FeedbackMessage";
 import Modal from "./Modal";
 
 export default function FormModal({
@@ -6,6 +7,8 @@ export default function FormModal({
   children,
   confirmLabel = "Salvar",
   description,
+  feedbackMessage = "",
+  feedbackTone = "error",
   isLoading = false,
   onClose,
   onSubmit,
@@ -20,6 +23,12 @@ export default function FormModal({
   return (
     <Modal title={title} description={description} onClose={onClose} size={size}>
       <form className="space-y-4" onSubmit={handleSubmit}>
+        <FeedbackMessage
+          message={feedbackMessage}
+          tone={feedbackTone}
+          persistent
+        />
+
         {children}
 
         <div className="flex flex-wrap justify-end gap-3">

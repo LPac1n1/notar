@@ -1,3 +1,4 @@
+import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { formatCpf } from "../../../utils/cpf";
 import {
@@ -35,13 +36,18 @@ export default function MonthlySummaryRow({
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] xl:items-start">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onNavigate?.(summary.donorId)}
-            className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+          <CopyableValue
+            copyLabel="Copiar nome"
+            value={summary.donorName}
           >
-            {summary.donorName}
-          </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.(summary.donorId)}
+              className="text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline"
+            >
+              {summary.donorName}
+            </button>
+          </CopyableValue>
 
           <div className="mt-2 flex flex-wrap gap-2">
             <StatusBadge status={summary.donorType} />
@@ -58,7 +64,13 @@ export default function MonthlySummaryRow({
           {summary.donorType === "auxiliary" && summary.holderName ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium text-[var(--text-soft)]">
-                Vinculado a: {summary.holderName}
+                Vinculado a:{" "}
+                <CopyableValue
+                  copyLabel="Copiar nome"
+                  value={summary.holderName}
+                >
+                  <span>{summary.holderName}</span>
+                </CopyableValue>
               </span>
               {!summary.holderIsActiveDonor ? (
                 <StatusBadge label="Pessoa de referência" tone="neutral" />
@@ -66,8 +78,16 @@ export default function MonthlySummaryRow({
             </div>
           ) : null}
 
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-[var(--muted)]">
-            <span>CPF: {formatCpf(summary.cpf)}</span>
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-[var(--muted)]">
+            <span className="inline-flex items-center gap-1.5">
+              CPF:
+              <CopyableValue
+                copyLabel="Copiar CPF"
+                value={formatCpf(summary.cpf)}
+              >
+                <span>{formatCpf(summary.cpf)}</span>
+              </CopyableValue>
+            </span>
             <span>Demanda: {summary.demand || "Nao informada"}</span>
           </div>
 
@@ -84,7 +104,17 @@ export default function MonthlySummaryRow({
                   title={`${source.name} • ${formatCpf(source.cpf)} • ${source.notesCount} nota(s)`}
                 >
                   {source.type === "auxiliary"
-                    ? `Auxiliar: ${source.name}`
+                    ? (
+                        <>
+                          Auxiliar:{" "}
+                          <CopyableValue
+                            copyLabel="Copiar nome"
+                            value={source.name}
+                          >
+                            <span>{source.name}</span>
+                          </CopyableValue>
+                        </>
+                      )
                     : "CPF principal"}
                 </span>
               ))}

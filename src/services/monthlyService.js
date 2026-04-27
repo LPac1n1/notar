@@ -563,3 +563,36 @@ export async function updateAbatementStatus({
     WHERE id = '${escapeSqlString(summaryId)}'
   `);
 }
+
+export async function updateAbatementStatuses({
+  summaryIds = [],
+  status,
+}) {
+  const normalizedIds = Array.from(
+    new Set(
+      summaryIds
+        .map((summaryId) => String(summaryId ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (normalizedIds.length === 0) {
+    return;
+  }
+
+  const normalizedStatus = status === "applied" ? "applied" : "pending";
+  const idList = normalizedIds
+    .map((summaryId) => `'${escapeSqlString(summaryId)}'`)
+    .join(", ");
+
+  await execute(`
+    UPDATE monthly_donor_summary
+    SET
+      abatement_status = '${escapeSqlString(normalizedStatus)}',
+      abatement_marked_at = ${
+        normalizedStatus === "applied" ? "CURRENT_TIMESTAMP" : "NULL"
+      },
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id IN (${idList})
+  `);
+}
