@@ -2,20 +2,14 @@ import { listDonors } from "./donorService.js";
 import { listImportCpfSummary, listImports } from "./importService.js";
 import { listMonthlySummaries } from "./monthlyService.js";
 import { buildCsvContent } from "../utils/csv.js";
+import { downloadFile } from "../utils/download.js";
 
-function triggerCsvDownload(fileName, csvContent) {
-  const blob = new Blob([`\uFEFF${csvContent}`], {
-    type: "text/csv;charset=utf-8",
+function downloadCsv(fileName, csvContent) {
+  downloadFile({
+    fileName,
+    content: `\uFEFF${csvContent}`,
+    mimeType: "text/csv;charset=utf-8",
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 export async function exportDonorsCsv(filters = {}) {
@@ -36,7 +30,7 @@ export async function exportDonorsCsv(filters = {}) {
     })),
   );
 
-  triggerCsvDownload("notar-doadores.csv", csvContent);
+  downloadCsv("notar-doadores.csv", csvContent);
 
   return { rowCount: donors.length };
 }
@@ -74,7 +68,7 @@ export async function exportMonthlySummariesCsv(filters = {}) {
     ? `-${filters.referenceMonth}`
     : "";
 
-  triggerCsvDownload(
+  downloadCsv(
     `notar-resumo-mensal${referenceMonthSuffix}.csv`,
     csvContent,
   );
@@ -119,7 +113,7 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
     rows,
   );
 
-  triggerCsvDownload("notar-cpfs-encontrados.csv", csvContent);
+  downloadCsv("notar-cpfs-encontrados.csv", csvContent);
 
   return { rowCount: rows.length };
 }
@@ -140,7 +134,7 @@ export async function exportImportsCsv(filters = {}) {
     imports,
   );
 
-  triggerCsvDownload("notar-historico-importacoes.csv", csvContent);
+  downloadCsv("notar-historico-importacoes.csv", csvContent);
 
   return { rowCount: imports.length };
 }

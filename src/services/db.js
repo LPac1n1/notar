@@ -9,6 +9,7 @@ import {
 } from "../utils/backup";
 import { normalizeCpf } from "../utils/cpf";
 import { startOfMonth } from "../utils/date";
+import { DEFAULT_DEMAND_COLOR } from "../utils/demandColor";
 
 let db = null;
 let conn = null;
@@ -34,7 +35,7 @@ let storageInfo = { ...DEFAULT_STORAGE_INFO };
 let dataChangeVersion = 0;
 
 const RESTORE_TABLE_COLUMNS = {
-  demands: ["id", "name", "is_active", "created_at", "updated_at"],
+  demands: ["id", "name", "color", "is_active", "created_at", "updated_at"],
   people: [
     "id",
     "name",
@@ -226,6 +227,7 @@ async function initSchema({ structural = true } = {}) {
     CREATE TABLE IF NOT EXISTS demands (
       id TEXT,
       name TEXT,
+      color TEXT DEFAULT '${DEFAULT_DEMAND_COLOR}',
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -338,6 +340,11 @@ async function initSchema({ structural = true } = {}) {
     await conn.query(`
     ALTER TABLE demands
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
+  `);
+
+    await conn.query(`
+    ALTER TABLE demands
+    ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '${DEFAULT_DEMAND_COLOR}'
   `);
 
     await conn.query(`
@@ -497,6 +504,13 @@ async function initSchema({ structural = true } = {}) {
   `);
   const shouldRebuildSummariesAfterCpfNormalization =
     Number(recordsNeedingCpfNormalizationRows.toArray()[0]?.total ?? 0) > 0;
+
+  await conn.query(`
+    UPDATE demands
+    SET
+      color = coalesce(nullif(trim(color), ''), '${DEFAULT_DEMAND_COLOR}'),
+      updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
+  `);
 
   await conn.query(`
     UPDATE people
@@ -1096,6 +1110,7 @@ async function exportDatabaseSnapshot() {
     SELECT
       id,
       name,
+      color,
       is_active,
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at

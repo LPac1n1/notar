@@ -2,6 +2,10 @@ import { nanoid } from "nanoid";
 import { escapeSqlString, execute, query } from "./db";
 import { reconcileAllImports } from "./importService";
 import { createTrashItem } from "./trashService";
+import {
+  DEFAULT_DEMAND_COLOR,
+  normalizeDemandColor,
+} from "../utils/demandColor";
 import { normalizeDemandName } from "../utils/normalize";
 
 export async function listDemands(filters = {}) {
@@ -18,7 +22,7 @@ export async function listDemands(filters = {}) {
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const rows = await query(`
-    SELECT id, name, is_active
+    SELECT id, name, color, is_active
     FROM demands
     ${whereClause}
     ORDER BY name ASC
@@ -27,12 +31,18 @@ export async function listDemands(filters = {}) {
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    color: normalizeDemandColor(row.color || DEFAULT_DEMAND_COLOR),
     isActive: Boolean(row.is_active),
   }));
 }
 
-export async function createDemand({ id = nanoid(), name }) {
+export async function createDemand({
+  id = nanoid(),
+  name,
+  color = DEFAULT_DEMAND_COLOR,
+}) {
   const trimmedName = normalizeDemandName(name);
+  const normalizedColor = normalizeDemandColor(color);
 
   if (!trimmedName) {
     throw new Error("O nome da demanda e obrigatorio.");
@@ -50,18 +60,24 @@ export async function createDemand({ id = nanoid(), name }) {
   }
 
   await execute(`
-    INSERT INTO demands (id, name, is_active, updated_at)
+    INSERT INTO demands (id, name, color, is_active, updated_at)
     VALUES (
       '${escapeSqlString(id)}',
       '${escapeSqlString(trimmedName)}',
+      '${escapeSqlString(normalizedColor)}',
       TRUE,
       CURRENT_TIMESTAMP
     )
   `);
 }
 
-export async function updateDemand({ id, name }) {
+export async function updateDemand({
+  id,
+  name,
+  color = DEFAULT_DEMAND_COLOR,
+}) {
   const trimmedName = normalizeDemandName(name);
+  const normalizedColor = normalizeDemandColor(color);
 
   if (!id) {
     throw new Error("O identificador da demanda e obrigatorio.");
@@ -100,6 +116,7 @@ export async function updateDemand({ id, name }) {
     UPDATE demands
     SET
       name = '${escapeSqlString(trimmedName)}',
+      color = '${escapeSqlString(normalizedColor)}',
       updated_at = CURRENT_TIMESTAMP
     WHERE id = '${escapeSqlString(id)}'
   `);
@@ -120,6 +137,7 @@ export async function deleteDemand(id) {
     SELECT
       id,
       name,
+      color,
       is_active,
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at

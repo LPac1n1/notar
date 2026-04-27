@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -12,14 +11,20 @@ import SelectInput from "../components/ui/SelectInput";
 import { SkeletonRows } from "../components/ui/Skeleton";
 import {
   DonorIcon,
-  DownloadIcon,
   MonthlyIcon,
   WarningIcon,
 } from "../components/ui/icons";
+import {
+  ABATEMENT_SORT_OPTIONS,
+  ABATEMENT_STATUS_OPTIONS,
+  DONATION_ACTIVITY_OPTIONS,
+  INITIAL_MONTHLY_FILTERS,
+} from "../features/monthly/constants";
 import GroupSection from "../features/monthly/components/GroupSection";
 import MonthlySummaryRow from "../features/monthly/components/MonthlySummaryRow";
-import OverviewMetric from "../features/monthly/components/OverviewMetric";
+import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
 import { exportMonthlySummariesCsv } from "../services/exportService";
+import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
 import { listImports } from "../services/importService";
 import {
   listMonthlySummaries,
@@ -34,16 +39,6 @@ import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useAsync } from "../hooks/useAsync";
 
-const INITIAL_MONTHLY_FILTERS = {
-  referenceMonth: "",
-  donorId: "",
-  cpf: "",
-  demand: "",
-  donationActivity: "all",
-  abatementStatus: "all",
-  abatementSort: "",
-};
-
 export default function Monthly() {
   const [summaries, setSummaries] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
@@ -53,6 +48,7 @@ export default function Monthly() {
   const [isLoading, setIsLoading] = useState(true);
   const [updatingSummaryId, setUpdatingSummaryId] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
@@ -97,33 +93,6 @@ export default function Monthly() {
         emptyLabel: "Todas as demandas",
       }),
     [summaries],
-  );
-
-  const abatementStatusOptions = useMemo(
-    () => [
-      { value: "all", label: "Todos os status" },
-      { value: "pending", label: "Pendentes", tone: "warning" },
-      { value: "applied", label: "Realizados", tone: "success" },
-    ],
-    [],
-  );
-
-  const donationActivityOptions = useMemo(
-    () => [
-      { value: "all", label: "Todos os doadores" },
-      { value: "donated", label: "Doaram no mês", tone: "success" },
-      { value: "not-donated", label: "Não doaram no mês", tone: "default" },
-    ],
-    [],
-  );
-
-  const abatementSortOptions = useMemo(
-    () => [
-      { value: "", label: "Sem ordenação por abatimento" },
-      { value: "desc", label: "Maior abatimento primeiro" },
-      { value: "asc", label: "Menor abatimento primeiro" },
-    ],
-    [],
   );
 
   const loadSummaries = useCallback(async () => {
@@ -237,6 +206,38 @@ export default function Monthly() {
       setError("Nao foi possivel exportar o resumo mensal.");
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsExportingPdf(true);
+      const result = await monthlyOperation.run(
+        () => exportDonationReportPdf(filters),
+        {
+          loadingMessage: "Gerando PDFs por demanda...",
+          successMessage: "PDFs gerados com sucesso.",
+        },
+      );
+      if (result.archiveName) {
+        setSuccessMessage(
+          `ZIP gerado com ${formatInteger(result.demandCount)} PDF(s) e ${formatInteger(result.rowCount)} pessoa(s).`,
+        );
+      } else {
+        setSuccessMessage(
+          `PDF gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
+        );
+      }
+    } catch (err) {
+      console.error(
+        "Erro ao exportar PDFs por demanda:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(getErrorMessage(err, "Nao foi possivel gerar os PDFs por demanda."));
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -462,39 +463,15 @@ export default function Monthly() {
           </div>
         )}
 
-        <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-          <div className={`grid gap-3 ${hasSelectedReferenceMonth ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-2"}`}>
-            {overviewMetrics.map((metric) => (
-              <OverviewMetric
-                key={metric.label}
-                icon={metric.icon}
-                label={metric.label}
-                value={metric.value}
-                helper={metric.helper}
-                tone={metric.tone}
-              />
-            ))}
-          </div>
-
-          <div className="flex flex-wrap gap-3 xl:justify-end">
-            <Button
-              variant="subtle"
-              onClick={handleClearRefinements}
-            >
-              Limpar refinamentos
-            </Button>
-            <Button
-              variant="subtle"
-              onClick={handleExport}
-              disabled={isExporting}
-              isLoading={isExporting}
-              loadingLabel="Exportando..."
-              leftIcon={<DownloadIcon className="h-4 w-4" />}
-            >
-              Exportar CSV
-            </Button>
-          </div>
-        </div>
+        <MonthlySummaryToolbar
+          metrics={overviewMetrics}
+          onClearRefinements={handleClearRefinements}
+          onExportCsv={handleExport}
+          onExportPdf={handleExportPdf}
+          isExportingCsv={isExporting}
+          isExportingPdf={isExportingPdf}
+          isPdfDisabled={summaries.length === 0}
+        />
 
         {selectedImport ? (
           <p className="mb-5 text-sm text-[var(--muted)]">
@@ -524,7 +501,7 @@ export default function Monthly() {
             name="donationActivity"
             value={filters.donationActivity}
             onChange={handleFilterChange}
-            options={donationActivityOptions}
+            options={DONATION_ACTIVITY_OPTIONS}
             placeholder="Todos os doadores"
             disabled={!hasSelectedReferenceMonth}
           />
@@ -533,7 +510,7 @@ export default function Monthly() {
             name="abatementStatus"
             value={filters.abatementStatus}
             onChange={handleFilterChange}
-            options={abatementStatusOptions}
+            options={ABATEMENT_STATUS_OPTIONS}
             placeholder="Todos os status"
             disabled={isNotDonatedFilterActive}
           />
@@ -542,7 +519,7 @@ export default function Monthly() {
             name="abatementSort"
             value={filters.abatementSort}
             onChange={handleFilterChange}
-            options={abatementSortOptions}
+            options={ABATEMENT_SORT_OPTIONS}
             placeholder="Ordenar por abatimento"
           />
         </div>

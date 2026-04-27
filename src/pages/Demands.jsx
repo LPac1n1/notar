@@ -15,12 +15,17 @@ import {
   PlusIcon,
   TrashIcon,
 } from "../components/ui/icons";
+import DemandColorField from "../features/demands/components/DemandColorField";
 import {
   createDemand,
   deleteDemand,
   listDemands,
   updateDemand,
 } from "../services/demandService";
+import {
+  DEFAULT_DEMAND_COLOR,
+  getContrastTextColor,
+} from "../utils/demandColor";
 import { getErrorMessage } from "../utils/error";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
@@ -29,10 +34,15 @@ const INITIAL_DEMAND_FILTERS = {
   name: "",
 };
 
+const EMPTY_DEMAND_FORM = {
+  name: "",
+  color: DEFAULT_DEMAND_COLOR,
+};
+
 export default function Demands() {
   const [demands, setDemands] = useState([]);
-  const [name, setName] = useState("");
-  const [editName, setEditName] = useState("");
+  const [createForm, setCreateForm] = useState({ ...EMPTY_DEMAND_FORM });
+  const [editForm, setEditForm] = useState({ ...EMPTY_DEMAND_FORM });
   const [editingDemand, setEditingDemand] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [demandPendingRemoval, setDemandPendingRemoval] = useState(null);
@@ -96,15 +106,24 @@ export default function Demands() {
 
   useDatabaseChangeEffect(refreshDemands);
 
+  const handleFormChange = (setter) => (event) => {
+    const { name: fieldName, value } = event.target;
+
+    setter((current) => ({
+      ...current,
+      [fieldName]: value,
+    }));
+  };
+
   const handleAdd = async () => {
-    if (!name.trim()) return;
+    if (!createForm.name.trim()) return;
 
     try {
       setError("");
       setSuccessMessage("");
       setIsSubmitting(true);
-      await createDemand({ name });
-      setName("");
+      await createDemand(createForm);
+      setCreateForm({ ...EMPTY_DEMAND_FORM });
       await loadDemands(filters);
       setIsCreateModalOpen(false);
       setSuccessMessage("Demanda cadastrada com sucesso.");
@@ -125,12 +144,15 @@ export default function Demands() {
     setError("");
     setSuccessMessage("");
     setEditingDemand(demand);
-    setEditName(demand.name);
+    setEditForm({
+      name: demand.name,
+      color: demand.color || DEFAULT_DEMAND_COLOR,
+    });
   };
 
   const handleCloseEditModal = () => {
     setEditingDemand(null);
-    setEditName("");
+    setEditForm({ ...EMPTY_DEMAND_FORM });
   };
 
   const handleSaveEdit = async () => {
@@ -142,7 +164,10 @@ export default function Demands() {
       setError("");
       setSuccessMessage("");
       setIsSubmitting(true);
-      await updateDemand({ id: editingDemand.id, name: editName });
+      await updateDemand({
+        id: editingDemand.id,
+        ...editForm,
+      });
       await loadDemands(filters);
       handleCloseEditModal();
       setSuccessMessage("Demanda atualizada com sucesso.");
@@ -227,7 +252,10 @@ export default function Demands() {
 
       <div className="mb-6">
         <Button
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setCreateForm({ ...EMPTY_DEMAND_FORM });
+            setIsCreateModalOpen(true);
+          }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
           Adicionar demanda
@@ -279,7 +307,23 @@ export default function Demands() {
               key={demand.id}
               className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
             >
-              <p className="font-medium">{demand.name}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--line-strong)] text-xs font-bold"
+                  style={{
+                    backgroundColor: demand.color,
+                    color: getContrastTextColor(demand.color),
+                  }}
+                >
+                  {demand.name.slice(0, 1)}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium">{demand.name}</p>
+                  <p className="font-mono text-xs text-[var(--muted)]">
+                    {demand.color}
+                  </p>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="subtle"
@@ -321,17 +365,25 @@ export default function Demands() {
             confirmLabel="Adicionar demanda"
             isLoading={isSubmitting}
             onClose={() => {
-              setName("");
+              setCreateForm({ ...EMPTY_DEMAND_FORM });
               setIsCreateModalOpen(false);
             }}
             onSubmit={handleAdd}
-            size="sm"
+            size="md"
           >
-            <TextInput
-              placeholder="Nome da demanda"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
+            <div className="space-y-4">
+              <TextInput
+                label="Nome"
+                name="name"
+                placeholder="Nome da demanda"
+                value={createForm.name}
+                onChange={handleFormChange(setCreateForm)}
+              />
+              <DemandColorField
+                value={createForm.color}
+                onChange={handleFormChange(setCreateForm)}
+              />
+            </div>
           </FormModal>
         ) : null}
       </AnimatePresence>
@@ -345,13 +397,21 @@ export default function Demands() {
             onSubmit={handleSaveEdit}
             confirmLabel="Salvar alterações"
             isLoading={isSubmitting}
-            size="sm"
+            size="md"
           >
-            <TextInput
-              placeholder="Nome da demanda"
-              value={editName}
-              onChange={(event) => setEditName(event.target.value)}
-            />
+            <div className="space-y-4">
+              <TextInput
+                label="Nome"
+                name="name"
+                placeholder="Nome da demanda"
+                value={editForm.name}
+                onChange={handleFormChange(setEditForm)}
+              />
+              <DemandColorField
+                value={editForm.color}
+                onChange={handleFormChange(setEditForm)}
+              />
+            </div>
           </FormModal>
         ) : null}
       </AnimatePresence>
