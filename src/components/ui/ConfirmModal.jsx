@@ -41,18 +41,10 @@ export default function ConfirmModal({
       ) : null}
 
       <div className="flex flex-wrap justify-end gap-3">
-        <Button
-          variant="subtle"
-          onClick={onCancel}
-          disabled={isLoading}
-        >
+        <Button variant="subtle" onClick={onCancel} disabled={isLoading}>
           Cancelar
         </Button>
-        <Button
-          variant={tone}
-          onClick={onConfirm}
-          disabled={isLoading}
-        >
+        <Button variant={tone} onClick={onConfirm} disabled={isLoading}>
           {isLoading ? "Confirmando..." : confirmLabel}
         </Button>
       </div>

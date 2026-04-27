@@ -19,10 +19,12 @@ import {
   exportDatabaseBackup,
   getDatabaseStorageInfo,
   importDatabaseBackup,
+  notifyDatabaseChanged,
   openDatabaseFile,
   STORAGE_INFO_EVENT,
 } from "../services/db";
 import { reconcileAllImports } from "../services/importService";
+import { useAsync } from "../hooks/useAsync";
 import { getErrorMessage } from "../utils/error";
 
 function formatBackupStats(stats = {}) {
@@ -47,6 +49,7 @@ export default function Settings() {
   const [backupInputKey, setBackupInputKey] = useState(0);
   const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
   const isLoadingStorage = storageInfo === null && !error;
+  const settingsOperation = useAsync({ reportGlobal: true });
 
   useEffect(() => {
     let isMounted = true;
@@ -95,17 +98,25 @@ export default function Settings() {
 
   const handleCreateFile = async () => {
     try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      setOperationMessage("Criando e conectando o arquivo de dados...");
+      await settingsOperation.run(
+        async () => {
+          setIsSubmitting(true);
+          setError("");
+          setSuccessMessage("");
+          setOperationMessage("Criando e conectando o arquivo de dados...");
 
-      const result = await createDatabaseFile();
-      setStorageInfo(result.storageInfo);
-      setSuccessMessage(
-        result.migratedCurrentSession
-          ? "Arquivo criado e conectado. Os dados atuais da sessao foram copiados para ele."
-          : "Arquivo criado e conectado. As proximas alteracoes serao gravadas nele.",
+          const result = await createDatabaseFile();
+          setStorageInfo(result.storageInfo);
+          setSuccessMessage(
+            result.migratedCurrentSession
+              ? "Arquivo criado e conectado. Os dados atuais da sessao foram copiados para ele."
+              : "Arquivo criado e conectado. As proximas alteracoes serao gravadas nele.",
+          );
+        },
+        {
+          loadingMessage: "Criando arquivo de dados...",
+          successMessage: "Arquivo de dados conectado.",
+        },
       );
     } catch (storageError) {
       setError(
@@ -122,19 +133,28 @@ export default function Settings() {
 
   const handleOpenFile = async () => {
     try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      setOperationMessage("Abrindo arquivo de dados e carregando informações...");
+      await settingsOperation.run(
+        async () => {
+          setIsSubmitting(true);
+          setError("");
+          setSuccessMessage("");
+          setOperationMessage("Abrindo arquivo de dados e carregando informações...");
 
-      const result = await openDatabaseFile();
-      setOperationMessage("Reconciliando importações e resumos mensais...");
-      await reconcileAllImports();
-      setStorageInfo(result.storageInfo);
-      setSuccessMessage(
-        result.usedExistingFile
-          ? "Arquivo existente conectado. Os dados carregados agora passam a vir desse arquivo."
-          : "Arquivo conectado com sucesso.",
+          const result = await openDatabaseFile({ emitChange: false });
+          setOperationMessage("Reconciliando importações e resumos mensais...");
+          await reconcileAllImports({ emitChange: false });
+          notifyDatabaseChanged({ source: "database-file-opened" });
+          setStorageInfo(result.storageInfo);
+          setSuccessMessage(
+            result.usedExistingFile
+              ? "Arquivo existente conectado. Os dados carregados agora passam a vir desse arquivo."
+              : "Arquivo conectado com sucesso.",
+          );
+        },
+        {
+          loadingMessage: "Abrindo arquivo de dados...",
+          successMessage: "Arquivo de dados carregado.",
+        },
       );
     } catch (storageError) {
       setError(
@@ -151,17 +171,25 @@ export default function Settings() {
 
   const handleDisconnectFile = async () => {
     try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      setOperationMessage("Desconectando arquivo de dados...");
+      await settingsOperation.run(
+        async () => {
+          setIsSubmitting(true);
+          setError("");
+          setSuccessMessage("");
+          setOperationMessage("Desconectando arquivo de dados...");
 
-      const result = await disconnectDatabaseFile();
-      setStorageInfo(result.storageInfo);
-      setSuccessMessage(
-        "Arquivo desconectado. Os dados atuais continuam apenas nesta sessao ate que um novo arquivo seja conectado.",
+          const result = await disconnectDatabaseFile();
+          setStorageInfo(result.storageInfo);
+          setSuccessMessage(
+            "Arquivo desconectado. Os dados atuais continuam apenas nesta sessao ate que um novo arquivo seja conectado.",
+          );
+          await refreshStorageInfo();
+        },
+        {
+          loadingMessage: "Desconectando arquivo de dados...",
+          successMessage: "Arquivo desconectado.",
+        },
       );
-      await refreshStorageInfo();
     } catch (storageError) {
       setError(
         getErrorMessage(
@@ -177,25 +205,33 @@ export default function Settings() {
 
   const handleExportBackup = async () => {
     try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      setOperationMessage("Gerando backup dos dados atuais...");
+      await settingsOperation.run(
+        async () => {
+          setIsSubmitting(true);
+          setError("");
+          setSuccessMessage("");
+          setOperationMessage("Gerando backup dos dados atuais...");
 
-      const backup = await exportDatabaseBackup();
-      const blob = new Blob([backup.text], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
+          const backup = await exportDatabaseBackup();
+          const blob = new Blob([backup.text], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
 
-      link.href = url;
-      link.download = backup.fileName;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+          link.href = url;
+          link.download = backup.fileName;
+          document.body.append(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
 
-      setSuccessMessage(
-        `Backup exportado com sucesso: ${formatBackupStats(backup.stats)}.`,
+          setSuccessMessage(
+            `Backup exportado com sucesso: ${formatBackupStats(backup.stats)}.`,
+          );
+        },
+        {
+          loadingMessage: "Gerando backup dos dados...",
+          successMessage: "Backup exportado.",
+        },
       );
     } catch (backupError) {
       setError(
@@ -227,19 +263,30 @@ export default function Settings() {
     }
 
     try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      setOperationMessage("Lendo e validando o arquivo de backup...");
+      await settingsOperation.run(
+        async () => {
+          setIsSubmitting(true);
+          setError("");
+          setSuccessMessage("");
+          setOperationMessage("Lendo e validando o arquivo de backup...");
 
-      const result = await importDatabaseBackup(selectedBackupFile);
-      setOperationMessage("Reconciliando importações e resumos mensais...");
-      await reconcileAllImports();
-      setStorageInfo(result.storageInfo);
-      resetBackupFileSelection();
-      setIsImportBackupConfirmOpen(false);
-      setSuccessMessage(
-        `Backup importado com sucesso: ${formatBackupStats(result.stats)}.`,
+          const result = await importDatabaseBackup(selectedBackupFile, {
+            emitChange: false,
+          });
+          setOperationMessage("Reconciliando importações e resumos mensais...");
+          await reconcileAllImports({ emitChange: false });
+          notifyDatabaseChanged({ source: "backup-import" });
+          setStorageInfo(result.storageInfo);
+          resetBackupFileSelection();
+          setIsImportBackupConfirmOpen(false);
+          setSuccessMessage(
+            `Backup importado com sucesso: ${formatBackupStats(result.stats)}.`,
+          );
+        },
+        {
+          loadingMessage: "Restaurando backup...",
+          successMessage: "Backup importado e telas atualizadas.",
+        },
       );
     } catch (backupError) {
       setError(

@@ -24,6 +24,7 @@ import {
   processImportedFile,
 } from "../services/importService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useAsync } from "../hooks/useAsync";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { formatMonthYear } from "../utils/date";
@@ -89,6 +90,7 @@ export default function Imports() {
   const importHistoryRequestIdRef = useRef(0);
   const cpfSummaryRequestIdRef = useRef(0);
   const hasInitializedRef = useRef(false);
+  const importOperation = useAsync({ reportGlobal: true });
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
@@ -367,7 +369,12 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setIsPreviewLoading(true);
-      const preview = await prepareImportPreview(file);
+      const preview = await importOperation.run(
+        () => prepareImportPreview(file),
+        {
+          loadingMessage: "Lendo planilha de importacao...",
+        },
+      );
       setSelectedFile(file);
       setPreviewData(preview);
       setUploadForm((current) => ({
@@ -428,13 +435,20 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setIsImporting(true);
-      await processImportedFile({
-        registeredFileName: previewData.registeredFileName,
-        originalFileName: previewData.originalFileName,
-        referenceMonth: uploadForm.referenceMonth,
-        valuePerNote: uploadForm.valuePerNote,
-        cpfColumn: uploadForm.cpfColumn,
-      });
+      await importOperation.run(
+        () =>
+          processImportedFile({
+            registeredFileName: previewData.registeredFileName,
+            originalFileName: previewData.originalFileName,
+            referenceMonth: uploadForm.referenceMonth,
+            valuePerNote: uploadForm.valuePerNote,
+            cpfColumn: uploadForm.cpfColumn,
+          }),
+        {
+          loadingMessage: "Processando importacao e conciliando CPFs...",
+          successMessage: "Importacao processada e telas atualizadas.",
+        },
+      );
       await Promise.all([
         loadAvailableImports(),
         loadImportHistory(importFilters),
@@ -468,7 +482,13 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setDeletingImportId(importPendingRemoval.id);
-      await deleteImport(importPendingRemoval.id);
+      await importOperation.run(
+        () => deleteImport(importPendingRemoval.id),
+        {
+          loadingMessage: "Enviando importacao para a lixeira...",
+          successMessage: "Importacao enviada para a lixeira.",
+        },
+      );
       await Promise.all([
         loadAvailableImports(),
         loadImportHistory(importFilters),
@@ -492,7 +512,12 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setIsExportingImports(true);
-      const result = await exportImportsCsv(importFilters);
+      const result = await importOperation.run(
+        () => exportImportsCsv(importFilters),
+        {
+          loadingMessage: "Exportando historico de importacoes...",
+        },
+      );
       setSuccessMessage(
         `${result.rowCount} importacao(oes) exportada(s) em CSV.`,
       );
@@ -512,7 +537,12 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setIsExportingCpfSummary(true);
-      const result = await exportImportCpfSummaryCsv(cpfFilters);
+      const result = await importOperation.run(
+        () => exportImportCpfSummaryCsv(cpfFilters),
+        {
+          loadingMessage: "Exportando CPFs encontrados...",
+        },
+      );
       setSuccessMessage(
         `${result.rowCount} CPF(s) exportado(s) em CSV.`,
       );

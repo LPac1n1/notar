@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -25,13 +25,26 @@ export default function Trash() {
   const [trashItemPendingPermanentDelete, setTrashItemPendingPermanentDelete] =
     useState(null);
   const [isClearTrashConfirmOpen, setIsClearTrashConfirmOpen] = useState(false);
+  const trashRequestIdRef = useRef(0);
 
   const refreshTrashItems = useCallback(async () => {
+    const requestId = trashRequestIdRef.current + 1;
+    trashRequestIdRef.current = requestId;
+
     try {
       setError("");
       const trashRows = await listTrashItems();
+
+      if (requestId !== trashRequestIdRef.current) {
+        return;
+      }
+
       setTrashItems(trashRows);
     } catch (trashError) {
+      if (requestId !== trashRequestIdRef.current) {
+        return;
+      }
+
       setError(
         getErrorMessage(
           trashError,
@@ -39,7 +52,9 @@ export default function Trash() {
         ),
       );
     } finally {
-      setIsLoading(false);
+      if (requestId === trashRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
@@ -9,6 +9,7 @@ import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
+import { SkeletonRows } from "../components/ui/Skeleton";
 import {
   DonorIcon,
   DownloadIcon,
@@ -31,6 +32,7 @@ import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useAsync } from "../hooks/useAsync";
 
 const INITIAL_MONTHLY_FILTERS = {
   referenceMonth: "",
@@ -54,6 +56,8 @@ export default function Monthly() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
+  const summariesRequestIdRef = useRef(0);
+  const monthlyOperation = useAsync({ reportGlobal: true });
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
   const isNotDonatedFilterActive =
     hasSelectedReferenceMonth && filters.donationActivity === "not-donated";
@@ -123,22 +127,37 @@ export default function Monthly() {
   );
 
   const loadSummaries = useCallback(async () => {
+    const requestId = summariesRequestIdRef.current + 1;
+    summariesRequestIdRef.current = requestId;
+
     try {
       setIsLoading(true);
       setError("");
-      const importRows = await listImports({ status: "processed" });
-      setAvailableImports(importRows);
+      const [importRows, monthlyRows] = await Promise.all([
+        listImports({ status: "processed" }),
+        listMonthlySummaries(filters),
+      ]);
 
-      const monthlyRows = await listMonthlySummaries(filters);
+      if (requestId !== summariesRequestIdRef.current) {
+        return;
+      }
+
+      setAvailableImports(importRows);
       setSummaries(monthlyRows);
     } catch (err) {
+      if (requestId !== summariesRequestIdRef.current) {
+        return;
+      }
+
       console.error(
         "Erro ao carregar resumo mensal:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError("Nao foi possivel carregar o resumo mensal.");
     } finally {
-      setIsLoading(false);
+      if (requestId === summariesRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [filters]);
 
@@ -201,7 +220,12 @@ export default function Monthly() {
       setError("");
       setSuccessMessage("");
       setIsExporting(true);
-      const result = await exportMonthlySummariesCsv(filters);
+      const result = await monthlyOperation.run(
+        () => exportMonthlySummariesCsv(filters),
+        {
+          loadingMessage: "Exportando resumo mensal...",
+        },
+      );
       setSuccessMessage(
         `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
       );
@@ -463,9 +487,11 @@ export default function Monthly() {
               variant="subtle"
               onClick={handleExport}
               disabled={isExporting}
+              isLoading={isExporting}
+              loadingLabel="Exportando..."
               leftIcon={<DownloadIcon className="h-4 w-4" />}
             >
-              {isExporting ? "Exportando..." : "Exportar CSV"}
+              Exportar CSV
             </Button>
           </div>
         </div>
@@ -543,7 +569,9 @@ export default function Monthly() {
           />
         </div>
 
-        {summaries.length === 0 ? (
+        {isRefreshingMonthlyData && summaries.length === 0 ? (
+          <SkeletonRows rows={4} className="mb-5" />
+        ) : summaries.length === 0 ? (
           <EmptyState
             title="Nenhum doador encontrado"
             description={

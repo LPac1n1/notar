@@ -69,8 +69,10 @@ export default function ImportUploadModal({
       <Button
         onClick={onProcessImport}
         disabled={isImporting || !previewData || !uploadForm.valuePerNote}
+        isLoading={isImporting}
+        loadingLabel="Processando..."
       >
-        {isImporting ? "Processando..." : "Processar importação"}
+        Processar importação
       </Button>
 
       {previewData ? (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -44,31 +44,57 @@ export default function Demands() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const demandsRequestIdRef = useRef(0);
   const demandsPagination = usePagination(demands, {
     initialPageSize: 25,
   });
 
-  const loadDemands = useCallback(async (currentFilters = filters) => {
+  const loadDemands = useCallback(async (
+    currentFilters = INITIAL_DEMAND_FILTERS,
+    { showLoading = false } = {},
+  ) => {
+    const requestId = demandsRequestIdRef.current + 1;
+    demandsRequestIdRef.current = requestId;
+
     try {
+      if (showLoading) {
+        setIsLoading(true);
+      }
+
       setError("");
       const demandRows = await listDemands(currentFilters);
+
+      if (requestId !== demandsRequestIdRef.current) {
+        return;
+      }
+
       setDemands(demandRows);
     } catch (err) {
+      if (requestId !== demandsRequestIdRef.current) {
+        return;
+      }
+
       console.error(
         "Erro ao carregar demandas:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError("Nao foi possivel carregar as demandas.");
     } finally {
-      setIsLoading(false);
+      if (requestId === demandsRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [filters]);
+  }, []);
 
   useEffect(() => {
-    loadDemands();
+    loadDemands({ ...INITIAL_DEMAND_FILTERS }, { showLoading: true });
   }, [loadDemands]);
 
-  useDatabaseChangeEffect(loadDemands);
+  const refreshDemands = useCallback(() => {
+    loadDemands(filters);
+  }, [filters, loadDemands]);
+
+  useDatabaseChangeEffect(refreshDemands);
 
   const handleAdd = async () => {
     if (!name.trim()) return;
@@ -79,7 +105,7 @@ export default function Demands() {
       setIsSubmitting(true);
       await createDemand({ name });
       setName("");
-      await loadDemands();
+      await loadDemands(filters);
       setIsCreateModalOpen(false);
       setSuccessMessage("Demanda cadastrada com sucesso.");
     } catch (err) {
@@ -117,7 +143,7 @@ export default function Demands() {
       setSuccessMessage("");
       setIsSubmitting(true);
       await updateDemand({ id: editingDemand.id, name: editName });
-      await loadDemands();
+      await loadDemands(filters);
       handleCloseEditModal();
       setSuccessMessage("Demanda atualizada com sucesso.");
     } catch (err) {
@@ -143,7 +169,7 @@ export default function Demands() {
       setSuccessMessage("");
       setIsDeleting(true);
       await deleteDemand(demandPendingRemoval.id);
-      await loadDemands();
+      await loadDemands(filters);
       if (editingDemand?.id === demandPendingRemoval.id) {
         handleCloseEditModal();
       }

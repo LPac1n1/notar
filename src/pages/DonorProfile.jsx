@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
@@ -20,21 +20,36 @@ export default function DonorProfile() {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const profileRequestIdRef = useRef(0);
 
   const loadProfile = useCallback(async () => {
+    const requestId = profileRequestIdRef.current + 1;
+    profileRequestIdRef.current = requestId;
+
     try {
       setIsLoading(true);
       setError("");
       const donorProfile = await getDonorProfile(donorId);
+
+      if (requestId !== profileRequestIdRef.current) {
+        return;
+      }
+
       setProfile(donorProfile);
     } catch (err) {
+      if (requestId !== profileRequestIdRef.current) {
+        return;
+      }
+
       console.error(
         "Erro ao carregar perfil do doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError("Nao foi possivel carregar o perfil do doador.");
     } finally {
-      setIsLoading(false);
+      if (requestId === profileRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [donorId]);
 

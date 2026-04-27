@@ -3,6 +3,7 @@ import {
   escapeSqlString,
   execute,
   normalizeCpf,
+  notifyDatabaseChanged,
   query,
   releaseRegisteredFile,
   registerFileText,
@@ -413,7 +414,7 @@ export async function createImportRecord({
   valuePerNote,
   status = "processed",
   notes = "",
-}) {
+}, { emitChange = true } = {}) {
   const normalizedMonth = startOfMonth(referenceMonth);
   const numericValuePerNote = parseValuePerNote(valuePerNote);
 
@@ -457,7 +458,7 @@ export async function createImportRecord({
       '${escapeSqlString(notes)}',
       CURRENT_TIMESTAMP
     )
-  `);
+  `, { flush: emitChange });
 
   return id;
 }
@@ -466,64 +467,67 @@ export async function saveImportCpfSummary({
   importId,
   referenceMonth,
   cpfCounts,
-}) {
+}, { emitChange = true } = {}) {
   const normalizedMonth = startOfMonth(referenceMonth);
 
   if (!importId || !normalizedMonth) {
     throw new Error("Importacao e mes de referencia sao obrigatorios.");
   }
 
-  await runInTransaction(async () => {
-    await execute(`
-      DELETE FROM import_cpf_summary
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
+  await runInTransaction(
+    async () => {
+      await execute(`
+        DELETE FROM import_cpf_summary
+        WHERE import_id = '${escapeSqlString(importId)}'
+      `);
 
-    let totalRows = 0;
+      let totalRows = 0;
 
-    for (const item of cpfCounts) {
-      const normalizedCpf = normalizeCpf(item.cpf);
-      const notesCount = toPositiveInteger(item.notesCount);
+      for (const item of cpfCounts) {
+        const normalizedCpf = normalizeCpf(item.cpf);
+        const notesCount = toPositiveInteger(item.notesCount);
 
-      if (normalizedCpf.length !== 11 || notesCount === 0) {
-        continue;
+        if (normalizedCpf.length !== 11 || notesCount === 0) {
+          continue;
+        }
+
+        totalRows += notesCount;
+
+        await execute(`
+          INSERT INTO import_cpf_summary (
+            id,
+            import_id,
+            reference_month,
+            cpf,
+            notes_count,
+            is_registered_donor,
+            updated_at
+          )
+          VALUES (
+            '${escapeSqlString(nanoid())}',
+            '${escapeSqlString(importId)}',
+            '${escapeSqlString(normalizedMonth)}',
+            '${escapeSqlString(normalizedCpf)}',
+            ${notesCount},
+            FALSE,
+            CURRENT_TIMESTAMP
+          )
+        `);
       }
 
-      totalRows += notesCount;
-
       await execute(`
-        INSERT INTO import_cpf_summary (
-          id,
-          import_id,
-          reference_month,
-          cpf,
-          notes_count,
-          is_registered_donor,
-          updated_at
-        )
-        VALUES (
-          '${escapeSqlString(nanoid())}',
-          '${escapeSqlString(importId)}',
-          '${escapeSqlString(normalizedMonth)}',
-          '${escapeSqlString(normalizedCpf)}',
-          ${notesCount},
-          FALSE,
-          CURRENT_TIMESTAMP
-        )
+        UPDATE imports
+        SET
+          reference_month = '${escapeSqlString(normalizedMonth)}',
+          total_rows = ${totalRows},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = '${escapeSqlString(importId)}'
       `);
-    }
+    },
+    { emitChange: false },
+  );
 
-    await execute(`
-      UPDATE imports
-      SET
-        reference_month = '${escapeSqlString(normalizedMonth)}',
-        total_rows = ${totalRows},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(importId)}'
-    `);
-  });
-
-  await reconcileImport(importId);
+  await reconcileImport(importId, { emitChange });
 }
 
 export async function processImportedFile({
@@ -555,7 +559,7 @@ export async function processImportedFile({
       fileName: originalFileName,
       valuePerNote,
       status: "processing",
-    });
+    }, { emitChange: false });
     const normalizedCpfExpression = normalizeCpfSqlExpression(
       escapeIdentifier(cpfColumn),
     );
@@ -577,7 +581,9 @@ export async function processImportedFile({
         cpf: row.cpf,
         notesCount: Number(row.notes_count ?? 0),
       })),
-    });
+    }, { emitChange: false });
+
+    notifyDatabaseChanged({ source: "import" });
 
     return importId;
   } catch (error) {
@@ -699,7 +705,7 @@ export async function deleteImport(importId) {
   });
 }
 
-export async function reconcileImport(importId) {
+export async function reconcileImport(importId, { emitChange = true } = {}) {
   const importRows = await query(`
     SELECT
       id,
@@ -716,150 +722,153 @@ export async function reconcileImport(importId) {
 
   const importValuePerNote = Number(importRows[0].value_per_note ?? 0);
 
-  await runInTransaction(async () => {
-    const existingSummaries = await query(`
-      SELECT
-        donor_id,
-        abatement_status,
-        strftime(abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at
-      FROM monthly_donor_summary
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
+  await runInTransaction(
+    async () => {
+      const existingSummaries = await query(`
+        SELECT
+          donor_id,
+          abatement_status,
+          strftime(abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at
+        FROM monthly_donor_summary
+        WHERE import_id = '${escapeSqlString(importId)}'
+      `);
 
-    const summaryStatusByDonorId = new Map(
-      existingSummaries.map((row) => [
-        row.donor_id,
-        {
-          abatementStatus: row.abatement_status ?? "pending",
-          abatementMarkedAt: row.abatement_marked_at ?? "",
-        },
-      ]),
-    );
-
-    await execute(`
-      UPDATE import_cpf_summary
-      SET
-        matched_source_id = (
-          SELECT donor_cpf_links.id
-          FROM donor_cpf_links
-          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
-            AND donor_cpf_links.is_active = TRUE
-          LIMIT 1
-        ),
-        matched_donor_id = (
-          SELECT donor_cpf_links.donor_id
-          FROM donor_cpf_links
-          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
-            AND donor_cpf_links.is_active = TRUE
-          LIMIT 1
-        ),
-        is_registered_donor = EXISTS (
-          SELECT 1
-          FROM donor_cpf_links
-          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
-            AND donor_cpf_links.is_active = TRUE
-        ),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
-
-    await execute(`
-      DELETE FROM monthly_donor_summary
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
-
-    const matchedRows = await query(`
-      SELECT
-        import_cpf_summary.import_id,
-        strftime(import_cpf_summary.reference_month, '%Y-%m-01') AS reference_month,
-        donors.id AS donor_id,
-        donors.cpf AS donor_cpf,
-        donors.name AS donor_name,
-        donors.demand AS demand,
-        sum(import_cpf_summary.notes_count) AS notes_count
-      FROM import_cpf_summary
-      INNER JOIN donor_cpf_links
-        ON donor_cpf_links.id = import_cpf_summary.matched_source_id
-      INNER JOIN donors
-        ON donors.id = donor_cpf_links.donor_id
-      WHERE import_cpf_summary.import_id = '${escapeSqlString(importId)}'
-        AND donors.is_active = TRUE
-        AND donor_cpf_links.is_active = TRUE
-      GROUP BY
-        import_cpf_summary.import_id,
-        import_cpf_summary.reference_month,
-        donors.id,
-        donors.cpf,
-        donors.name,
-        donors.demand
-    `);
-
-    for (const row of matchedRows) {
-      const notesCount = Number(row.notes_count ?? 0);
-      const valuePerNote = importValuePerNote;
-      const abatementAmount = notesCount * valuePerNote;
-      const existingSummary = summaryStatusByDonorId.get(row.donor_id);
-      const abatementStatus = existingSummary?.abatementStatus ?? "pending";
-      const abatementMarkedAt = existingSummary?.abatementMarkedAt ?? "";
+      const summaryStatusByDonorId = new Map(
+        existingSummaries.map((row) => [
+          row.donor_id,
+          {
+            abatementStatus: row.abatement_status ?? "pending",
+            abatementMarkedAt: row.abatement_marked_at ?? "",
+          },
+        ]),
+      );
 
       await execute(`
-        INSERT INTO monthly_donor_summary (
-          id,
-          import_id,
-          donor_id,
-          reference_month,
-          cpf,
-          donor_name,
-          demand,
-          notes_count,
-          value_per_note,
-          abatement_amount,
-          abatement_status,
-          abatement_marked_at,
-          updated_at
-        )
-        VALUES (
-          '${escapeSqlString(nanoid())}',
-          '${escapeSqlString(row.import_id)}',
-          '${escapeSqlString(row.donor_id)}',
-          '${escapeSqlString(row.reference_month)}',
-          '${escapeSqlString(row.donor_cpf)}',
-          '${escapeSqlString(row.donor_name)}',
-          '${escapeSqlString(row.demand ?? "")}',
-          ${notesCount},
-          ${valuePerNote},
-          ${abatementAmount},
-          '${escapeSqlString(abatementStatus)}',
-          ${abatementMarkedAt ? `'${escapeSqlString(abatementMarkedAt)}'` : "NULL"},
-          CURRENT_TIMESTAMP
-        )
+        UPDATE import_cpf_summary
+        SET
+          matched_source_id = (
+            SELECT donor_cpf_links.id
+            FROM donor_cpf_links
+            WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+              AND donor_cpf_links.is_active = TRUE
+            LIMIT 1
+          ),
+          matched_donor_id = (
+            SELECT donor_cpf_links.donor_id
+            FROM donor_cpf_links
+            WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+              AND donor_cpf_links.is_active = TRUE
+            LIMIT 1
+          ),
+          is_registered_donor = EXISTS (
+            SELECT 1
+            FROM donor_cpf_links
+            WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+              AND donor_cpf_links.is_active = TRUE
+          ),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE import_id = '${escapeSqlString(importId)}'
       `);
-    }
 
-    await execute(`
-      UPDATE imports
-      SET
-        matched_rows = coalesce((
-          SELECT sum(notes_count)
-          FROM import_cpf_summary
-          WHERE import_id = '${escapeSqlString(importId)}'
-            AND is_registered_donor = TRUE
-        ), 0),
-        matched_donors = coalesce((
-          SELECT count(DISTINCT matched_donor_id)
-          FROM import_cpf_summary
-          WHERE import_id = '${escapeSqlString(importId)}'
-            AND is_registered_donor = TRUE
-            AND matched_donor_id IS NOT NULL
-        ), 0),
-        status = 'processed',
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(importId)}'
-    `);
-  });
+      await execute(`
+        DELETE FROM monthly_donor_summary
+        WHERE import_id = '${escapeSqlString(importId)}'
+      `);
+
+      const matchedRows = await query(`
+        SELECT
+          import_cpf_summary.import_id,
+          strftime(import_cpf_summary.reference_month, '%Y-%m-01') AS reference_month,
+          donors.id AS donor_id,
+          donors.cpf AS donor_cpf,
+          donors.name AS donor_name,
+          donors.demand AS demand,
+          sum(import_cpf_summary.notes_count) AS notes_count
+        FROM import_cpf_summary
+        INNER JOIN donor_cpf_links
+          ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+        INNER JOIN donors
+          ON donors.id = donor_cpf_links.donor_id
+        WHERE import_cpf_summary.import_id = '${escapeSqlString(importId)}'
+          AND donors.is_active = TRUE
+          AND donor_cpf_links.is_active = TRUE
+        GROUP BY
+          import_cpf_summary.import_id,
+          import_cpf_summary.reference_month,
+          donors.id,
+          donors.cpf,
+          donors.name,
+          donors.demand
+      `);
+
+      for (const row of matchedRows) {
+        const notesCount = Number(row.notes_count ?? 0);
+        const valuePerNote = importValuePerNote;
+        const abatementAmount = notesCount * valuePerNote;
+        const existingSummary = summaryStatusByDonorId.get(row.donor_id);
+        const abatementStatus = existingSummary?.abatementStatus ?? "pending";
+        const abatementMarkedAt = existingSummary?.abatementMarkedAt ?? "";
+
+        await execute(`
+          INSERT INTO monthly_donor_summary (
+            id,
+            import_id,
+            donor_id,
+            reference_month,
+            cpf,
+            donor_name,
+            demand,
+            notes_count,
+            value_per_note,
+            abatement_amount,
+            abatement_status,
+            abatement_marked_at,
+            updated_at
+          )
+          VALUES (
+            '${escapeSqlString(nanoid())}',
+            '${escapeSqlString(row.import_id)}',
+            '${escapeSqlString(row.donor_id)}',
+            '${escapeSqlString(row.reference_month)}',
+            '${escapeSqlString(row.donor_cpf)}',
+            '${escapeSqlString(row.donor_name)}',
+            '${escapeSqlString(row.demand ?? "")}',
+            ${notesCount},
+            ${valuePerNote},
+            ${abatementAmount},
+            '${escapeSqlString(abatementStatus)}',
+            ${abatementMarkedAt ? `'${escapeSqlString(abatementMarkedAt)}'` : "NULL"},
+            CURRENT_TIMESTAMP
+          )
+        `);
+      }
+
+      await execute(`
+        UPDATE imports
+        SET
+          matched_rows = coalesce((
+            SELECT sum(notes_count)
+            FROM import_cpf_summary
+            WHERE import_id = '${escapeSqlString(importId)}'
+              AND is_registered_donor = TRUE
+          ), 0),
+          matched_donors = coalesce((
+            SELECT count(DISTINCT matched_donor_id)
+            FROM import_cpf_summary
+            WHERE import_id = '${escapeSqlString(importId)}'
+              AND is_registered_donor = TRUE
+              AND matched_donor_id IS NOT NULL
+          ), 0),
+          status = 'processed',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = '${escapeSqlString(importId)}'
+      `);
+    },
+    { emitChange, changeSource: "reconcile-import" },
+  );
 }
 
-export async function reconcileAllImports() {
+export async function reconcileAllImports({ emitChange = true } = {}) {
   const imports = await query(`
     SELECT id
     FROM imports
@@ -867,7 +876,11 @@ export async function reconcileAllImports() {
   `);
 
   for (const importRow of imports) {
-    await reconcileImport(importRow.id);
+    await reconcileImport(importRow.id, { emitChange: false });
+  }
+
+  if (emitChange && imports.length > 0) {
+    notifyDatabaseChanged({ source: "reconcile-all-imports" });
   }
 }
 
@@ -895,6 +908,10 @@ export async function reconcileImportsForCpfs(cpfs = []) {
   `);
 
   for (const importRow of imports) {
-    await reconcileImport(importRow.id);
+    await reconcileImport(importRow.id, { emitChange: false });
+  }
+
+  if (imports.length > 0) {
+    notifyDatabaseChanged({ source: "cpf-reconcile" });
   }
 }

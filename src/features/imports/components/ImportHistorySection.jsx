@@ -4,6 +4,7 @@ import MonthInput from "../../../components/ui/MonthInput";
 import PaginationControls from "../../../components/ui/PaginationControls";
 import SectionCard from "../../../components/ui/SectionCard";
 import SelectInput from "../../../components/ui/SelectInput";
+import { SkeletonRows } from "../../../components/ui/Skeleton";
 import { DownloadIcon } from "../../../components/ui/icons";
 import ImportHistoryItem from "./ImportHistoryItem";
 
@@ -28,9 +29,11 @@ export default function ImportHistorySection({
           variant="subtle"
           onClick={onExport}
           disabled={isExporting}
+          isLoading={isExporting}
+          loadingLabel="Exportando..."
           leftIcon={<DownloadIcon className="h-4 w-4" />}
         >
-          {isExporting ? "Exportando..." : "Exportar histórico CSV"}
+          Exportar histórico CSV
         </Button>
         <Button variant="subtle" onClick={onClearFilters}>
           Limpar filtros
@@ -71,13 +74,15 @@ export default function ImportHistorySection({
         />
       </div>
 
-      {imports.length === 0 ? (
+      {isRefreshing && imports.length === 0 ? (
+        <SkeletonRows rows={3} />
+      ) : imports.length === 0 ? (
         <EmptyState
           title="Nenhuma importação cadastrada"
           description="Quando você importar uma planilha da Nota Fiscal Paulista, o histórico aparecerá aqui."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy={isRefreshing}>
           <PaginationControls
             endItem={pagination.endItem}
             onPageChange={pagination.setPage}

@@ -1234,7 +1234,10 @@ async function persistConnectedFileSnapshot() {
   await persistSnapshotToFileHandle(connectedDatabaseFileHandle, snapshot);
 }
 
-async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
+async function restoreDatabaseSnapshot(
+  snapshot,
+  { allowEmpty = false, emitChange = true } = {},
+) {
   const normalizedSnapshot = normalizeSnapshotPayload(snapshot);
 
   if (!normalizedSnapshot) {
@@ -1299,7 +1302,9 @@ async function restoreDatabaseSnapshot(snapshot, { allowEmpty = false } = {}) {
 
   await initSchema({ structural: false });
   await flushOpenFiles();
-  notifyDatabaseChanged({ source: "restore" });
+  if (emitChange) {
+    notifyDatabaseChanged({ source: "restore" });
+  }
 }
 
 async function readSnapshotFromFileHandle(handle) {
@@ -1338,7 +1343,10 @@ function buildConnectedFileStorageInfo(handle) {
   };
 }
 
-async function connectDatabaseFileHandle(handle, { preserveCurrentData } = {}) {
+async function connectDatabaseFileHandle(
+  handle,
+  { emitChange = true, preserveCurrentData } = {},
+) {
   if (!supportsFileDatabaseSelection()) {
     throw new Error(
       "Este navegador nao suporta selecao de arquivo para usar um banco local em disco.",
@@ -1367,7 +1375,10 @@ async function connectDatabaseFileHandle(handle, { preserveCurrentData } = {}) {
   updateStorageInfo(buildConnectedFileStorageInfo(handle));
 
   if (!isEmptyFile && snapshotFromFile) {
-    await restoreDatabaseSnapshot(snapshotFromFile, { allowEmpty: true });
+    await restoreDatabaseSnapshot(snapshotFromFile, {
+      allowEmpty: true,
+      emitChange,
+    });
   } else if (!isEmptyFile && !snapshotFromFile) {
     throw new Error(
       "O arquivo selecionado nao parece ser um arquivo de dados valido do Notar.",
@@ -1407,7 +1418,7 @@ export async function createDatabaseFile() {
   return connectDatabaseFileHandle(handle, { preserveCurrentData: true });
 }
 
-export async function openDatabaseFile() {
+export async function openDatabaseFile({ emitChange = true } = {}) {
   if (!supportsFileDatabaseSelection()) {
     throw new Error(
       "Este navegador nao suporta a abertura de arquivo local para o banco de dados.",
@@ -1430,7 +1441,10 @@ export async function openDatabaseFile() {
     throw new Error("Nenhum arquivo foi selecionado.");
   }
 
-  return connectDatabaseFileHandle(handle, { preserveCurrentData: false });
+  return connectDatabaseFileHandle(handle, {
+    emitChange,
+    preserveCurrentData: false,
+  });
 }
 
 export async function disconnectDatabaseFile() {
@@ -1476,7 +1490,7 @@ export async function exportDatabaseBackup() {
   };
 }
 
-export async function importDatabaseBackup(file) {
+export async function importDatabaseBackup(file, { emitChange = true } = {}) {
   if (!file) {
     throw new Error("Selecione um arquivo de backup para importar.");
   }
@@ -1501,7 +1515,7 @@ export async function importDatabaseBackup(file) {
     throw new Error("O arquivo selecionado nao parece ser um backup valido do Notar.");
   }
 
-  await restoreDatabaseSnapshot(snapshot, { allowEmpty: true });
+  await restoreDatabaseSnapshot(snapshot, { allowEmpty: true, emitChange });
 
   return {
     storageInfo: await getDatabaseStorageInfo(),

@@ -31,8 +31,13 @@ export default function FormModal({
           >
             {cancelLabel}
           </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Salvando..." : confirmLabel}
+          <Button
+            type="submit"
+            disabled={isLoading}
+            isLoading={isLoading}
+            loadingLabel="Salvando..."
+          >
+            {confirmLabel}
           </Button>
         </div>
       </form>

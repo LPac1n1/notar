@@ -4,6 +4,7 @@ import MonthInput from "../../../components/ui/MonthInput";
 import PaginationControls from "../../../components/ui/PaginationControls";
 import SectionCard from "../../../components/ui/SectionCard";
 import SelectInput from "../../../components/ui/SelectInput";
+import { SkeletonRows } from "../../../components/ui/Skeleton";
 import { DownloadIcon } from "../../../components/ui/icons";
 import CpfSummaryItem from "./CpfSummaryItem";
 
@@ -31,9 +32,11 @@ export default function CpfSummarySection({
           variant="subtle"
           onClick={onExport}
           disabled={isExporting}
+          isLoading={isExporting}
+          loadingLabel="Exportando..."
           leftIcon={<DownloadIcon className="h-4 w-4" />}
         >
-          {isExporting ? "Exportando..." : "Exportar CSV"}
+          Exportar CSV
         </Button>
         <Button variant="subtle" onClick={onClearFilters}>
           Limpar filtros
@@ -109,13 +112,15 @@ export default function CpfSummarySection({
         />
       </div>
 
-      {cpfSummary.length === 0 ? (
+      {isRefreshing && cpfSummary.length === 0 ? (
+        <SkeletonRows rows={4} />
+      ) : cpfSummary.length === 0 ? (
         <EmptyState
           title="Nenhum CPF encontrado"
           description="Os CPFs identificados nas importações aparecerão aqui, junto com a indicação de cadastro no sistema."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy={isRefreshing}>
           <PaginationControls
             endItem={pagination.endItem}
             onPageChange={pagination.setPage}

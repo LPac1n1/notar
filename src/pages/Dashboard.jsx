@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeModal, setActiveModal] = useState("");
+  const dashboardRequestIdRef = useRef(0);
   const navigate = useNavigate();
 
   const openDonorProfile = (donorId) => {
@@ -38,12 +39,24 @@ export default function Dashboard() {
   };
 
   const loadDashboard = useCallback(async () => {
+    const requestId = dashboardRequestIdRef.current + 1;
+    dashboardRequestIdRef.current = requestId;
+
     try {
       setIsLoading(true);
       setError("");
       const overview = await getDashboardOverview();
+
+      if (requestId !== dashboardRequestIdRef.current) {
+        return;
+      }
+
       setDashboard(overview);
     } catch (dashboardError) {
+      if (requestId !== dashboardRequestIdRef.current) {
+        return;
+      }
+
       console.error(
         "Erro ao carregar dashboard:",
         getErrorMessage(dashboardError, "Erro desconhecido."),
@@ -55,7 +68,9 @@ export default function Dashboard() {
         ),
       );
     } finally {
-      setIsLoading(false);
+      if (requestId === dashboardRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
