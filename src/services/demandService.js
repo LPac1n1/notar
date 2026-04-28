@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { escapeSqlString, execute, query } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileAllImports } from "./importService";
 import { createTrashItem } from "./trashService";
 import {
@@ -69,6 +70,17 @@ export async function createDemand({
       CURRENT_TIMESTAMP
     )
   `);
+
+  await createActionHistoryEntry({
+    actionType: "create",
+    entityType: "demand",
+    entityId: id,
+    label: trimmedName,
+    description: `Demanda ${trimmedName} cadastrada.`,
+    payload: {
+      color: normalizedColor,
+    },
+  });
 }
 
 export async function updateDemand({
@@ -130,6 +142,18 @@ export async function updateDemand({
   `);
 
   await reconcileAllImports();
+
+  await createActionHistoryEntry({
+    actionType: "update",
+    entityType: "demand",
+    entityId: id,
+    label: trimmedName,
+    description: `Demanda ${currentName} atualizada para ${trimmedName}.`,
+    payload: {
+      color: normalizedColor,
+      previousName: currentName,
+    },
+  });
 }
 
 export async function deleteDemand(id) {
@@ -179,6 +203,17 @@ export async function deleteDemand(id) {
     DELETE FROM demands
     WHERE id = '${escapeSqlString(id)}'
   `);
+
+  await createActionHistoryEntry({
+    actionType: "delete",
+    entityType: "demand",
+    entityId: id,
+    label: demandRows[0].name,
+    description: `Demanda ${demandRows[0].name} enviada para a lixeira.`,
+    payload: {
+      trashItemId,
+    },
+  });
 
   return trashItemId;
 }

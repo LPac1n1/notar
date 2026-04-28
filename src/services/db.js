@@ -110,6 +110,16 @@ const RESTORE_TABLE_COLUMNS = {
     "created_at",
     "updated_at",
   ],
+  action_history: [
+    "id",
+    "action_type",
+    "entity_type",
+    "entity_id",
+    "label",
+    "description",
+    "payload_json",
+    "created_at",
+  ],
   trash_items: [
     "id",
     "entity_type",
@@ -334,6 +344,19 @@ async function initSchema({ structural = true } = {}) {
       label TEXT,
       payload_json TEXT,
       deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+    await conn.query(`
+    CREATE TABLE IF NOT EXISTS action_history (
+      id TEXT,
+      action_type TEXT,
+      entity_type TEXT,
+      entity_id TEXT,
+      label TEXT,
+      description TEXT,
+      payload_json TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -966,6 +989,10 @@ async function initSchema({ structural = true } = {}) {
     await conn.query(`
       CREATE INDEX IF NOT EXISTS idx_monthly_summary_import ON monthly_donor_summary(import_id)
     `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_action_history_entity ON action_history(entity_type, created_at)
+    `).catch(() => null);
   }
 
 }
@@ -1228,6 +1255,20 @@ async function exportDatabaseSnapshot() {
     ORDER BY deleted_at DESC, id ASC
   `);
 
+  const actionHistory = await query(`
+    SELECT
+      id,
+      action_type,
+      entity_type,
+      entity_id,
+      label,
+      description,
+      payload_json,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM action_history
+    ORDER BY created_at DESC, id ASC
+  `);
+
   return {
     demands,
     people,
@@ -1236,6 +1277,7 @@ async function exportDatabaseSnapshot() {
     imports,
     importCpfSummary,
     monthlyDonorSummary,
+    actionHistory,
     trashItems,
   };
 }
@@ -1264,6 +1306,7 @@ async function restoreDatabaseSnapshot(
   }
 
   const tableOrderToClear = [
+    "action_history",
     "monthly_donor_summary",
     "import_cpf_summary",
     "imports",
@@ -1281,6 +1324,7 @@ async function restoreDatabaseSnapshot(
     ["imports", normalizedSnapshot.imports],
     ["import_cpf_summary", normalizedSnapshot.importCpfSummary],
     ["monthly_donor_summary", normalizedSnapshot.monthlyDonorSummary],
+    ["action_history", normalizedSnapshot.actionHistory],
     ["trash_items", normalizedSnapshot.trashItems],
   ];
 

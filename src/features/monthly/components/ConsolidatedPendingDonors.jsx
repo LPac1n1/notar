@@ -64,12 +64,12 @@ export default function ConsolidatedPendingDonors({
     }));
   };
 
-  const markMonthsAsApplied = (donor, summaryIds) => {
+  const markMonthsAsApplied = (donor, summaryIds, options = {}) => {
     if (!summaryIds.length) {
       return;
     }
 
-    onStatusChange?.(donor, "applied", { summaryIds });
+    onStatusChange?.(donor, "applied", { ...options, summaryIds });
   };
 
   return (
@@ -189,7 +189,9 @@ export default function ConsolidatedPendingDonors({
                         variant="subtle"
                         disabled={isUpdating || selectedMonthIds.length === 0}
                         onClick={() =>
-                          markMonthsAsApplied(donor, selectedMonthIds)
+                          markMonthsAsApplied(donor, selectedMonthIds, {
+                            operation: "selected",
+                          })
                         }
                       >
                         Realizar selecionados
@@ -201,6 +203,7 @@ export default function ConsolidatedPendingDonors({
                           markMonthsAsApplied(
                             donor,
                             donor.months.map((month) => month.id),
+                            { operation: "all" },
                           )
                         }
                       >
@@ -222,7 +225,10 @@ export default function ConsolidatedPendingDonors({
                           variant="subtle"
                           disabled={isUpdating || monthIdsThroughLimit.length === 0}
                           onClick={() =>
-                            markMonthsAsApplied(donor, monthIdsThroughLimit)
+                            markMonthsAsApplied(donor, monthIdsThroughLimit, {
+                              monthLimit,
+                              operation: "through",
+                            })
                           }
                         >
                           Realizar até

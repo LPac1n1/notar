@@ -16,6 +16,7 @@ import TextInput from "../components/ui/TextInput";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import DonorForm from "../features/donors/components/DonorForm";
 import DonorListItem from "../features/donors/components/DonorListItem";
+import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { listDemands } from "../services/demandService";
 import {
   createDonor,
@@ -494,6 +495,17 @@ export default function Donors() {
       setSuccessAction(null);
       setIsExporting(true);
       const result = await exportDonorsCsv(filters);
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: "donors-csv",
+        label: "Doadores CSV",
+        description: `${result.rowCount} doador(es) exportado(s) em CSV.`,
+        payload: {
+          filters,
+          rowCount: result.rowCount,
+        },
+      });
       setSuccessMessage(`${result.rowCount} doador(es) exportado(s) em CSV.`);
     } catch (err) {
       console.error(

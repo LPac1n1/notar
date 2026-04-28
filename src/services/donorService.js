@@ -6,6 +6,7 @@ import {
   runInTransaction,
   startOfMonth,
 } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileImportsForCpfs } from "./importService";
 import {
   createPerson,
@@ -264,7 +265,7 @@ async function resolveCreatePersonContext({
   const createdPersonId = await createPerson({
     name: normalizedName,
     cpf: normalizedCpf,
-  });
+  }, { recordHistory: false });
 
   return getPersonById(createdPersonId);
 }
@@ -540,6 +541,20 @@ export async function createDonor({
 
   await syncAuxiliaryHolderDonorIds([person.id]);
   await reconcileCpfChanges([person.cpfValue]);
+
+  await createActionHistoryEntry({
+    actionType: "create",
+    entityType: "donor",
+    entityId: id,
+    label: person.name,
+    description: `Doador ${person.name} cadastrado como ${normalizedDonorType === "auxiliary" ? "auxiliar" : "titular"}.`,
+    payload: {
+      cpf: person.cpfValue,
+      demand: resolvedDemand,
+      donorType: normalizedDonorType,
+      holderName: holderContext?.name ?? "",
+    },
+  });
 }
 
 export async function updateDonor({
@@ -681,6 +696,21 @@ export async function updateDonor({
 
   await syncAuxiliaryHolderDonorIds([currentPerson.id]);
   await reconcileCpfChanges([currentDonor.cpf, normalizedCpf]);
+
+  await createActionHistoryEntry({
+    actionType: "update",
+    entityType: "donor",
+    entityId: id,
+    label: normalizedName,
+    description: `Doador ${currentPerson.name} atualizado.`,
+    payload: {
+      cpf: normalizedCpf,
+      demand: resolvedDemand,
+      donorType: normalizedDonorType,
+      previousCpf: currentDonor.cpf,
+      previousName: currentPerson.name,
+    },
+  });
 }
 
 export async function deleteDonor(id) {
@@ -780,6 +810,19 @@ export async function deleteDonor(id) {
 
   await syncAuxiliaryHolderDonorIds([donor.person_id]);
   await reconcileCpfChanges(cpfRows.map((row) => row.cpf));
+
+  await createActionHistoryEntry({
+    actionType: "delete",
+    entityType: "donor",
+    entityId: id,
+    label: donor.name,
+    description: `Doador ${donor.name} enviado para a lixeira.`,
+    payload: {
+      cpf: donor.cpf,
+      donorType: donor.donor_type,
+      trashItemId,
+    },
+  });
 
   return trashItemId;
 }

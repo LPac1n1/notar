@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   formatDatePtBR,
+  formatDateTimePtBR,
   formatMonthYear,
   hasDonationStartConflict,
   startOfMonth,
@@ -22,6 +23,10 @@ test("formatMonthYear returns month name capitalized in pt-BR", () => {
 
 test("formatDatePtBR returns Brazilian date format", () => {
   assert.equal(formatDatePtBR("2026-04-14T12:00:00Z"), "14/04/2026");
+});
+
+test("formatDateTimePtBR returns Brazilian date and time format", () => {
+  assert.equal(formatDateTimePtBR("2026-04-14 10:30:00"), "14/04/2026, 10:30");
 });
 
 test("subtractOneMonth returns the previous month boundary", () => {

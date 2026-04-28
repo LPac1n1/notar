@@ -6,6 +6,7 @@ import {
   query,
   runInTransaction,
 } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileImportsForCpfs } from "./importService";
 
 function serializeSqlValue(value) {
@@ -102,16 +103,54 @@ export async function listTrashItems() {
 }
 
 export async function deleteTrashItemPermanently(id) {
+  const rows = await query(`
+    SELECT id, entity_type, entity_id, label
+    FROM trash_items
+    WHERE id = '${escapeSqlString(id)}'
+    LIMIT 1
+  `);
+
   await execute(`
     DELETE FROM trash_items
     WHERE id = '${escapeSqlString(id)}'
   `);
+
+  if (rows[0]) {
+    await createActionHistoryEntry({
+      actionType: "permanent_delete",
+      entityType: "trash",
+      entityId: rows[0].entity_id,
+      label: rows[0].label,
+      description: `${rows[0].label} removido permanentemente da lixeira.`,
+      payload: {
+        originalEntityType: rows[0].entity_type,
+        trashItemId: rows[0].id,
+      },
+    });
+  }
 }
 
 export async function deleteAllTrashItemsPermanently() {
+  const rows = await query(`
+    SELECT count(*) AS total
+    FROM trash_items
+  `);
+  const total = Number(rows[0]?.total ?? 0);
+
   await execute(`
     DELETE FROM trash_items
   `);
+
+  await createActionHistoryEntry({
+    actionType: "permanent_delete",
+    entityType: "trash",
+    entityId: "trash",
+    label: "Lixeira",
+    description: `Lixeira esvaziada com ${total} item(ns).`,
+    payload: {
+      total,
+    },
+  });
 }
 
 async function restoreDemand(payload) {
@@ -312,7 +351,7 @@ async function restoreImport(payload) {
 
 export async function restoreTrashItem(id) {
   const rows = await query(`
-    SELECT id, entity_type, entity_id, payload_json
+    SELECT id, entity_type, entity_id, label, payload_json
     FROM trash_items
     WHERE id = '${escapeSqlString(id)}'
     LIMIT 1
@@ -345,5 +384,16 @@ export async function restoreTrashItem(id) {
       DELETE FROM trash_items
       WHERE id = '${escapeSqlString(id)}'
     `);
+
+    await createActionHistoryEntry({
+      actionType: "restore",
+      entityType: trashItem.entity_type,
+      entityId: trashItem.entity_id,
+      label: trashItem.label,
+      description: `${trashItem.label} restaurado da lixeira.`,
+      payload: {
+        trashItemId: trashItem.id,
+      },
+    });
   });
 }

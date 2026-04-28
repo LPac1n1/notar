@@ -10,6 +10,7 @@ import {
   runInTransaction,
   startOfMonth,
 } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
 import {
   detectCpfColumn,
   getImportFileExtension,
@@ -585,6 +586,23 @@ export async function processImportedFile({
 
     notifyDatabaseChanged({ source: "import" });
 
+    await createActionHistoryEntry({
+      actionType: "import",
+      entityType: "import",
+      entityId: importId,
+      label: originalFileName,
+      description: `Planilha ${originalFileName} importada.`,
+      payload: {
+        cpfColumn,
+        fileName: originalFileName,
+        referenceMonth: normalizedMonth,
+        rowCount: cpfCounts.reduce(
+          (total, row) => total + Number(row.notes_count ?? 0),
+          0,
+        ),
+      },
+    });
+
     return importId;
   } catch (error) {
     const errorMessage = getErrorMessage(error, "Falha ao processar a importacao.");
@@ -703,6 +721,18 @@ export async function deleteImport(importId) {
       DELETE FROM imports
       WHERE id = '${escapeSqlString(importId)}'
     `);
+  });
+
+  await createActionHistoryEntry({
+    actionType: "delete",
+    entityType: "import",
+    entityId: importId,
+    label: importRows[0].file_name,
+    description: `Importação ${importRows[0].file_name} enviada para a lixeira.`,
+    payload: {
+      referenceMonth: importRows[0].reference_month,
+      trashItemId,
+    },
   });
 
   return trashItemId;

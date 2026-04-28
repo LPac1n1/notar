@@ -11,6 +11,7 @@ import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDet
 import CpfSummarySection from "../features/imports/components/CpfSummarySection";
 import ImportHistorySection from "../features/imports/components/ImportHistorySection";
 import ImportUploadModal from "../features/imports/components/ImportUploadModal";
+import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { releaseRegisteredFile } from "../services/db";
 import {
   exportImportCpfSummaryCsv,
@@ -618,6 +619,17 @@ export default function Imports() {
           loadingMessage: "Exportando historico de importacoes...",
         },
       );
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: "imports-csv",
+        label: "Histórico de importações CSV",
+        description: `${result.rowCount} importacao(oes) exportada(s) em CSV.`,
+        payload: {
+          filters: importFilters,
+          rowCount: result.rowCount,
+        },
+      });
       setSuccessMessage(
         `${result.rowCount} importacao(oes) exportada(s) em CSV.`,
       );
@@ -644,6 +656,17 @@ export default function Imports() {
           loadingMessage: "Exportando CPFs encontrados...",
         },
       );
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: "import-cpfs-csv",
+        label: "CPFs encontrados CSV",
+        description: `${result.rowCount} CPF(s) exportado(s) em CSV.`,
+        payload: {
+          filters: cpfFilters,
+          rowCount: result.rowCount,
+        },
+      });
       setSuccessMessage(
         `${result.rowCount} CPF(s) exportado(s) em CSV.`,
       );

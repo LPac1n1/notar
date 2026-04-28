@@ -76,6 +76,29 @@ export function formatDatePtBR(value) {
   }).format(date);
 }
 
+export function formatDateTimePtBR(value) {
+  if (!value) {
+    return "";
+  }
+
+  const normalizedValue = String(value).includes("T")
+    ? value
+    : String(value).replace(" ", "T");
+  const date = new Date(normalizedValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function subtractOneMonth(value) {
   if (!value) {
     return "";

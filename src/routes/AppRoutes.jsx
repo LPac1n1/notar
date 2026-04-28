@@ -10,6 +10,7 @@ import Demands from "../pages/Demands";
 import People from "../pages/People";
 import Monthly from "../pages/Monthly";
 import Imports from "../pages/Imports";
+import ActionHistory from "../pages/ActionHistory";
 import Settings from "../pages/Settings";
 import Trash from "../pages/Trash";
 
@@ -29,6 +30,7 @@ function AnimatedRoutes() {
             <Route path="/mensal" element={<Monthly />} />
             <Route path="/importacoes" element={<Imports />} />
             <Route path="/lixeira" element={<Trash />} />
+            <Route path="/historico" element={<ActionHistory />} />
             <Route path="/configuracoes" element={<Settings />} />
           </Routes>
         </PageTransition>

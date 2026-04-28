@@ -15,6 +15,7 @@ export {
   FolderOpen as FolderOpenIcon,
   HardDriveDownload as BackupExportIcon,
   HardDriveUpload as BackupImportIcon,
+  History as HistoryIcon,
   Inbox as EmptyIcon,
   Info as InfoIcon,
   LayoutDashboard as DashboardIcon,

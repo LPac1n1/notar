@@ -25,13 +25,15 @@ import GroupSection from "../features/monthly/components/GroupSection";
 import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
 import MonthlySummaryRow from "../features/monthly/components/MonthlySummaryRow";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
+import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
 import { listImports } from "../services/importService";
 import {
   listMonthlySummaries,
-  updateAbatementStatus,
+  updateAbatementStatusWithHistory,
   updateAbatementStatuses,
+  updateAbatementStatusesWithHistory,
 } from "../services/monthlyService";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
@@ -42,6 +44,77 @@ import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useAsync } from "../hooks/useAsync";
 import { useDelayedLoading } from "../hooks/useDelayedLoading";
+
+function getAbatementStatusLabel(status) {
+  return status === "applied" ? "realizado" : "pendente";
+}
+
+function getAbatementOperationLabel(operation, monthLimit = "") {
+  if (operation === "all") {
+    return "Realizar todos";
+  }
+
+  if (operation === "through") {
+    return monthLimit
+      ? `Realizar até ${formatMonthYear(monthLimit)}`
+      : "Realizar até";
+  }
+
+  if (operation === "selected") {
+    return "Realizar selecionados";
+  }
+
+  if (operation === "undo") {
+    return "Desfazer";
+  }
+
+  return "Alteração manual";
+}
+
+function buildAbatementHistoryEntry({
+  actionType = "monthly_abatement_status_update",
+  donor,
+  monthLimit = "",
+  months,
+  operation = "manual",
+  status,
+}) {
+  const normalizedMonths = months.map((month) => ({
+    id: month.id,
+    referenceMonth: month.referenceMonth,
+    previousStatus: month.abatementStatus,
+    amount: Number(month.abatementAmount ?? 0),
+  }));
+  const totalAmount = normalizedMonths.reduce(
+    (total, month) => total + month.amount,
+    0,
+  );
+  const statusLabel = getAbatementStatusLabel(status);
+  const actionVerb = actionType.includes("undo")
+    ? "restaurado(s) como"
+    : "marcado(s) como";
+
+  return {
+    actionType,
+    entityType: "monthly_abatement",
+    entityId: donor.donorId,
+    label: donor.donorName,
+    description: `${formatInteger(normalizedMonths.length)} mês(es) de ${donor.donorName} ${actionVerb} ${statusLabel}.`,
+    payload: {
+      demand: donor.demand ?? "",
+      donorId: donor.donorId,
+      donorName: donor.donorName,
+      donorType: donor.donorType,
+      monthCount: normalizedMonths.length,
+      monthLimit,
+      months: normalizedMonths,
+      operation,
+      operationLabel: getAbatementOperationLabel(operation, monthLimit),
+      status,
+      totalAmount,
+    },
+  };
+}
 
 export default function Monthly() {
   const location = useLocation();
@@ -217,8 +290,9 @@ export default function Monthly() {
     }));
   };
 
-  const applyStatusChanges = useCallback(async (changes = []) => {
+  const applyStatusChanges = useCallback(async (changes = [], history = null) => {
     const changesByStatus = new Map();
+    let didRecordHistory = false;
 
     for (const change of changes) {
       if (!change.summaryId) {
@@ -232,7 +306,16 @@ export default function Monthly() {
     }
 
     for (const [status, summaryIds] of changesByStatus.entries()) {
-      await updateAbatementStatuses({ summaryIds, status });
+      if (history && !didRecordHistory) {
+        await updateAbatementStatusesWithHistory({
+          history,
+          status,
+          summaryIds,
+        });
+        didRecordHistory = true;
+      } else {
+        await updateAbatementStatuses({ summaryIds, status });
+      }
     }
   }, []);
 
@@ -240,6 +323,7 @@ export default function Monthly() {
     async ({
       changes = [],
       donorId = "",
+      history = null,
       summaryId = "",
       message = "Alteracao desfeita.",
     } = {}) => {
@@ -249,7 +333,7 @@ export default function Monthly() {
         setSuccessAction(null);
         setUpdatingDonorId(donorId);
         setUpdatingSummaryId(summaryId);
-        await applyStatusChanges(changes);
+        await applyStatusChanges(changes, history);
         await loadSummaries();
         setSuccessMessage(message);
       } catch (err) {
@@ -278,7 +362,12 @@ export default function Monthly() {
       setSuccessMessage("");
       setSuccessAction(null);
       setUpdatingSummaryId(summaryId);
-      await updateAbatementStatus({ summaryId, status });
+      const history = buildAbatementHistoryEntry({
+        donor: currentSummary,
+        months: [currentSummary],
+        status,
+      });
+      await updateAbatementStatusWithHistory({ history, summaryId, status });
       await loadSummaries();
       const message = "Status do abatimento atualizado.";
       setSuccessMessage(message);
@@ -292,6 +381,13 @@ export default function Monthly() {
                 status: currentSummary.abatementStatus,
               },
             ],
+            history: buildAbatementHistoryEntry({
+              actionType: "monthly_abatement_status_undo",
+              donor: currentSummary,
+              months: [currentSummary],
+              operation: "undo",
+              status: currentSummary.abatementStatus,
+            }),
             summaryId,
             message: "Status anterior restaurado.",
           }),
@@ -312,7 +408,7 @@ export default function Monthly() {
   const handleConsolidatedDonorStatusChange = async (
     donor,
     status,
-    { summaryIds = [] } = {},
+    { monthLimit = "", operation = "manual", summaryIds = [] } = {},
   ) => {
     if (!donor || status !== "applied") {
       return;
@@ -334,7 +430,15 @@ export default function Monthly() {
       setSuccessMessage("");
       setSuccessAction(null);
       setUpdatingDonorId(donor.donorId);
-      await updateAbatementStatuses({
+      const history = buildAbatementHistoryEntry({
+        donor,
+        monthLimit,
+        months: changedMonths,
+        operation,
+        status,
+      });
+      await updateAbatementStatusesWithHistory({
+        history,
         summaryIds: changedMonths.map((month) => month.id),
         status,
       });
@@ -350,6 +454,13 @@ export default function Monthly() {
               status: month.abatementStatus,
             })),
             donorId: donor.donorId,
+            history: buildAbatementHistoryEntry({
+              actionType: "monthly_abatement_status_undo",
+              donor,
+              months: changedMonths,
+              operation: "undo",
+              status: "pending",
+            }),
             message: "Abatimentos do doador restaurados como pendentes.",
           }),
       });
@@ -386,6 +497,17 @@ export default function Monthly() {
           loadingMessage: "Exportando resumo mensal...",
         },
       );
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: "monthly-csv",
+        label: "Gestão mensal CSV",
+        description: `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
+        payload: {
+          filters,
+          rowCount: result.rowCount,
+        },
+      });
       setSuccessMessage(
         `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
       );
@@ -413,10 +535,35 @@ export default function Monthly() {
         },
       );
       if (result.archiveName) {
+        await createActionHistoryEntry({
+          actionType: "export",
+          entityType: "export",
+          entityId: "donation-report-zip",
+          label: result.archiveName,
+          description: `ZIP gerado com ${formatInteger(result.demandCount)} PDF(s).`,
+          payload: {
+            archiveName: result.archiveName,
+            demandCount: result.demandCount,
+            filters,
+            rowCount: result.rowCount,
+          },
+        });
         setSuccessMessage(
           `ZIP gerado com ${formatInteger(result.demandCount)} PDF(s) e ${formatInteger(result.rowCount)} pessoa(s).`,
         );
       } else {
+        await createActionHistoryEntry({
+          actionType: "export",
+          entityType: "export",
+          entityId: "donation-report-pdf",
+          label: result.fileName ?? "PDF por demanda",
+          description: `PDF gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
+          payload: {
+            fileName: result.fileName ?? "",
+            filters,
+            rowCount: result.rowCount,
+          },
+        });
         setSuccessMessage(
           `PDF gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
         );

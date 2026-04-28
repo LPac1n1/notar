@@ -5,6 +5,7 @@ import {
   normalizeCpf,
   query,
 } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
 import { createTrashItem } from "./trashService";
 import { formatCpf } from "../utils/cpf";
 import { formatMonthYear } from "../utils/date";
@@ -211,7 +212,7 @@ export async function createPerson({
   id = nanoid(),
   name,
   cpf,
-}) {
+}, { recordHistory = true } = {}) {
   const normalizedName = normalizePersonName(name);
   const normalizedCpf = normalizeCpf(cpf);
 
@@ -245,6 +246,19 @@ export async function createPerson({
       CURRENT_TIMESTAMP
     )
   `);
+
+  if (recordHistory) {
+    await createActionHistoryEntry({
+      actionType: "create",
+      entityType: "person",
+      entityId: id,
+      label: normalizedName,
+      description: `Pessoa ${normalizedName} cadastrada.`,
+      payload: {
+        cpf: normalizedCpf,
+      },
+    });
+  }
 
   return id;
 }
@@ -293,6 +307,19 @@ export async function updatePerson({
       updated_at = CURRENT_TIMESTAMP
     WHERE id = '${escapeSqlString(id)}'
   `);
+
+  await createActionHistoryEntry({
+    actionType: "update",
+    entityType: "person",
+    entityId: id,
+    label: normalizedName,
+    description: `Pessoa ${currentPerson.name} atualizada.`,
+    payload: {
+      cpf: normalizedCpf,
+      previousCpf: currentPerson.cpfValue,
+      previousName: currentPerson.name,
+    },
+  });
 }
 
 export async function deletePerson(id) {
@@ -352,6 +379,17 @@ export async function deletePerson(id) {
     DELETE FROM people
     WHERE id = '${escapeSqlString(id)}'
   `);
+
+  await createActionHistoryEntry({
+    actionType: "delete",
+    entityType: "person",
+    entityId: id,
+    label: rows[0].name,
+    description: `Pessoa ${rows[0].name} enviada para a lixeira.`,
+    payload: {
+      trashItemId,
+    },
+  });
 
   return trashItemId;
 }

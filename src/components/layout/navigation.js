@@ -2,6 +2,7 @@ import {
   DashboardIcon,
   DemandIcon,
   DonorIcon,
+  HistoryIcon,
   ImportIcon,
   MonthlyIcon,
   SettingsIcon,
@@ -52,6 +53,12 @@ export const NAV_ITEMS = [
     label: "Lixeira",
     description: "Itens removidos e restauração",
     icon: TrashIcon,
+  },
+  {
+    to: "/historico",
+    label: "Histórico",
+    description: "Auditoria e ações recentes",
+    icon: HistoryIcon,
   },
   {
     to: "/configuracoes",

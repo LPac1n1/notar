@@ -3,8 +3,10 @@ import {
   execute,
   normalizeCpf,
   query,
+  runInTransaction,
   startOfMonth,
 } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
 
 function parseSourceCpfs(value) {
   return String(value ?? "")
@@ -564,6 +566,23 @@ export async function updateAbatementStatus({
   `);
 }
 
+export async function updateAbatementStatusWithHistory({
+  history,
+  status,
+  summaryId,
+}) {
+  await runInTransaction(
+    async () => {
+      await updateAbatementStatus({ summaryId, status });
+
+      if (history) {
+        await createActionHistoryEntry(history);
+      }
+    },
+    { changeSource: "monthly-action-history" },
+  );
+}
+
 export async function updateAbatementStatuses({
   summaryIds = [],
   status,
@@ -595,4 +614,21 @@ export async function updateAbatementStatuses({
       updated_at = CURRENT_TIMESTAMP
     WHERE id IN (${idList})
   `);
+}
+
+export async function updateAbatementStatusesWithHistory({
+  history,
+  status,
+  summaryIds = [],
+}) {
+  await runInTransaction(
+    async () => {
+      await updateAbatementStatuses({ summaryIds, status });
+
+      if (history) {
+        await createActionHistoryEntry(history);
+      }
+    },
+    { changeSource: "monthly-action-history" },
+  );
 }

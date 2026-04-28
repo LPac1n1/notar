@@ -23,6 +23,7 @@ import {
   openDatabaseFile,
   STORAGE_INFO_EVENT,
 } from "../services/db";
+import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { reconcileAllImports } from "../services/importService";
 import { downloadFile } from "../utils/download";
 import { getErrorMessage } from "../utils/error";
@@ -35,8 +36,25 @@ function formatBackupStats(stats = {}) {
     `${stats.imports ?? 0} importacao(oes)`,
     `${stats.importCpfSummary ?? 0} CPF(s) consolidados`,
     `${stats.monthlyDonorSummary ?? 0} resumo(s) mensal(is)`,
+    `${stats.actionHistory ?? 0} acao(oes) no historico`,
     `${stats.trashItems ?? 0} item(ns) na lixeira`,
   ].join(", ");
+}
+
+async function recordSettingsAction({
+  actionType,
+  description,
+  label,
+  payload = {},
+}) {
+  await createActionHistoryEntry({
+    actionType,
+    entityType: "settings",
+    entityId: "settings",
+    label,
+    description,
+    payload,
+  });
 }
 
 export default function Settings() {
@@ -101,6 +119,15 @@ export default function Settings() {
       setSuccessMessage("");
 
       const result = await createDatabaseFile();
+      await recordSettingsAction({
+        actionType: "storage",
+        label: result.storageInfo.fileName || "Arquivo de dados",
+        description: "Arquivo de dados criado e conectado.",
+        payload: {
+          fileName: result.storageInfo.fileName,
+          migratedCurrentSession: result.migratedCurrentSession,
+        },
+      });
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
         result.migratedCurrentSession
@@ -127,6 +154,15 @@ export default function Settings() {
 
       const result = await openDatabaseFile({ emitChange: false });
       await reconcileAllImports({ emitChange: false });
+      await recordSettingsAction({
+        actionType: "storage",
+        label: result.storageInfo.fileName || "Arquivo de dados",
+        description: "Arquivo de dados existente conectado.",
+        payload: {
+          fileName: result.storageInfo.fileName,
+          usedExistingFile: result.usedExistingFile,
+        },
+      });
       notifyDatabaseChanged({ source: "database-file-opened" });
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
@@ -153,6 +189,14 @@ export default function Settings() {
       setSuccessMessage("");
 
       const result = await disconnectDatabaseFile();
+      await recordSettingsAction({
+        actionType: "storage",
+        label: storageInfo?.fileName || "Arquivo de dados",
+        description: "Arquivo de dados desconectado.",
+        payload: {
+          fileName: storageInfo?.fileName ?? "",
+        },
+      });
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
         "Arquivo desconectado. Os dados atuais continuam apenas nesta sessao ate que um novo arquivo seja conectado.",
@@ -181,6 +225,16 @@ export default function Settings() {
         fileName: backup.fileName,
         content: backup.text,
         mimeType: "application/json",
+      });
+      await recordSettingsAction({
+        actionType: "backup",
+        label: backup.fileName,
+        description: "Backup exportado.",
+        payload: {
+          exportedAt: backup.exportedAt,
+          fileName: backup.fileName,
+          stats: backup.stats,
+        },
       });
 
       setSuccessMessage(
@@ -223,6 +277,15 @@ export default function Settings() {
         emitChange: false,
       });
       await reconcileAllImports({ emitChange: false });
+      await recordSettingsAction({
+        actionType: "backup",
+        label: selectedBackupFile.name,
+        description: "Backup importado e restaurado.",
+        payload: {
+          fileName: selectedBackupFile.name,
+          stats: result.stats,
+        },
+      });
       notifyDatabaseChanged({ source: "backup-import" });
       setStorageInfo(result.storageInfo);
       resetBackupFileSelection();
