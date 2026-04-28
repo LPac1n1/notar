@@ -309,13 +309,20 @@ export default function Monthly() {
     }
   };
 
-  const handleConsolidatedDonorStatusChange = async (donor, status) => {
+  const handleConsolidatedDonorStatusChange = async (
+    donor,
+    status,
+    { summaryIds = [] } = {},
+  ) => {
     if (!donor || status !== "applied") {
       return;
     }
 
+    const summaryIdSet = new Set(summaryIds);
     const changedMonths = donor.months.filter(
-      (month) => month.abatementStatus !== status,
+      (month) =>
+        month.abatementStatus !== status &&
+        (summaryIdSet.size === 0 || summaryIdSet.has(month.id)),
     );
 
     if (changedMonths.length === 0) {
@@ -476,6 +483,8 @@ export default function Monthly() {
         donorId: summary.donorId,
         donorName: summary.donorName,
         donorType: summary.donorType,
+        holderName: summary.holderName,
+        holderIsActiveDonor: summary.holderIsActiveDonor,
         cpf: summary.cpf,
         demand: summary.demand,
         months: [],
