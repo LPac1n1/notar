@@ -19,9 +19,11 @@ export default function PaginationControls({
 
   return (
     <div
+      aria-label="Paginação de resultados"
       className={`flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between ${className}`.trim()}
+      role="navigation"
     >
-      <div>
+      <div aria-live="polite">
         Mostrando{" "}
         <span className="font-medium text-[var(--text-main)]">
           {totalItems === 0 ? 0 : (page - 1) * pageSize + 1}-{endItem}
@@ -54,6 +56,7 @@ export default function PaginationControls({
             variant="subtle"
             onClick={() => onPageChange(Math.max(1, page - 1))}
             disabled={page <= 1}
+            aria-label="Página anterior"
             leftIcon={<ChevronLeftIcon className="h-4 w-4" />}
           >
             Anterior
@@ -65,6 +68,7 @@ export default function PaginationControls({
             variant="subtle"
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages}
+            aria-label="Próxima página"
             rightIcon={<ChevronRightIcon className="h-4 w-4" />}
           >
             Próxima

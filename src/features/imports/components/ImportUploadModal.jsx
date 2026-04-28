@@ -7,6 +7,7 @@ import TextInput from "../../../components/ui/TextInput";
 import ImportPreviewTable from "./ImportPreviewTable";
 
 export default function ImportUploadModal({
+  errors = {},
   errorMessage = "",
   fileInputKey,
   isImporting,
@@ -32,6 +33,7 @@ export default function ImportUploadModal({
           type="file"
           accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           onChange={onPreviewImport}
+          error={errors.file}
         />
 
         <MonthInput
@@ -39,6 +41,7 @@ export default function ImportUploadModal({
           name="referenceMonth"
           value={uploadForm.referenceMonth}
           onChange={onChange}
+          error={errors.referenceMonth}
         />
 
         <TextInput
@@ -50,6 +53,7 @@ export default function ImportUploadModal({
           placeholder="Valor por nota (R$)"
           value={uploadForm.valuePerNote}
           onChange={onChange}
+          error={errors.valuePerNote}
         />
 
         <SelectInput
@@ -62,6 +66,7 @@ export default function ImportUploadModal({
           searchable={previewColumnOptions.length > 8}
           searchPlaceholder="Buscar coluna..."
           disabled={!previewData}
+          error={errors.cpfColumn}
         />
       </div>
 
@@ -73,7 +78,9 @@ export default function ImportUploadModal({
 
       <Button
         onClick={onProcessImport}
-        disabled={isImporting || !previewData || !uploadForm.valuePerNote}
+        disabled={isImporting}
+        isLoading={isImporting}
+        loadingLabel="Processando..."
       >
         Processar importação
       </Button>

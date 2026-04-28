@@ -28,6 +28,11 @@ import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
+import {
+  getFirstValidationError,
+  hasValidationErrors,
+  validatePersonForm,
+} from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 
@@ -45,7 +50,9 @@ export default function People() {
   const [people, setPeople] = useState([]);
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
   const [createForm, setCreateForm] = useState({ ...EMPTY_PERSON_FORM });
+  const [createFormErrors, setCreateFormErrors] = useState({});
   const [editForm, setEditForm] = useState({ ...EMPTY_PERSON_FORM });
+  const [editFormErrors, setEditFormErrors] = useState({});
   const [editingPerson, setEditingPerson] = useState(null);
   const [personPendingRemoval, setPersonPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -141,8 +148,13 @@ export default function People() {
     [filters, loadPeople],
   );
 
-  const handleFormChange = (setter) => (event) => {
+  const handleFormChange = (setter, setFormErrors) => (event) => {
     const { name, value } = event.target;
+
+    setFormErrors((current) => ({
+      ...current,
+      [name]: "",
+    }));
 
     setter((current) => ({
       ...current,
@@ -163,6 +175,14 @@ export default function People() {
   };
 
   const handleAdd = async () => {
+    const validationErrors = validatePersonForm(createForm);
+
+    if (hasValidationErrors(validationErrors)) {
+      setCreateFormErrors(validationErrors);
+      setError(getFirstValidationError(validationErrors));
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -175,6 +195,7 @@ export default function People() {
       });
       setIsCreateModalOpen(false);
       setCreateForm({ ...EMPTY_PERSON_FORM });
+      setCreateFormErrors({});
       setSuccessMessage("Pessoa cadastrada com sucesso.");
       await loadPeople(filters);
     } catch (err) {
@@ -193,6 +214,14 @@ export default function People() {
       return;
     }
 
+    const validationErrors = validatePersonForm(editForm);
+
+    if (hasValidationErrors(validationErrors)) {
+      setEditFormErrors(validationErrors);
+      setError(getFirstValidationError(validationErrors));
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -205,6 +234,7 @@ export default function People() {
       });
       setEditingPerson(null);
       setEditForm({ ...EMPTY_PERSON_FORM });
+      setEditFormErrors({});
       setSuccessMessage("Pessoa atualizada com sucesso.");
       await loadPeople(filters);
     } catch (err) {
@@ -280,6 +310,7 @@ export default function People() {
             setSuccessMessage("");
             setSuccessAction(null);
             setCreateForm({ ...EMPTY_PERSON_FORM });
+            setCreateFormErrors({});
             setIsCreateModalOpen(true);
           }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
@@ -391,6 +422,7 @@ export default function People() {
                     setSuccessMessage("");
                     setSuccessAction(null);
                     setEditingPerson(person);
+                    setEditFormErrors({});
                     setEditForm({
                       name: person.name,
                       cpf: person.cpf,
@@ -436,6 +468,7 @@ export default function People() {
             onClose={() => {
               setIsCreateModalOpen(false);
               setCreateForm({ ...EMPTY_PERSON_FORM });
+              setCreateFormErrors({});
             }}
             onSubmit={handleAdd}
           >
@@ -445,14 +478,16 @@ export default function People() {
                 name="name"
                 placeholder="Nome da pessoa"
                 value={createForm.name}
-                onChange={handleFormChange(setCreateForm)}
+                onChange={handleFormChange(setCreateForm, setCreateFormErrors)}
+                error={createFormErrors.name}
               />
               <TextInput
                 label="CPF"
                 name="cpf"
                 placeholder="CPF"
                 value={createForm.cpf}
-                onChange={handleFormChange(setCreateForm)}
+                onChange={handleFormChange(setCreateForm, setCreateFormErrors)}
+                error={createFormErrors.cpf}
               />
             </div>
           </FormModal>
@@ -470,6 +505,7 @@ export default function People() {
             onClose={() => {
               setEditingPerson(null);
               setEditForm({ ...EMPTY_PERSON_FORM });
+              setEditFormErrors({});
             }}
             onSubmit={handleSaveEdit}
           >
@@ -479,14 +515,16 @@ export default function People() {
                 name="name"
                 placeholder="Nome da pessoa"
                 value={editForm.name}
-                onChange={handleFormChange(setEditForm)}
+                onChange={handleFormChange(setEditForm, setEditFormErrors)}
+                error={editFormErrors.name}
               />
               <TextInput
                 label="CPF"
                 name="cpf"
                 placeholder="CPF"
                 value={editForm.cpf}
-                onChange={handleFormChange(setEditForm)}
+                onChange={handleFormChange(setEditForm, setEditFormErrors)}
+                error={editFormErrors.cpf}
               />
             </div>
           </FormModal>

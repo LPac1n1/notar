@@ -61,6 +61,7 @@ export default function ImportedMonthsCarousel({
 
       <div
         ref={railRef}
+        aria-label="Meses importados"
         className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {imports.map((item) => {
@@ -72,6 +73,8 @@ export default function ImportedMonthsCarousel({
               key={item.id}
               type="button"
               onClick={() => onSelectMonth(isSelected ? "" : referenceMonth)}
+              aria-label={`${isSelected ? "Limpar seleção de" : "Selecionar"} ${formatMonthYear(item.referenceMonth)}`}
+              aria-pressed={isSelected}
               className={`min-w-[250px] rounded-md border p-4 text-left transition ${
                 isSelected
                   ? "border-[var(--accent)] bg-[var(--surface-elevated)]"

@@ -7,7 +7,7 @@ export function usePagination(items, { initialPageSize = 25 } = {}) {
   const [pageSize, setPageSize] = useState(initialPageSize);
   const totalItems = items.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const currentPage = Math.min(page, totalPages);
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
 
   const visibleItems = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
@@ -22,12 +22,21 @@ export function usePagination(items, { initialPageSize = 25 } = {}) {
     setPage(1);
   };
 
+  const setClampedPage = (nextPage) => {
+    setPage((current) => {
+      const resolvedPage =
+        typeof nextPage === "function" ? nextPage(current) : nextPage;
+
+      return Math.min(Math.max(Number(resolvedPage) || 1, 1), totalPages);
+    });
+  };
+
   return {
     endItem,
     handlePageSizeChange,
     page: currentPage,
     pageSize,
-    setPage,
+    setPage: setClampedPage,
     startItem,
     totalItems,
     totalPages,

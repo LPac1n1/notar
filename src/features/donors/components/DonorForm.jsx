@@ -4,6 +4,7 @@ import TextInput from "../../../components/ui/TextInput";
 
 export default function DonorForm({
   demandOptions,
+  errors = {},
   form,
   holderOptions,
   onChange,
@@ -19,6 +20,7 @@ export default function DonorForm({
         onChange={onChange}
         options={typeOptions}
         placeholder="Tipo de doador"
+        error={errors.donorType}
       />
 
       <SelectInput
@@ -30,6 +32,7 @@ export default function DonorForm({
         placeholder="Selecione uma demanda"
         searchable
         searchPlaceholder="Buscar demanda..."
+        error={errors.demand}
       />
 
       {form.donorType === "auxiliary" ? (
@@ -43,6 +46,7 @@ export default function DonorForm({
             placeholder="Selecione titular ou pessoa"
             searchable
             searchPlaceholder="Buscar titular ou pessoa..."
+            error={errors.holderPersonId}
           />
           {selectedHolder && !selectedHolder.donorId ? (
             <p className="text-xs text-[var(--muted)]">
@@ -58,6 +62,7 @@ export default function DonorForm({
         placeholder="Nome do doador"
         value={form.name}
         onChange={onChange}
+        error={errors.name}
       />
       <TextInput
         label="CPF"
@@ -65,6 +70,7 @@ export default function DonorForm({
         placeholder="CPF"
         value={form.cpf}
         onChange={onChange}
+        error={errors.cpf}
       />
 
       <MonthInput
@@ -72,6 +78,7 @@ export default function DonorForm({
         name="donationStartDate"
         value={form.donationStartDate}
         onChange={onChange}
+        error={errors.donationStartDate}
       />
     </div>
   );

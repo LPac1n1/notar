@@ -42,6 +42,7 @@ function toIsoMonth(value) {
 export default function MonthInput({
   className = "",
   description = "",
+  error = "",
   hideLabel = false,
   id,
   label = "",
@@ -58,8 +59,9 @@ export default function MonthInput({
   const displayValue = isEditing ? draftValue : formatDisplayValue(value);
   const hasInvalidFullValue =
     displayValue.length === 7 && !toIsoMonth(displayValue);
+  const hasError = Boolean(error) || hasInvalidFullValue;
   const descriptionId = description ? `${inputId}-description` : "";
-  const errorId = hasInvalidFullValue ? `${inputId}-error` : "";
+  const errorId = hasError ? `${inputId}-error` : "";
   const ariaDescribedBy = [descriptionId, errorId]
     .filter(Boolean)
     .join(" ");
@@ -111,9 +113,9 @@ export default function MonthInput({
           setDraftValue(formatDisplayValue(value));
         }}
         aria-describedby={ariaDescribedBy || undefined}
-        aria-invalid={hasInvalidFullValue}
+        aria-invalid={hasError}
         className={`w-full rounded-md border bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:bg-[var(--surface-muted)] ${
-          hasInvalidFullValue
+          hasError
             ? "border-[color:var(--danger)] focus:border-[color:var(--danger)]"
             : "border-[var(--line)] focus:border-[var(--accent)]"
         }`}
@@ -128,12 +130,12 @@ export default function MonthInput({
         </p>
       ) : null}
 
-      {hasInvalidFullValue ? (
+      {hasError ? (
         <p
           id={errorId}
           className="text-xs leading-5 text-[var(--danger)]"
         >
-          Informe um mês válido no formato MM/AAAA.
+          {error || "Informe um mês válido no formato MM/AAAA."}
         </p>
       ) : null}
     </div>

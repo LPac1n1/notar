@@ -55,6 +55,7 @@ export default function SelectInput({
   description = "",
   disabled = false,
   emptyStateLabel = "Nenhuma opção disponível",
+  error = "",
   hideLabel = false,
   id,
   label = "",
@@ -71,8 +72,12 @@ export default function SelectInput({
   const controlId = id || name || generatedId;
   const labelId = `${controlId}-label`;
   const descriptionId = description ? `${controlId}-description` : "";
+  const errorId = error ? `${controlId}-error` : "";
   const listboxId = `${controlId}-listbox`;
   const triggerTextId = `${controlId}-value`;
+  const ariaDescribedBy = [descriptionId, errorId]
+    .filter(Boolean)
+    .join(" ");
   const optionRefs = useRef([]);
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -367,6 +372,9 @@ export default function SelectInput({
     success: "border-[color:var(--success)]",
     warning: "border-[color:var(--warning)]",
   }[activeTone] ?? "";
+  const stateToneClassName = error
+    ? "border-[color:var(--danger)]"
+    : toneClassName;
 
   return (
     <div
@@ -395,15 +403,16 @@ export default function SelectInput({
         disabled={disabled}
         onClick={toggleMenu}
         onKeyDown={handleTriggerKeyDown}
-        className={`flex w-full items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-left outline-none transition-colors duration-150 focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] ${toneClassName} ${
+        className={`flex w-full items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-left outline-none transition-colors duration-150 focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] ${stateToneClassName} ${
           disabled
             ? "cursor-not-allowed bg-[var(--surface-muted)] text-[var(--muted)]"
             : "text-[var(--text-main)] hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)]"
         }`}
         aria-controls={listboxId}
-        aria-describedby={descriptionId || undefined}
+        aria-describedby={ariaDescribedBy || undefined}
         aria-expanded={isMenuOpen}
         aria-haspopup="listbox"
+        aria-invalid={Boolean(error)}
         aria-labelledby={label ? `${labelId} ${triggerTextId}` : triggerTextId}
       >
         <span className="flex min-w-0 items-center gap-2">
@@ -438,6 +447,15 @@ export default function SelectInput({
           className="text-xs leading-5 text-[var(--muted)]"
         >
           {description}
+        </p>
+      ) : null}
+
+      {error ? (
+        <p
+          id={errorId}
+          className="text-xs leading-5 text-[var(--danger)]"
+        >
+          {error}
         </p>
       ) : null}
 

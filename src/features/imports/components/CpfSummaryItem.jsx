@@ -32,11 +32,7 @@ export default function CpfSummaryItem({
               </button>
             </CopyableValue>
           </div>
-        ) : (
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            CPF ainda nao vinculado
-          </p>
-        )}
+        ) : null}
 
         {item.isRegisteredDonor ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -71,9 +67,11 @@ export default function CpfSummaryItem({
           </div>
         ) : null}
 
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Demanda: {item.demand || "Nao informada"}
-        </p>
+        {item.demand ? (
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Demanda: {item.demand}
+          </p>
+        ) : null}
       </div>
 
       <div>

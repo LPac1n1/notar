@@ -38,11 +38,14 @@ export default function CopyButton({
 }) {
   const [status, setStatus] = useState("idle");
   const timeoutRef = useRef(null);
+  const isMountedRef = useRef(true);
   const isCopied = status === "copied";
   const isError = status === "error";
+  const hasFeedback = isCopied || isError;
 
   useEffect(
     () => () => {
+      isMountedRef.current = false;
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
       }
@@ -50,20 +53,33 @@ export default function CopyButton({
     [],
   );
 
-  const handleCopy = async () => {
+  const handleCopy = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
     }
 
     try {
       const didCopy = await copyToClipboard(value);
-      setStatus(didCopy ? "copied" : "error");
+      if (isMountedRef.current) {
+        setStatus(didCopy ? "copied" : "error");
+      }
     } catch {
-      setStatus("error");
+      if (isMountedRef.current) {
+        setStatus("error");
+      }
+    }
+
+    if (!isMountedRef.current) {
+      return;
     }
 
     timeoutRef.current = window.setTimeout(() => {
-      setStatus("idle");
+      if (isMountedRef.current) {
+        setStatus("idle");
+      }
     }, 1500);
   };
 
@@ -89,19 +105,17 @@ export default function CopyButton({
       <span className="sr-only">
         {isCopied ? copiedLabel : isError ? errorLabel : label}
       </span>
-      <span
-        className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-semibold shadow-lg transition ${
-          isCopied || isError
-            ? "translate-y-0 opacity-100"
-            : "translate-y-1 opacity-0"
-        } ${
-          isCopied
-            ? "border-[var(--success-line)] bg-[var(--surface-elevated)] text-[var(--success)]"
-            : "border-[var(--danger-line)] bg-[var(--surface-elevated)] text-[var(--danger)]"
-        }`}
-      >
-        {isCopied ? copiedLabel : errorLabel}
-      </span>
+      {hasFeedback ? (
+        <span
+          className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border bg-[var(--surface-elevated)] px-2 py-1 text-[11px] font-semibold opacity-100 shadow-lg ${
+            isCopied
+              ? "border-[var(--success-line)] text-[var(--success)]"
+              : "border-[var(--danger-line)] text-[var(--danger)]"
+          }`}
+        >
+          {isCopied ? copiedLabel : errorLabel}
+        </span>
+      ) : null}
     </button>
   );
 }

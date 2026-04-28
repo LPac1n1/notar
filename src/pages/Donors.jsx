@@ -29,6 +29,11 @@ import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
+import {
+  getFirstValidationError,
+  hasValidationErrors,
+  validateDonorForm,
+} from "../utils/preventiveValidation";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
@@ -66,7 +71,9 @@ export default function Donors() {
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
+  const [createFormErrors, setCreateFormErrors] = useState({});
   const [editForm, setEditForm] = useState({ ...EMPTY_DONOR_FORM });
+  const [editFormErrors, setEditFormErrors] = useState({});
   const [editingDonor, setEditingDonor] = useState(null);
   const [donorPendingRemoval, setDonorPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -286,8 +293,14 @@ export default function Donors() {
     });
   }, [isLoading]);
 
-  const handleFormChange = (setter) => (event) => {
+  const handleFormChange = (setter, setFormErrors) => (event) => {
     const { name, value } = event.target;
+
+    setFormErrors((current) => ({
+      ...current,
+      [name]: "",
+      ...(name === "donorType" ? { demand: "", holderPersonId: "" } : {}),
+    }));
 
     setter((current) => {
       if (name === "donorType") {
@@ -320,15 +333,25 @@ export default function Donors() {
     setSuccessMessage("");
     setSuccessAction(null);
     setCreateForm({ ...EMPTY_DONOR_FORM });
+    setCreateFormErrors({});
     setIsCreateModalOpen(true);
   };
 
   const handleCloseCreateModal = () => {
     setCreateForm({ ...EMPTY_DONOR_FORM });
+    setCreateFormErrors({});
     setIsCreateModalOpen(false);
   };
 
   const handleAdd = async () => {
+    const validationErrors = validateDonorForm(createForm);
+
+    if (hasValidationErrors(validationErrors)) {
+      setCreateFormErrors(validationErrors);
+      setError(getFirstValidationError(validationErrors));
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -367,6 +390,7 @@ export default function Donors() {
     setSuccessMessage("");
     setSuccessAction(null);
     setEditingDonor(donor);
+    setEditFormErrors({});
     setEditForm({
       name: donor.name,
       cpf: donor.cpf,
@@ -380,10 +404,19 @@ export default function Donors() {
   const handleCloseEditModal = () => {
     setEditingDonor(null);
     setEditForm({ ...EMPTY_DONOR_FORM });
+    setEditFormErrors({});
   };
 
   const handleSaveEdit = async () => {
     if (!editingDonor) {
+      return;
+    }
+
+    const validationErrors = validateDonorForm(editForm);
+
+    if (hasValidationErrors(validationErrors)) {
+      setEditFormErrors(validationErrors);
+      setError(getFirstValidationError(validationErrors));
       return;
     }
 
@@ -633,9 +666,10 @@ export default function Donors() {
           >
             <DonorForm
               demandOptions={donorFormDemandOptions}
+              errors={createFormErrors}
               form={createForm}
               holderOptions={createHolderOptions}
-              onChange={handleFormChange(setCreateForm)}
+              onChange={handleFormChange(setCreateForm, setCreateFormErrors)}
               selectedHolder={selectedCreateHolder}
               typeOptions={DONOR_FORM_TYPE_OPTIONS}
             />
@@ -656,9 +690,10 @@ export default function Donors() {
           >
             <DonorForm
               demandOptions={donorFormDemandOptions}
+              errors={editFormErrors}
               form={editForm}
               holderOptions={editHolderOptions}
-              onChange={handleFormChange(setEditForm)}
+              onChange={handleFormChange(setEditForm, setEditFormErrors)}
               selectedHolder={selectedEditHolder}
               typeOptions={DONOR_FORM_TYPE_OPTIONS}
             />

@@ -88,6 +88,8 @@ export default function Modal({
   const dialogRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousActiveElementRef = useRef(null);
+  const appScrollTopRef = useRef(0);
+  const restoreScrollTimerRef = useRef(null);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -98,12 +100,29 @@ export default function Modal({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    const appScrollContainer = document.getElementById("app-scroll-container");
+    appScrollTopRef.current = appScrollContainer?.scrollTop ?? 0;
+    const restoreAppScroll = () => {
+      appScrollContainer?.scrollTo({
+        top: appScrollTopRef.current,
+        behavior: "auto",
+      });
+    };
 
     lockPageScroll();
 
     window.requestAnimationFrame(() => {
-      dialogRef.current?.focus();
+      dialogRef.current?.focus({ preventScroll: true });
+      restoreAppScroll();
+      window.requestAnimationFrame(restoreAppScroll);
+      restoreScrollTimerRef.current = window.setTimeout(restoreAppScroll, 0);
     });
+
+    const handleFocusIn = () => {
+      window.requestAnimationFrame(() => {
+        restoreAppScroll();
+      });
+    };
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && canClose) {
@@ -139,16 +158,23 @@ export default function Modal({
     };
 
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
 
     return () => {
       unlockPageScroll();
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
+
+      if (restoreScrollTimerRef.current) {
+        window.clearTimeout(restoreScrollTimerRef.current);
+      }
 
       if (
         previousActiveElementRef.current &&
         document.contains(previousActiveElementRef.current)
       ) {
-        previousActiveElementRef.current.focus();
+        previousActiveElementRef.current.focus({ preventScroll: true });
+        restoreAppScroll();
       }
     };
   }, [canClose]);

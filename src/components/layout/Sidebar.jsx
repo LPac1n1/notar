@@ -45,8 +45,8 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <aside className="hidden w-72 shrink-0 lg:block">
-        <div className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-4 py-5 text-[var(--text-main)]">
+      <aside className="hidden h-full w-72 shrink-0 lg:block">
+        <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-4 py-5 text-[var(--text-main)]">
           <div className="relative">
             <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">

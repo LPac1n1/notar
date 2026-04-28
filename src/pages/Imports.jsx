@@ -29,6 +29,11 @@ import { useAsync } from "../hooks/useAsync";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { formatMonthYear } from "../utils/date";
+import {
+  getFirstValidationError,
+  hasValidationErrors,
+  validateImportUpload,
+} from "../utils/preventiveValidation";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
@@ -58,6 +63,7 @@ export default function Imports() {
     valuePerNote: "",
     cpfColumn: "",
   });
+  const [uploadFormErrors, setUploadFormErrors] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -402,6 +408,10 @@ export default function Imports() {
 
   const handleUploadChange = (event) => {
     const { name, value } = event.target;
+    setUploadFormErrors((current) => ({
+      ...current,
+      [name]: "",
+    }));
     setUploadForm((current) => ({
       ...current,
       [name]: value,
@@ -418,6 +428,10 @@ export default function Imports() {
     if (!file) {
       setSelectedFile(null);
       setPreviewData(null);
+      setUploadFormErrors((current) => ({
+        ...current,
+        file: "",
+      }));
       return;
     }
 
@@ -435,6 +449,11 @@ export default function Imports() {
       );
       setSelectedFile(file);
       setPreviewData(preview);
+      setUploadFormErrors((current) => ({
+        ...current,
+        file: "",
+        cpfColumn: preview.detectedCpfColumn ? "" : current.cpfColumn,
+      }));
       setUploadForm((current) => ({
         ...current,
         cpfColumn: preview.detectedCpfColumn || current.cpfColumn,
@@ -450,6 +469,13 @@ export default function Imports() {
           "Nao foi possivel gerar a pre-visualizacao da planilha.",
         ),
       );
+      setUploadFormErrors((current) => ({
+        ...current,
+        file: getErrorMessage(
+          err,
+          "Nao foi possivel gerar a pre-visualizacao da planilha.",
+        ),
+      }));
       setSelectedFile(null);
       setPreviewData(null);
     } finally {
@@ -464,6 +490,7 @@ export default function Imports() {
 
     setSelectedFile(null);
     setPreviewData(null);
+    setUploadFormErrors({});
     setFileInputKey((current) => current + 1);
   };
 
@@ -478,14 +505,21 @@ export default function Imports() {
       valuePerNote: "",
       cpfColumn: "",
     });
+    setUploadFormErrors({});
     setIsImportModalOpen(false);
   };
 
   const handleProcessImport = async () => {
-    if (!selectedFile || !previewData) {
-      setError(
-        "Selecione um arquivo e gere a pre-visualizacao antes de importar.",
-      );
+    const validationErrors = validateImportUpload({
+      availableImports,
+      previewData,
+      selectedFile,
+      uploadForm,
+    });
+
+    if (hasValidationErrors(validationErrors)) {
+      setUploadFormErrors(validationErrors);
+      setError(getFirstValidationError(validationErrors));
       return;
     }
 
@@ -518,6 +552,7 @@ export default function Imports() {
         valuePerNote: "",
         cpfColumn: "",
       });
+      setUploadFormErrors({});
       setIsImportModalOpen(false);
       setSuccessMessage("Importacao processada com sucesso.");
     } catch (err) {
@@ -671,6 +706,7 @@ export default function Imports() {
             setError("");
             setSuccessMessage("");
             setSuccessAction(null);
+            setUploadFormErrors({});
             setIsImportModalOpen(true);
           }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
@@ -690,6 +726,7 @@ export default function Imports() {
             onClose={handleCloseImportModal}
             onPreviewImport={handlePreviewImport}
             onProcessImport={handleProcessImport}
+            errors={uploadFormErrors}
             previewColumnOptions={previewColumnOptions}
             previewData={previewData}
             uploadForm={uploadForm}

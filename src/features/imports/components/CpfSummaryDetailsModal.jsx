@@ -12,9 +12,11 @@ export default function CpfSummaryDetailsModal({
   return (
     <Modal
       title="Meses e arquivos do CPF"
-      description={`${formatCpf(details.cpf)} • ${
-        details.donorName || details.sourceName || "CPF ainda nao vinculado"
-      }`}
+      description={
+        details.donorName || details.sourceName
+          ? `${formatCpf(details.cpf)} • ${details.donorName || details.sourceName}`
+          : formatCpf(details.cpf)
+      }
       onClose={onClose}
       size="lg"
     >
@@ -31,9 +33,9 @@ export default function CpfSummaryDetailsModal({
               </span>
             </CopyableValue>
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            Nome:
-            {details.donorName || details.sourceName ? (
+          {details.donorName || details.sourceName ? (
+            <span className="inline-flex items-center gap-1.5">
+              Nome:
               <CopyableValue
                 copyLabel="Copiar nome"
                 value={details.donorName || details.sourceName}
@@ -42,15 +44,15 @@ export default function CpfSummaryDetailsModal({
                   {details.donorName || details.sourceName}
                 </span>
               </CopyableValue>
-            ) : (
-              <span className="font-medium text-[var(--text-main)]">
-                Nao vinculado
-              </span>
-            )}
-          </span>
+            </span>
+          ) : null}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div
+          className={`grid gap-3 ${
+            details.demand ? "md:grid-cols-3" : "md:grid-cols-2"
+          }`}
+        >
           <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <p className="text-sm text-[var(--muted)]">Total de notas</p>
             <p className="mt-1 font-semibold text-[var(--text-main)]">
@@ -63,12 +65,14 @@ export default function CpfSummaryDetailsModal({
               {details.monthCount}
             </p>
           </div>
-          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-            <p className="text-sm text-[var(--muted)]">Demanda</p>
-            <p className="mt-1 font-semibold text-[var(--text-main)]">
-              {details.demand || "Nao informada"}
-            </p>
-          </div>
+          {details.demand ? (
+            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+              <p className="text-sm text-[var(--muted)]">Demanda</p>
+              <p className="mt-1 font-semibold text-[var(--text-main)]">
+                {details.demand}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {details.isRegisteredDonor ? (
