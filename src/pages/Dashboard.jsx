@@ -113,7 +113,7 @@ export default function Dashboard() {
       setError(
         getErrorMessage(
           dashboardError,
-          "Nao foi possivel carregar os indicadores do dashboard.",
+          "Não foi possível carregar os indicadores do dashboard.",
         ),
       );
     } finally {
@@ -203,10 +203,10 @@ export default function Dashboard() {
                 />
                 <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                   <CopyableCpf value={donor.cpf} />
-                  <span>• Demanda: {donor.demand || "Nao informada"}</span>
+                  <span>• Demanda: {donor.demand || "Não informada"}</span>
                 </p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Início: {donor.donationStartDate ? formatMonthYear(donor.donationStartDate) : "Nao informado"}
+                  Início: {donor.donationStartDate ? formatMonthYear(donor.donationStartDate) : "Não informado"}
                 </p>
               </div>
             ))}
@@ -490,7 +490,7 @@ export default function Dashboard() {
                     name={item.donorName}
                     onClick={() => openDonorProfile(item.donorId)}
                   />
-                  {" "}• Demanda: {item.demand || "Nao informada"}
+                  {" "}• Demanda: {item.demand || "Não informada"}
                 </p>
               </div>
             ))}

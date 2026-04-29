@@ -219,17 +219,17 @@ export async function createPerson({
   const normalizedCpf = normalizeCpf(cpf);
 
   if (!normalizedName) {
-    throw new Error("O nome da pessoa e obrigatorio.");
+    throw new Error("O nome da pessoa é obrigatório.");
   }
 
   if (normalizedCpf.length !== 11) {
-    throw new Error("Informe um CPF valido com 11 digitos.");
+    throw new Error("Informe um CPF válido com 11 dígitos.");
   }
 
   const existingPerson = await findPersonByCpf(normalizedCpf);
 
   if (existingPerson) {
-    throw new Error("Ja existe uma pessoa cadastrada com esse CPF.");
+    throw new Error("Já existe uma pessoa cadastrada com esse CPF.");
   }
 
   await execute(`
@@ -271,34 +271,34 @@ export async function updatePerson({
   cpf,
 }) {
   if (!id) {
-    throw new Error("O identificador da pessoa e obrigatorio.");
+    throw new Error("O identificador da pessoa é obrigatório.");
   }
 
   const normalizedName = normalizePersonName(name);
   const normalizedCpf = normalizeCpf(cpf);
 
   if (!normalizedName) {
-    throw new Error("O nome da pessoa e obrigatorio.");
+    throw new Error("O nome da pessoa é obrigatório.");
   }
 
   if (normalizedCpf.length !== 11) {
-    throw new Error("Informe um CPF valido com 11 digitos.");
+    throw new Error("Informe um CPF válido com 11 dígitos.");
   }
 
   const currentPerson = await getPersonById(id);
 
   if (!currentPerson) {
-    throw new Error("Pessoa nao encontrada.");
+    throw new Error("Pessoa não encontrada.");
   }
 
   if (currentPerson.donorId) {
-    throw new Error("Esta pessoa ja e um doador ativo. Edite o cadastro pela tela de doadores.");
+    throw new Error("Esta pessoa já é um doador ativo. Edite o cadastro pela tela de doadores.");
   }
 
   const existingPerson = await findPersonByCpf(normalizedCpf);
 
   if (existingPerson && existingPerson.id !== id) {
-    throw new Error("Ja existe outra pessoa cadastrada com esse CPF.");
+    throw new Error("Já existe outra pessoa cadastrada com esse CPF.");
   }
 
   await execute(`
@@ -352,7 +352,7 @@ export async function deletePerson(id) {
   `);
 
   if (activeDonor.length > 0) {
-    throw new Error("Esta pessoa ja possui um cadastro de doador ativo.");
+    throw new Error("Esta pessoa já possui um cadastro de doador ativo.");
   }
 
   const linkedAuxiliaries = await query(`
@@ -365,7 +365,7 @@ export async function deletePerson(id) {
   `);
 
   if (linkedAuxiliaries.length > 0) {
-    throw new Error("Esta pessoa esta vinculada a auxiliares e nao pode ser removida agora.");
+    throw new Error("Esta pessoa está vinculada a auxiliares e não pode ser removida agora.");
   }
 
   const trashItemId = await createTrashItem({

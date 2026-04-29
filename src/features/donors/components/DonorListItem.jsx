@@ -44,10 +44,10 @@ export default function DonorListItem({
           </CopyableValue>
         </div>
         <p className="text-sm text-[var(--muted)]">
-          Demanda: {donor.demand || "Nao informada"}
+          Demanda: {donor.demand || "Não informada"}
         </p>
         <p className="text-sm text-[var(--muted)]">
-          Início: {donor.donationStartDate || "Nao informado"}
+          Início: {donor.donationStartDate || "Não informado"}
         </p>
         {donor.createdAt ? (
           <p className="mt-5 text-xs text-[var(--muted)]">

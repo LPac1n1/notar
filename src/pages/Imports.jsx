@@ -244,10 +244,10 @@ export default function Imports() {
       }
 
       console.error(
-        "Erro ao carregar importacoes:",
+        "Erro ao carregar importações:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar os dados de importacao.");
+      setError("Não foi possível carregar os dados de importação.");
     } finally {
       if (requestId === importHistoryRequestIdRef.current) {
         setIsImportHistoryRefreshing(false);
@@ -278,10 +278,10 @@ export default function Imports() {
       }
 
       console.error(
-        "Erro ao carregar importacoes:",
+        "Erro ao carregar importações:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar os dados de importacao.");
+      setError("Não foi possível carregar os dados de importação.");
     } finally {
       if (requestId === cpfSummaryRequestIdRef.current) {
         setIsCpfSummaryRefreshing(false);
@@ -316,7 +316,7 @@ export default function Imports() {
       }
 
       console.error(
-        "Erro ao carregar opcoes de filtros de CPFs:",
+        "Erro ao carregar opções de filtros de CPFs:",
         getErrorMessage(err, "Erro desconhecido."),
       );
     }
@@ -335,10 +335,10 @@ export default function Imports() {
         ]);
       } catch (err) {
         console.error(
-          "Erro ao carregar importacoes:",
+          "Erro ao carregar importações:",
           getErrorMessage(err, "Erro desconhecido."),
         );
-        setError("Nao foi possivel carregar os dados de importacao.");
+        setError("Não foi possível carregar os dados de importação.");
       } finally {
         setIsLoading(false);
         hasInitializedRef.current = true;
@@ -400,13 +400,13 @@ export default function Imports() {
         setSuccessAction(null);
         await restoreTrashItem(trashItemId);
         await refreshImports();
-        setSuccessMessage("Importacao restaurada com sucesso.");
+        setSuccessMessage("Importação restaurada com sucesso.");
       } catch (err) {
         console.error(
-          "Erro ao restaurar importacao:",
+          "Erro ao restaurar importação:",
           getErrorMessage(err, "Erro desconhecido."),
         );
-        setError(getErrorMessage(err, "Nao foi possivel restaurar a importacao."));
+        setError(getErrorMessage(err, "Não foi possível restaurar a importação."));
       }
     },
     [refreshImports],
@@ -480,7 +480,7 @@ export default function Imports() {
       const preview = await importOperation.run(
         () => prepareImportPreview(file),
         {
-          loadingMessage: "Lendo planilha de importacao...",
+          loadingMessage: "Lendo planilha de importação...",
           reportGlobal: false,
         },
       );
@@ -497,20 +497,20 @@ export default function Imports() {
       }));
     } catch (err) {
       console.error(
-        "Erro ao gerar pre-visualizacao:",
+        "Erro ao gerar pré-visualização:",
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(
         getErrorMessage(
           err,
-          "Nao foi possivel gerar a pre-visualizacao da planilha.",
+          "Não foi possível gerar a pré-visualização da planilha.",
         ),
       );
       setUploadFormErrors((current) => ({
         ...current,
         file: getErrorMessage(
           err,
-          "Nao foi possivel gerar a pre-visualizacao da planilha.",
+          "Não foi possível gerar a pré-visualização da planilha.",
         ),
       }));
       setSelectedFile(null);
@@ -575,7 +575,7 @@ export default function Imports() {
             cpfColumn: uploadForm.cpfColumn,
           }),
         {
-          loadingMessage: "Processando importacao e conciliando CPFs...",
+          loadingMessage: "Processando importação e conciliando CPFs...",
         },
       );
       await Promise.all([
@@ -592,13 +592,13 @@ export default function Imports() {
       });
       setUploadFormErrors({});
       setIsImportModalOpen(false);
-      setSuccessMessage("Importacao processada com sucesso.");
+      setSuccessMessage("Importação processada com sucesso.");
     } catch (err) {
       console.error(
-        "Erro ao processar importacao:",
+        "Erro ao processar importação:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel processar a importacao."));
+      setError(getErrorMessage(err, "Não foi possível processar a importação."));
     } finally {
       setIsImporting(false);
     }
@@ -617,7 +617,7 @@ export default function Imports() {
       const trashItemId = await importOperation.run(
         () => deleteImport(importPendingRemoval.id),
         {
-          loadingMessage: "Enviando importacao para a lixeira...",
+          loadingMessage: "Enviando importação para a lixeira...",
         },
       );
       await Promise.all([
@@ -627,7 +627,7 @@ export default function Imports() {
         loadCpfSummaryOptions(cpfFilters),
       ]);
       setImportPendingRemoval(null);
-      setSuccessMessage("Importacao enviada para a lixeira com sucesso.");
+      setSuccessMessage("Importação enviada para a lixeira com sucesso.");
       if (trashItemId) {
         setSuccessAction({
           label: "Desfazer",
@@ -636,10 +636,10 @@ export default function Imports() {
       }
     } catch (err) {
       console.error(
-        "Erro ao excluir importacao:",
+        "Erro ao excluir importação:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel excluir a importacao.");
+      setError("Não foi possível excluir a importação.");
     } finally {
       setDeletingImportId("");
     }
@@ -654,7 +654,7 @@ export default function Imports() {
       const result = await importOperation.run(
         () => exportImportsCsv(importFilters),
         {
-          loadingMessage: "Exportando historico de importacoes...",
+          loadingMessage: "Exportando histórico de importações...",
         },
       );
       await createActionHistoryEntry({
@@ -662,21 +662,21 @@ export default function Imports() {
         entityType: "export",
         entityId: "imports-csv",
         label: "Histórico de importações CSV",
-        description: `${formatInteger(result.rowCount)} importacao(oes) exportada(s) em CSV.`,
+        description: `${formatInteger(result.rowCount)} importação(ões) exportada(s) em CSV.`,
         payload: {
           filters: importFilters,
           rowCount: result.rowCount,
         },
       });
       setSuccessMessage(
-        `${formatInteger(result.rowCount)} importacao(oes) exportada(s) em CSV.`,
+        `${formatInteger(result.rowCount)} importação(ões) exportada(s) em CSV.`,
       );
     } catch (err) {
       console.error(
-        "Erro ao exportar historico de importacoes:",
+        "Erro ao exportar histórico de importações:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel exportar o historico de importacoes.");
+      setError("Não foi possível exportar o histórico de importações.");
     } finally {
       setIsExportingImports(false);
     }
@@ -713,7 +713,7 @@ export default function Imports() {
         "Erro ao exportar CPFs encontrados:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel exportar os CPFs encontrados.");
+      setError("Não foi possível exportar os CPFs encontrados.");
     } finally {
       setIsExportingCpfSummary(false);
     }

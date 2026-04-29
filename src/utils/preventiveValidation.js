@@ -28,41 +28,41 @@ export function isValidMonthInput(value) {
 }
 
 export function validateRequiredText(value, label) {
-  return isBlank(value) ? `${label} e obrigatorio.` : "";
+  return isBlank(value) ? `${label} é obrigatório.` : "";
 }
 
 export function validateCpfValue(value) {
   const cpf = normalizeCpf(value);
 
   if (!cpf) {
-    return "CPF e obrigatorio.";
+    return "CPF é obrigatório.";
   }
 
   if (cpf.length !== 11) {
-    return "Informe um CPF valido com 11 digitos.";
+    return "Informe um CPF válido com 11 dígitos.";
   }
 
   return "";
 }
 
-export function validateRequiredMonth(value, label = "Mes") {
+export function validateRequiredMonth(value, label = "Mês") {
   if (isBlank(value)) {
-    return `${label} e obrigatorio.`;
+    return `${label} é obrigatório.`;
   }
 
   return isValidMonthInput(value)
     ? ""
-    : `Informe ${label.toLowerCase()} valido no formato MM/AAAA.`;
+    : `Informe ${label.toLowerCase()} válido no formato MM/AAAA.`;
 }
 
-export function validateOptionalMonth(value, label = "mes") {
+export function validateOptionalMonth(value, label = "mês") {
   if (isBlank(value)) {
     return "";
   }
 
   return isValidMonthInput(value)
     ? ""
-    : `Informe ${label} valido no formato MM/AAAA.`;
+    : `Informe ${label} válido no formato MM/AAAA.`;
 }
 
 export function validatePositiveMoney(value, label) {
@@ -95,7 +95,7 @@ export function validateDonorForm(form = {}) {
     cpf: validateCpfValue(form.cpf),
     donationStartDate: validateOptionalMonth(
       form.donationStartDate,
-      "inicio das doacoes",
+      "início das doações",
     ),
   };
 }
@@ -110,10 +110,10 @@ export function validateImportUpload({
     file:
       selectedFile && previewData
         ? ""
-        : "Selecione um arquivo e aguarde a pre-visualizacao.",
+        : "Selecione um arquivo e aguarde a pré-visualização.",
     referenceMonth: validateRequiredMonth(
       uploadForm.referenceMonth,
-      "Mes de referencia",
+      "Mês de referência",
     ),
     valuePerNote: validatePositiveMoney(uploadForm.valuePerNote, "Valor por nota"),
     cpfColumn: validateRequiredText(uploadForm.cpfColumn, "Coluna de CPF"),
@@ -127,7 +127,7 @@ export function validateImportUpload({
 
     if (hasExistingImport) {
       errors.referenceMonth =
-        "Ja existe uma importacao cadastrada para esse mes.";
+        "Já existe uma importação cadastrada para esse mês.";
     }
   }
 

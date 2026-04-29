@@ -226,7 +226,7 @@ export default function Monthly() {
         "Erro ao carregar resumo mensal:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar o resumo mensal.");
+      setError("Não foi possível carregar o resumo mensal.");
     } finally {
       if (requestId === summariesRequestIdRef.current) {
         setIsLoading(false);
@@ -356,7 +356,7 @@ export default function Monthly() {
           "Erro ao desfazer status do abatimento:",
           getErrorMessage(err, "Erro desconhecido."),
         );
-        setError(getErrorMessage(err, "Nao foi possivel desfazer a alteracao."));
+        setError(getErrorMessage(err, "Não foi possível desfazer a alteração."));
       } finally {
         setUpdatingDonorId("");
         setUpdatingSummaryId("");
@@ -413,7 +413,7 @@ export default function Monthly() {
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(
-        getErrorMessage(err, "Nao foi possivel atualizar o status do abatimento."),
+        getErrorMessage(err, "Não foi possível atualizar o status do abatimento."),
       );
     } finally {
       setUpdatingSummaryId("");
@@ -485,7 +485,7 @@ export default function Monthly() {
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(
-        getErrorMessage(err, "Nao foi possivel atualizar os abatimentos do doador."),
+        getErrorMessage(err, "Não foi possível atualizar os abatimentos do doador."),
       );
     } finally {
       setUpdatingDonorId("");
@@ -531,7 +531,7 @@ export default function Monthly() {
         "Erro ao exportar resumo mensal:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel exportar o resumo mensal.");
+      setError("Não foi possível exportar o resumo mensal.");
     } finally {
       setIsExporting(false);
     }
@@ -588,7 +588,7 @@ export default function Monthly() {
         "Erro ao exportar PDFs por demanda:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel gerar os PDFs por demanda."));
+      setError(getErrorMessage(err, "Não foi possível gerar os PDFs por demanda."));
     } finally {
       setIsExportingPdf(false);
     }

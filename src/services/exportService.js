@@ -21,12 +21,12 @@ export async function exportDonorsCsv(filters = {}) {
       { key: "cpf", label: "CPF" },
       { key: "demand", label: "Demanda" },
       { key: "holderName", label: "Pessoa vinculada" },
-      { key: "donationStartDate", label: "Inicio das doacoes" },
+      { key: "donationStartDate", label: "Início das doações" },
       { key: "isActive", label: "Ativo" },
     ],
     donors.map((donor) => ({
       ...donor,
-      isActive: donor.isActive ? "Sim" : "Nao",
+      isActive: donor.isActive ? "Sim" : "Não",
     })),
   );
 
@@ -39,7 +39,7 @@ export async function exportMonthlySummariesCsv(filters = {}) {
   const summaries = await listMonthlySummaries(filters);
   const csvContent = buildCsvContent(
     [
-      { key: "referenceMonth", label: "Mes de referencia" },
+      { key: "referenceMonth", label: "Mês de referência" },
       { key: "donorName", label: "Doador" },
       { key: "donationActivity", label: "Situação no mês" },
       { key: "cpf", label: "CPF" },
@@ -53,11 +53,11 @@ export async function exportMonthlySummariesCsv(filters = {}) {
     summaries.map((summary) => ({
       ...summary,
       donationActivity: summary.hasDonationsInMonth
-        ? "Doou no mes"
-        : "Nao doou no mes",
+        ? "Doou no mês"
+        : "Não doou no mês",
       abatementStatus:
         !summary.hasDonationsInMonth
-          ? "Sem doacoes no mes"
+          ? "Sem doações no mês"
           : summary.abatementStatus === "applied"
             ? "Realizado"
             : "Pendente",
@@ -87,7 +87,7 @@ export async function exportImportCpfSummaryCsv(filters = {}) {
     demand: item.demand || "",
     notesCount: item.notesCount,
     monthCount: item.monthCount,
-    registrationStatus: item.isRegisteredDonor ? "Vinculado" : "Nao vinculado",
+    registrationStatus: item.isRegisteredDonor ? "Vinculado" : "Não vinculado",
     appearanceMonths: item.appearances
       .map((appearance) => appearance.referenceMonth)
       .join(", "),
@@ -122,11 +122,11 @@ export async function exportImportsCsv(filters = {}) {
   const imports = await listImports(filters);
   const csvContent = buildCsvContent(
     [
-      { key: "referenceMonth", label: "Mes de referencia" },
+      { key: "referenceMonth", label: "Mês de referência" },
       { key: "fileName", label: "Arquivo" },
       { key: "valuePerNote", label: "Valor por nota" },
       { key: "totalRows", label: "Total de linhas" },
-      { key: "matchedRows", label: "Linhas compativeis" },
+      { key: "matchedRows", label: "Linhas compatíveis" },
       { key: "matchedDonors", label: "Doadores que doaram encontrados" },
       { key: "status", label: "Status" },
       { key: "importedAt", label: "Importado em" },

@@ -164,7 +164,7 @@ export default function ConsolidatedPendingDonors({
                               <span>{formatCpf(donor.cpf)}</span>
                             </CopyableValue>
                           </span>
-                          <span>Demanda: {donor.demand || "Nao informada"}</span>
+                          <span>Demanda: {donor.demand || "Não informada"}</span>
                         </div>
                       </div>
 

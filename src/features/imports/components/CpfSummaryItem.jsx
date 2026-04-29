@@ -89,7 +89,7 @@ export default function CpfSummaryItem({
               : "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]"
           }`}
         >
-          {item.isRegisteredDonor ? "Vinculado" : "Nao vinculado"}
+          {item.isRegisteredDonor ? "Vinculado" : "Não vinculado"}
         </span>
         {item.sourceType ? (
           <p className="mt-1 text-xs text-[var(--muted)]">

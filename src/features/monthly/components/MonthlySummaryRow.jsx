@@ -88,7 +88,7 @@ export default function MonthlySummaryRow({
                 <span>{formatCpf(summary.cpf)}</span>
               </CopyableValue>
             </span>
-            <span>Demanda: {summary.demand || "Nao informada"}</span>
+            <span>Demanda: {summary.demand || "Não informada"}</span>
           </div>
 
           {summary.sources.length > 0 ? (
@@ -123,7 +123,7 @@ export default function MonthlySummaryRow({
 
           {hasStartDateConflict ? (
             <p className="mt-2 text-sm text-[var(--warning)]">
-              Atencao: {summary.sourceStartConflictCount || 1} CPF(s)
+              Atenção: {summary.sourceStartConflictCount || 1} CPF(s)
               vinculado(s) apareceram antes do início de doação informado.
             </p>
           ) : null}
@@ -189,7 +189,7 @@ export default function MonthlySummaryRow({
             {summary.abatementMarkedAt
               ? `Marcado em ${summary.abatementMarkedAt}`
               : summary.canUpdateAbatement
-                ? "Ainda nao marcado"
+                ? "Ainda não marcado"
                 : "Nenhum abatimento gerado"}
           </p>
         </div>

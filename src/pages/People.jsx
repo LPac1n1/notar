@@ -108,7 +108,7 @@ export default function People() {
         "Erro ao carregar pessoas:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar as pessoas.");
+      setError("Não foi possível carregar as pessoas.");
     } finally {
       if (requestId === peopleRequestIdRef.current) {
         setIsLoading(false);
@@ -151,7 +151,7 @@ export default function People() {
           "Erro ao restaurar pessoa:",
           getErrorMessage(err, "Erro desconhecido."),
         );
-        setError(getErrorMessage(err, "Nao foi possivel restaurar a pessoa."));
+        setError(getErrorMessage(err, "Não foi possível restaurar a pessoa."));
       }
     },
     [filters, loadPeople],
@@ -212,7 +212,7 @@ export default function People() {
         "Erro ao adicionar pessoa:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel cadastrar a pessoa."));
+      setError(getErrorMessage(err, "Não foi possível cadastrar a pessoa."));
     } finally {
       setIsSubmitting(false);
     }
@@ -251,7 +251,7 @@ export default function People() {
         "Erro ao atualizar pessoa:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel atualizar a pessoa."));
+      setError(getErrorMessage(err, "Não foi possível atualizar a pessoa."));
     } finally {
       setIsSubmitting(false);
     }
@@ -282,7 +282,7 @@ export default function People() {
         "Erro ao remover pessoa:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel remover a pessoa."));
+      setError(getErrorMessage(err, "Não foi possível remover a pessoa."));
     } finally {
       setIsDeleting(false);
     }

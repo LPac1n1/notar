@@ -5,7 +5,7 @@ export default function ErrorState({
   actionLabel = "",
   description = "Tente novamente em alguns instantes.",
   onAction,
-  title = "Nao foi possivel carregar os dados",
+  title = "Não foi possível carregar os dados",
 }) {
   return (
     <div

@@ -62,7 +62,7 @@ async function ensureDonationCpfIsAvailable(
   if (existingLink.length > 0) {
     const holderName =
       existingLink[0].donor_name || existingLink[0].name || "outro doador";
-    throw new Error(`Este CPF ja esta vinculado a ${holderName}.`);
+    throw new Error(`Este CPF já está vinculado a ${holderName}.`);
   }
 }
 
@@ -85,7 +85,7 @@ async function ensureDemandExists(demand, { required = true } = {}) {
   `);
 
   if (existingDemand.length === 0) {
-    throw new Error("A demanda selecionada nao existe mais.");
+    throw new Error("A demanda selecionada não existe mais.");
   }
 
   return existingDemand[0].name;
@@ -134,7 +134,7 @@ async function ensurePersonCanBeAuxiliary(personId, { ignoreDonorId = "" } = {})
 
   if (linkedAuxiliaryRows.length > 0) {
     throw new Error(
-      "Esta pessoa ja possui auxiliares vinculados e nao pode ser cadastrada como auxiliar.",
+      "Esta pessoa já possui auxiliares vinculados e não pode ser cadastrada como auxiliar.",
     );
   }
 }
@@ -178,7 +178,7 @@ async function getHolderPersonContext({
   const person = await getPersonById(resolvedHolderPersonId);
 
   if (!person) {
-    throw new Error("A pessoa vinculada nao existe mais.");
+    throw new Error("A pessoa vinculada não existe mais.");
   }
 
   const activeDonorRows = await query(`
@@ -233,7 +233,7 @@ async function resolveCreatePersonContext({
     const existingPerson = await getPersonById(personId);
 
     if (!existingPerson) {
-      throw new Error("A pessoa selecionada nao existe mais.");
+      throw new Error("A pessoa selecionada não existe mais.");
     }
 
     return existingPerson;
@@ -243,11 +243,11 @@ async function resolveCreatePersonContext({
   const normalizedCpf = normalizeCpf(cpf);
 
   if (!normalizedName) {
-    throw new Error("O nome do doador e obrigatorio.");
+    throw new Error("O nome do doador é obrigatório.");
   }
 
   if (normalizedCpf.length !== 11) {
-    throw new Error("Informe um CPF valido com 11 digitos.");
+    throw new Error("Informe um CPF válido com 11 dígitos.");
   }
 
   const existingPerson = await findPersonByCpf(normalizedCpf);
@@ -460,7 +460,7 @@ export async function createDonor({
   const existingDonorForPerson = await findActiveDonorByPersonId(person.id);
 
   if (existingDonorForPerson) {
-    throw new Error("Esta pessoa ja esta cadastrada como doador.");
+    throw new Error("Esta pessoa já está cadastrada como doador.");
   }
 
   if (normalizedDonorType === "auxiliary") {
@@ -478,7 +478,7 @@ export async function createDonor({
       : null;
 
   if (normalizedDonorType === "auxiliary" && holderContext?.id === person.id) {
-    throw new Error("Um auxiliar nao pode ser vinculado a si mesmo.");
+    throw new Error("Um auxiliar não pode ser vinculado a si mesmo.");
   }
 
   const resolvedDemand = await ensureDemandExists(
@@ -570,7 +570,7 @@ export async function updateDonor({
   holderDonorId = "",
 }) {
   if (!id) {
-    throw new Error("O identificador do doador e obrigatorio.");
+    throw new Error("O identificador do doador é obrigatório.");
   }
 
   const donorRows = await query(`
@@ -586,7 +586,7 @@ export async function updateDonor({
   `);
 
   if (donorRows.length === 0) {
-    throw new Error("Doador nao encontrado.");
+    throw new Error("Doador não encontrado.");
   }
 
   const currentDonor = donorRows[0];
@@ -599,15 +599,15 @@ export async function updateDonor({
   const normalizedDonorType = normalizeDonorType(donorType);
 
   if (!normalizedName) {
-    throw new Error("O nome do doador e obrigatorio.");
+    throw new Error("O nome do doador é obrigatório.");
   }
 
   if (normalizedCpf.length !== 11) {
-    throw new Error("Informe um CPF valido com 11 digitos.");
+    throw new Error("Informe um CPF válido com 11 dígitos.");
   }
 
   if (!currentPerson) {
-    throw new Error("A pessoa vinculada a este doador nao foi encontrada.");
+    throw new Error("A pessoa vinculada a este doador não foi encontrada.");
   }
 
   const existingPerson = await findPersonByCpf(normalizedCpf);
@@ -633,7 +633,7 @@ export async function updateDonor({
       : null;
 
   if (normalizedDonorType === "auxiliary" && holderContext?.id === currentPerson.id) {
-    throw new Error("Um auxiliar nao pode ser vinculado a si mesmo.");
+    throw new Error("Um auxiliar não pode ser vinculado a si mesmo.");
   }
 
   const resolvedDemand = await ensureDemandExists(
@@ -875,7 +875,7 @@ export async function createAuxiliaryDonor({
   `);
 
   if (donorRows.length === 0) {
-    throw new Error("O titular selecionado nao existe mais.");
+    throw new Error("O titular selecionado não existe mais.");
   }
 
   return createDonor({
@@ -903,7 +903,7 @@ export async function updateAuxiliaryDonor({
   `);
 
   if (sourceRows.length === 0) {
-    throw new Error("O auxiliar selecionado nao existe mais.");
+    throw new Error("O auxiliar selecionado não existe mais.");
   }
 
   const donorRows = await query(`
@@ -914,7 +914,7 @@ export async function updateAuxiliaryDonor({
   `);
 
   if (donorRows.length === 0) {
-    throw new Error("O titular selecionado nao existe mais.");
+    throw new Error("O titular selecionado não existe mais.");
   }
 
   return updateDonor({
@@ -971,7 +971,7 @@ export async function getDonorProfile(donorId) {
   `);
 
   if (donorRows.length === 0) {
-    throw new Error("Doador nao encontrado.");
+    throw new Error("Doador não encontrado.");
   }
 
   const monthlyRows = await query(`

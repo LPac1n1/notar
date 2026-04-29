@@ -100,7 +100,7 @@ export default function Demands() {
         "Erro ao carregar demandas:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar as demandas.");
+      setError("Não foi possível carregar as demandas.");
     } finally {
       if (requestId === demandsRequestIdRef.current) {
         setIsLoading(false);
@@ -133,7 +133,7 @@ export default function Demands() {
           "Erro ao restaurar demanda:",
           getErrorMessage(err, "Erro desconhecido."),
         );
-        setError(getErrorMessage(err, "Nao foi possivel restaurar a demanda."));
+        setError(getErrorMessage(err, "Não foi possível restaurar a demanda."));
       }
     },
     [filters, loadDemands],
@@ -167,7 +167,7 @@ export default function Demands() {
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(
-        getErrorMessage(err, "Nao foi possivel adicionar a demanda."),
+        getErrorMessage(err, "Não foi possível adicionar a demanda."),
       );
     } finally {
       setIsSubmitting(false);
@@ -213,7 +213,7 @@ export default function Demands() {
         getErrorMessage(err, "Erro desconhecido."),
       );
       setError(
-        getErrorMessage(err, "Nao foi possivel atualizar a demanda."),
+        getErrorMessage(err, "Não foi possível atualizar a demanda."),
       );
     } finally {
       setIsSubmitting(false);
@@ -248,7 +248,7 @@ export default function Demands() {
         "Erro ao remover demanda:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel remover a demanda."));
+      setError(getErrorMessage(err, "Não foi possível remover a demanda."));
     } finally {
       setIsDeleting(false);
     }

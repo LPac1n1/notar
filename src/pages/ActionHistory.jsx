@@ -71,7 +71,7 @@ export default function ActionHistory() {
       setError(
         getErrorMessage(
           historyError,
-          "Nao foi possivel carregar o historico de acoes.",
+          "Não foi possível carregar o histórico de ações.",
         ),
       );
     } finally {

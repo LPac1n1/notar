@@ -227,7 +227,7 @@ export default function Donors() {
         "Erro ao carregar dados de doadores:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar os doadores.");
+      setError("Não foi possível carregar os doadores.");
     } finally {
       if (requestId === donorsRequestIdRef.current) {
         setIsLoading(false);
@@ -281,7 +281,7 @@ export default function Donors() {
           "Erro ao restaurar doador:",
           getErrorMessage(err, "Erro desconhecido."),
         );
-        setError(getErrorMessage(err, "Nao foi possivel restaurar o doador."));
+        setError(getErrorMessage(err, "Não foi possível restaurar o doador."));
       }
     },
     [refreshDonors],
@@ -377,7 +377,7 @@ export default function Donors() {
       });
       handleCloseCreateModal();
       setSuccessMessage(
-        "Doador cadastrado e reconciliado com as importacoes existentes.",
+        "Doador cadastrado e reconciliado com as importações existentes.",
       );
       await Promise.all([
         loadSupportingData(),
@@ -388,7 +388,7 @@ export default function Donors() {
         "Erro ao adicionar doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel adicionar o doador."));
+      setError(getErrorMessage(err, "Não foi possível adicionar o doador."));
     } finally {
       setIsSubmitting(false);
     }
@@ -445,7 +445,7 @@ export default function Donors() {
       });
       handleCloseEditModal();
       setSuccessMessage(
-        "Doador atualizado e reconciliado com as importacoes existentes.",
+        "Doador atualizado e reconciliado com as importações existentes.",
       );
       await Promise.all([
         loadSupportingData(),
@@ -456,7 +456,7 @@ export default function Donors() {
         "Erro ao atualizar doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError(getErrorMessage(err, "Nao foi possivel atualizar o doador."));
+      setError(getErrorMessage(err, "Não foi possível atualizar o doador."));
     } finally {
       setIsSubmitting(false);
     }
@@ -490,7 +490,7 @@ export default function Donors() {
         "Erro ao remover doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel remover o doador.");
+      setError("Não foi possível remover o doador.");
     } finally {
       setIsDeleting(false);
     }
@@ -520,7 +520,7 @@ export default function Donors() {
         "Erro ao exportar doadores:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel exportar os doadores.");
+      setError("Não foi possível exportar os doadores.");
     } finally {
       setIsExporting(false);
     }

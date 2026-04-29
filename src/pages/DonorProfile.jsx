@@ -58,7 +58,7 @@ export default function DonorProfile() {
         "Erro ao carregar perfil do doador:",
         getErrorMessage(err, "Erro desconhecido."),
       );
-      setError("Nao foi possivel carregar o perfil do doador.");
+      setError("Não foi possível carregar o perfil do doador.");
     } finally {
       if (requestId === profileRequestIdRef.current) {
         setIsLoading(false);
@@ -178,13 +178,13 @@ export default function DonorProfile() {
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Demanda</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {donor.demand || "Nao informada"}
+            {donor.demand || "Não informada"}
           </p>
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Início das doações</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {donor.donationStartDate || "Nao informado"}
+            {donor.donationStartDate || "Não informado"}
           </p>
           {donor.donationStartDateValue ? (
             <p className="mt-1 text-xs text-[var(--muted)]">
@@ -373,7 +373,7 @@ export default function DonorProfile() {
                 </CopyableValue>
               </div>
               <p className="text-sm text-[var(--muted)]">
-                Início: {source.donationStartDate || "Nao informado"} •{" "}
+                Início: {source.donationStartDate || "Não informado"} •{" "}
                 {formatInteger(source.totalNotes)} nota(s)
               </p>
             </div>

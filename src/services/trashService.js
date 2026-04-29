@@ -339,7 +339,7 @@ async function restoreImport(payload) {
 
     if (existingImport.length > 0) {
       throw new Error(
-        "Ja existe uma importacao para o mes deste item. Exclua a importacao atual antes de restaurar.",
+        "Já existe uma importação para o mês deste item. Exclua a importação atual antes de restaurar.",
       );
     }
   }
@@ -358,7 +358,7 @@ export async function restoreTrashItem(id) {
   `);
 
   if (rows.length === 0) {
-    throw new Error("Item da lixeira nao encontrado.");
+    throw new Error("Item da lixeira não encontrado.");
   }
 
   const trashItem = rows[0];
@@ -377,7 +377,7 @@ export async function restoreTrashItem(id) {
     } else if (trashItem.entity_type === "import") {
       await restoreImport(payload);
     } else {
-      throw new Error("Tipo de item da lixeira nao suportado.");
+      throw new Error("Tipo de item da lixeira não suportado.");
     }
 
     await execute(`

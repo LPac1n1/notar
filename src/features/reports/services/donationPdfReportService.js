@@ -123,7 +123,7 @@ async function buildDonationReportData(filters = {}) {
   const groups = mapDemandGroups({ demands, summaries });
 
   if (groups.length === 0) {
-    throw new Error("Nao ha dados para gerar o PDF com os filtros atuais.");
+    throw new Error("Não há dados para gerar o PDF com os filtros atuais.");
   }
 
   return {

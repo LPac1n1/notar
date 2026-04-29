@@ -26,8 +26,8 @@ export const DATA_CHANGED_EVENT = "notar:data-changed";
 const DEFAULT_STORAGE_INFO = {
   mode: "unknown",
   isPersistent: false,
-  label: "Armazenamento nao inicializado",
-  description: "O banco de dados ainda nao foi carregado.",
+  label: "Armazenamento não inicializado",
+  description: "O banco de dados ainda não foi carregado.",
   path: "",
   fileName: "",
 };
@@ -221,11 +221,11 @@ async function openDatabase() {
   updateStorageInfo({
     mode: "memory",
     isPersistent: false,
-    label: "Armazenamento temporario da sessao",
+    label: "Armazenamento temporário da sessão",
     description:
       supportsFileDatabaseSelection()
-        ? "Os dados atuais estao apenas nesta sessao. Para persistir, crie ou abra um arquivo de dados em Configuracoes."
-        : "Este navegador nao disponibilizou a selecao de arquivo necessaria. Os dados podem se perder ao fechar ou recarregar a aplicacao.",
+        ? "Os dados atuais estão apenas nesta sessão. Para persistir, crie ou abra um arquivo de dados em Configurações."
+        : "Este navegador não disponibilizou a seleção de arquivo necessária. Os dados podem se perder ao fechar ou recarregar a aplicação.",
     path: "",
     fileName: "",
   });
@@ -1298,7 +1298,7 @@ async function restoreDatabaseSnapshot(
   const normalizedSnapshot = normalizeSnapshotPayload(snapshot);
 
   if (!normalizedSnapshot) {
-    throw new Error("O arquivo de backup nao esta em um formato valido.");
+    throw new Error("O arquivo de backup não está em um formato válido.");
   }
 
   if (!allowEmpty && !snapshotHasData(normalizedSnapshot)) {
@@ -1396,7 +1396,7 @@ function buildConnectedFileStorageInfo(handle) {
     isPersistent: true,
     label: "Arquivo de dados conectado",
     description:
-      "Os dados do Notar estao sendo gravados no arquivo local conectado nesta sessao.",
+      "Os dados do Notar estão sendo gravados no arquivo local conectado nesta sessão.",
     path: "",
     fileName: handle.name ?? "notar-dados.json",
   };
@@ -1408,14 +1408,14 @@ async function connectDatabaseFileHandle(
 ) {
   if (!supportsFileDatabaseSelection()) {
     throw new Error(
-      "Este navegador nao suporta selecao de arquivo para usar um banco local em disco.",
+      "Este navegador não suporta seleção de arquivo para usar um banco local em disco.",
     );
   }
 
   const hasPermission = await ensureFileHandlePermission(handle, true);
   if (!hasPermission) {
     throw new Error(
-      "O navegador nao liberou acesso de leitura e escrita ao arquivo selecionado.",
+      "O navegador não liberou acesso de leitura e escrita ao arquivo selecionado.",
     );
   }
 
@@ -1440,7 +1440,7 @@ async function connectDatabaseFileHandle(
     });
   } else if (!isEmptyFile && !snapshotFromFile) {
     throw new Error(
-      "O arquivo selecionado nao parece ser um arquivo de dados valido do Notar.",
+      "O arquivo selecionado não parece ser um arquivo de dados válido do Notar.",
     );
   }
 
@@ -1458,7 +1458,7 @@ async function connectDatabaseFileHandle(
 export async function createDatabaseFile() {
   if (!supportsFileDatabaseSelection()) {
     throw new Error(
-      "Este navegador nao suporta a criacao de arquivo local para o banco de dados.",
+      "Este navegador não suporta a criação de arquivo local para o banco de dados.",
     );
   }
 
@@ -1483,7 +1483,7 @@ export async function openDatabaseFile({
 } = {}) {
   if (!supportsFileDatabaseSelection()) {
     throw new Error(
-      "Este navegador nao suporta a abertura de arquivo local para o banco de dados.",
+      "Este navegador não suporta a abertura de arquivo local para o banco de dados.",
     );
   }
 
@@ -1519,7 +1519,7 @@ export async function disconnectDatabaseFile() {
     isPersistent: false,
     label: "Arquivo desconectado",
     description:
-      "Os dados atuais continuam na memoria desta sessao. Para voltar a persistir, conecte um arquivo novamente.",
+      "Os dados atuais continuam na memória desta sessão. Para voltar a persistir, conecte um arquivo novamente.",
     path: "",
     fileName: "",
   });
@@ -1562,7 +1562,7 @@ export async function importDatabaseBackup(file, { emitChange = true } = {}) {
   const fileText = await file.text();
 
   if (!fileText.trim()) {
-    throw new Error("O arquivo de backup esta vazio.");
+    throw new Error("O arquivo de backup está vazio.");
   }
 
   let parsedPayload = null;
@@ -1570,13 +1570,13 @@ export async function importDatabaseBackup(file, { emitChange = true } = {}) {
   try {
     parsedPayload = JSON.parse(fileText);
   } catch {
-    throw new Error("O arquivo selecionado nao contem um JSON valido.");
+    throw new Error("O arquivo selecionado não contém um JSON válido.");
   }
 
   const snapshot = normalizeSnapshotPayload(parsedPayload);
 
   if (!snapshot) {
-    throw new Error("O arquivo selecionado nao parece ser um backup valido do Notar.");
+    throw new Error("O arquivo selecionado não parece ser um backup válido do Notar.");
   }
 
   await restoreDatabaseSnapshot(snapshot, { allowEmpty: true, emitChange });

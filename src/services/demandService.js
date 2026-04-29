@@ -46,7 +46,7 @@ export async function createDemand({
   const normalizedColor = normalizeDemandColor(color);
 
   if (!trimmedName) {
-    throw new Error("O nome da demanda e obrigatorio.");
+    throw new Error("O nome da demanda é obrigatório.");
   }
 
   const existingDemand = await query(`
@@ -57,7 +57,7 @@ export async function createDemand({
   `);
 
   if (existingDemand.length > 0) {
-    throw new Error("Ja existe uma demanda cadastrada com esse nome.");
+    throw new Error("Já existe uma demanda cadastrada com esse nome.");
   }
 
   await execute(`
@@ -92,11 +92,11 @@ export async function updateDemand({
   const normalizedColor = normalizeDemandColor(color);
 
   if (!id) {
-    throw new Error("O identificador da demanda e obrigatorio.");
+    throw new Error("O identificador da demanda é obrigatório.");
   }
 
   if (!trimmedName) {
-    throw new Error("O nome da demanda e obrigatorio.");
+    throw new Error("O nome da demanda é obrigatório.");
   }
 
   const currentDemandRows = await query(`
@@ -107,7 +107,7 @@ export async function updateDemand({
   `);
 
   if (currentDemandRows.length === 0) {
-    throw new Error("A demanda selecionada nao existe mais.");
+    throw new Error("A demanda selecionada não existe mais.");
   }
 
   const currentName = String(currentDemandRows[0].name ?? "").trim();
@@ -121,7 +121,7 @@ export async function updateDemand({
   `);
 
   if (existingDemand.length > 0) {
-    throw new Error("Ja existe outra demanda cadastrada com esse nome.");
+    throw new Error("Já existe outra demanda cadastrada com esse nome.");
   }
 
   await execute(`
@@ -187,7 +187,7 @@ export async function deleteDemand(id) {
   `);
 
   if (linkedDonors.length > 0) {
-    throw new Error("Nao e possivel remover uma demanda vinculada a doadores.");
+    throw new Error("Não é possível remover uma demanda vinculada a doadores.");
   }
 
   const trashItemId = await createTrashItem({

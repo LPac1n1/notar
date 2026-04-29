@@ -23,9 +23,9 @@ test("person validation catches required fields before persistence", () => {
   });
 
   assert.equal(hasValidationErrors(errors), true);
-  assert.equal(errors.name, "Nome e obrigatorio.");
-  assert.equal(errors.cpf, "Informe um CPF valido com 11 digitos.");
-  assert.equal(getFirstValidationError(errors), "Nome e obrigatorio.");
+  assert.equal(errors.name, "Nome é obrigatório.");
+  assert.equal(errors.cpf, "Informe um CPF válido com 11 dígitos.");
+  assert.equal(getFirstValidationError(errors), "Nome é obrigatório.");
 });
 
 test("donor validation applies holder and auxiliary requirements", () => {
@@ -44,8 +44,8 @@ test("donor validation applies holder and auxiliary requirements", () => {
     donationStartDate: "2026-01",
   });
 
-  assert.equal(holderErrors.demand, "Demanda e obrigatorio.");
-  assert.equal(auxiliaryErrors.holderPersonId, "Pessoa vinculada e obrigatorio.");
+  assert.equal(holderErrors.demand, "Demanda é obrigatório.");
+  assert.equal(auxiliaryErrors.holderPersonId, "Pessoa vinculada é obrigatório.");
 });
 
 test("import validation catches missing data and duplicate months", () => {
@@ -60,7 +60,7 @@ test("import validation catches missing data and duplicate months", () => {
     },
   });
 
-  assert.equal(errors.referenceMonth, "Ja existe uma importacao cadastrada para esse mes.");
+  assert.equal(errors.referenceMonth, "Já existe uma importação cadastrada para esse mês.");
 
   const missingErrors = validateImportUpload({
     uploadForm: {
@@ -70,7 +70,7 @@ test("import validation catches missing data and duplicate months", () => {
     },
   });
 
-  assert.equal(missingErrors.file, "Selecione um arquivo e aguarde a pre-visualizacao.");
+  assert.equal(missingErrors.file, "Selecione um arquivo e aguarde a pré-visualização.");
   assert.equal(missingErrors.valuePerNote, "Valor por nota deve ser maior que zero.");
-  assert.equal(missingErrors.cpfColumn, "Coluna de CPF e obrigatorio.");
+  assert.equal(missingErrors.cpfColumn, "Coluna de CPF é obrigatório.");
 });

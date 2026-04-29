@@ -68,7 +68,7 @@ async function registerSpreadsheetPreviewFile(file, registeredFileName) {
       ) ?? workbook.worksheets[0];
 
     if (!worksheet) {
-      throw new Error("A planilha do Excel nao possui nenhuma aba com dados.");
+      throw new Error("A planilha do Excel não possui nenhuma aba com dados.");
     }
 
     const csvBuffer = await workbook.csv.writeBuffer({
@@ -103,7 +103,7 @@ export async function prepareImportPreview(file) {
 
   if (!isSupportedImportExtension(fileExtension)) {
     throw new Error(
-      "Por enquanto, a importacao suporta apenas arquivos CSV, TXT ou XLSX.",
+      "Por enquanto, a importação suporta apenas arquivos CSV, TXT ou XLSX.",
     );
   }
 
@@ -420,7 +420,7 @@ export async function createImportRecord({
   const numericValuePerNote = parseValuePerNote(valuePerNote);
 
   if (!normalizedMonth) {
-    throw new Error("Informe um mes de referencia valido para a importacao.");
+    throw new Error("Informe um mês de referência válido para a importação.");
   }
 
   if (numericValuePerNote === null) {
@@ -436,7 +436,7 @@ export async function createImportRecord({
 
   if (existingImport.length > 0) {
     throw new Error(
-      "Ja existe uma importacao cadastrada para esse mes. Exclua a importacao anterior antes de importar novamente.",
+      "Já existe uma importação cadastrada para esse mês. Exclua a importação anterior antes de importar novamente.",
     );
   }
 
@@ -472,7 +472,7 @@ export async function saveImportCpfSummary({
   const normalizedMonth = startOfMonth(referenceMonth);
 
   if (!importId || !normalizedMonth) {
-    throw new Error("Importacao e mes de referencia sao obrigatorios.");
+    throw new Error("Importação e mês de referência são obrigatórios.");
   }
 
   await runInTransaction(
@@ -541,11 +541,11 @@ export async function processImportedFile({
   const normalizedMonth = startOfMonth(referenceMonth);
 
   if (!registeredFileName || !originalFileName) {
-    throw new Error("Arquivo de importacao invalido.");
+    throw new Error("Arquivo de importação inválido.");
   }
 
   if (!normalizedMonth) {
-    throw new Error("Informe o mes de referencia da planilha.");
+    throw new Error("Informe o mês de referência da planilha.");
   }
 
   if (!cpfColumn) {
@@ -605,7 +605,7 @@ export async function processImportedFile({
 
     return importId;
   } catch (error) {
-    const errorMessage = getErrorMessage(error, "Falha ao processar a importacao.");
+    const errorMessage = getErrorMessage(error, "Falha ao processar a importação.");
 
     if (importId) {
       await execute(`

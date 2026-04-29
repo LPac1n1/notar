@@ -41,10 +41,10 @@ function formatBackupStats(stats = {}) {
     `${formatInteger(stats.demands ?? 0)} demanda(s)`,
     `${formatInteger(stats.donors ?? 0)} doador(es)`,
     `${formatInteger(stats.donorCpfLinks ?? 0)} CPF(s) vinculado(s)`,
-    `${formatInteger(stats.imports ?? 0)} importacao(oes)`,
+    `${formatInteger(stats.imports ?? 0)} importação(ões)`,
     `${formatInteger(stats.importCpfSummary ?? 0)} CPF(s) consolidados`,
     `${formatInteger(stats.monthlyDonorSummary ?? 0)} resumo(s) mensal(is)`,
-    `${formatInteger(stats.actionHistory ?? 0)} acao(oes) no historico`,
+    `${formatInteger(stats.actionHistory ?? 0)} ação(ões) no histórico`,
     `${formatInteger(stats.trashItems ?? 0)} item(ns) na lixeira`,
   ].join(", ");
 }
@@ -102,7 +102,7 @@ export default function Settings() {
 
         if (isMounted) {
           setError(
-            "Nao foi possivel verificar o modo de armazenamento local do sistema.",
+            "Não foi possível verificar o modo de armazenamento local do sistema.",
           );
         }
       }
@@ -147,14 +147,14 @@ export default function Settings() {
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
         result.migratedCurrentSession
-          ? "Arquivo criado e conectado. Os dados atuais da sessao foram copiados para ele."
+          ? "Arquivo criado e conectado. Os dados atuais da sessão foram copiados para ele."
           : "Arquivo criado e conectado. As proximas alteracoes serao gravadas nele.",
       );
     } catch (storageError) {
       setError(
         getErrorMessage(
           storageError,
-          "Nao foi possivel criar e conectar o arquivo de dados.",
+          "Não foi possível criar e conectar o arquivo de dados.",
         ),
       );
     } finally {
@@ -211,7 +211,7 @@ export default function Settings() {
       setError(
         getErrorMessage(
           storageError,
-          "Nao foi possivel abrir o arquivo de dados.",
+          "Não foi possível abrir o arquivo de dados.",
         ),
       );
     } finally {
@@ -238,14 +238,14 @@ export default function Settings() {
       });
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
-        "Arquivo desconectado. Os dados atuais continuam apenas nesta sessao ate que um novo arquivo seja conectado.",
+        "Arquivo desconectado. Os dados atuais continuam apenas nesta sessão até que um novo arquivo seja conectado.",
       );
       await refreshStorageInfo();
     } catch (storageError) {
       setError(
         getErrorMessage(
           storageError,
-          "Nao foi possivel desconectar o arquivo de dados.",
+          "Não foi possível desconectar o arquivo de dados.",
         ),
       );
     } finally {
@@ -283,7 +283,7 @@ export default function Settings() {
       setError(
         getErrorMessage(
           backupError,
-          "Nao foi possivel exportar o backup do sistema.",
+          "Não foi possível exportar o backup do sistema.",
         ),
       );
     } finally {
@@ -345,7 +345,7 @@ export default function Settings() {
       setError(
         getErrorMessage(
           backupError,
-          "Nao foi possivel importar o backup selecionado.",
+          "Não foi possível importar o backup selecionado.",
         ),
       );
     } finally {
@@ -415,7 +415,7 @@ export default function Settings() {
 
             {!storageInfo.isPersistent ? (
               <FeedbackMessage
-                message="Sem um arquivo conectado, os dados atuais so existem nesta sessao e podem se perder ao fechar ou recarregar a aplicacao."
+                message="Sem um arquivo conectado, os dados atuais só existem nesta sessão e podem se perder ao fechar ou recarregar a aplicação."
                 tone="warning"
                 className="mb-0"
                 persistent

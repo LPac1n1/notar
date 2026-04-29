@@ -12,7 +12,7 @@ const INITIAL_STATE = {
 };
 
 export function useAsync({
-  errorMessage = "A operacao nao foi concluida.",
+  errorMessage = "A operação não foi concluída.",
   loadingMessage = "Processando",
   reportFinal = false,
   reportGlobal = false,

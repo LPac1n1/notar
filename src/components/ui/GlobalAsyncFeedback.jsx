@@ -77,7 +77,7 @@ export default function GlobalAsyncFeedback() {
                   />
                   {activeOperations.length > 1 ? (
                     <p className="mt-2 text-xs text-[var(--muted)]">
-                      {activeOperations.length} operacao(oes) em andamento.
+                      {activeOperations.length} operação(ões) em andamento.
                     </p>
                   ) : null}
                 </Motion.div>

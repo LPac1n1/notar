@@ -54,7 +54,7 @@ export default function Trash() {
       setError(
         getErrorMessage(
           trashError,
-          "Nao foi possivel carregar os itens da lixeira.",
+          "Não foi possível carregar os itens da lixeira.",
         ),
       );
     } finally {
@@ -80,7 +80,7 @@ export default function Trash() {
       setSuccessMessage(`${item.label} foi restaurado com sucesso.`);
     } catch (trashError) {
       setError(
-        getErrorMessage(trashError, "Nao foi possivel restaurar o item."),
+        getErrorMessage(trashError, "Não foi possível restaurar o item."),
       );
     } finally {
       setIsSubmitting(false);
@@ -104,7 +104,7 @@ export default function Trash() {
       setError(
         getErrorMessage(
           trashError,
-          "Nao foi possivel excluir o item permanentemente.",
+          "Não foi possível excluir o item permanentemente.",
         ),
       );
     } finally {
@@ -125,7 +125,7 @@ export default function Trash() {
       setError(
         getErrorMessage(
           trashError,
-          "Nao foi possivel apagar todos os itens da lixeira.",
+          "Não foi possível apagar todos os itens da lixeira.",
         ),
       );
     } finally {
