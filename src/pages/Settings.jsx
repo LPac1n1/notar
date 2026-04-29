@@ -4,6 +4,7 @@ import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import Loader from "../components/ui/Loader";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
@@ -24,20 +25,27 @@ import {
   STORAGE_INFO_EVENT,
 } from "../services/db";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
+import {
+  finishDataSyncFeedback,
+  startDataSyncFeedback,
+} from "../services/dataSyncFeedback";
 import { reconcileAllImports } from "../services/importService";
 import { downloadFile } from "../utils/download";
 import { getErrorMessage } from "../utils/error";
+import { formatInteger } from "../utils/format";
+
+const DATA_SYNC_HANDOFF_DELAY_MS = 650;
 
 function formatBackupStats(stats = {}) {
   return [
-    `${stats.demands ?? 0} demanda(s)`,
-    `${stats.donors ?? 0} doador(es)`,
-    `${stats.donorCpfLinks ?? 0} CPF(s) vinculado(s)`,
-    `${stats.imports ?? 0} importacao(oes)`,
-    `${stats.importCpfSummary ?? 0} CPF(s) consolidados`,
-    `${stats.monthlyDonorSummary ?? 0} resumo(s) mensal(is)`,
-    `${stats.actionHistory ?? 0} acao(oes) no historico`,
-    `${stats.trashItems ?? 0} item(ns) na lixeira`,
+    `${formatInteger(stats.demands ?? 0)} demanda(s)`,
+    `${formatInteger(stats.donors ?? 0)} doador(es)`,
+    `${formatInteger(stats.donorCpfLinks ?? 0)} CPF(s) vinculado(s)`,
+    `${formatInteger(stats.imports ?? 0)} importacao(oes)`,
+    `${formatInteger(stats.importCpfSummary ?? 0)} CPF(s) consolidados`,
+    `${formatInteger(stats.monthlyDonorSummary ?? 0)} resumo(s) mensal(is)`,
+    `${formatInteger(stats.actionHistory ?? 0)} acao(oes) no historico`,
+    `${formatInteger(stats.trashItems ?? 0)} item(ns) na lixeira`,
   ].join(", ");
 }
 
@@ -57,6 +65,12 @@ async function recordSettingsAction({
   });
 }
 
+function waitForDataSyncHandoff() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, DATA_SYNC_HANDOFF_DELAY_MS);
+  });
+}
+
 export default function Settings() {
   const [storageInfo, setStorageInfo] = useState(null);
   const [error, setError] = useState("");
@@ -65,7 +79,9 @@ export default function Settings() {
   const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [backupInputKey, setBackupInputKey] = useState(0);
   const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
+  const [dataSyncMessage, setDataSyncMessage] = useState("");
   const isLoadingStorage = storageInfo === null && !error;
+  const isApplyingData = Boolean(dataSyncMessage);
 
   useEffect(() => {
     let isMounted = true;
@@ -147,12 +163,32 @@ export default function Settings() {
   };
 
   const handleOpenFile = async () => {
+    let dataSyncOperationId = "";
+
     try {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
 
-      const result = await openDatabaseFile({ emitChange: false });
+      const result = await openDatabaseFile({
+        emitChange: false,
+        onFileSelected: (handle) => {
+          const nextMessage = "Carregando dados";
+          dataSyncOperationId = startDataSyncFeedback({
+            label: nextMessage,
+            source: "database-file-opened",
+          });
+          setDataSyncMessage(nextMessage);
+          setStorageInfo((current) =>
+            current
+              ? {
+                  ...current,
+                  fileName: handle?.name ?? current.fileName,
+                }
+              : current,
+          );
+        },
+      });
       await reconcileAllImports({ emitChange: false });
       await recordSettingsAction({
         actionType: "storage",
@@ -164,6 +200,7 @@ export default function Settings() {
         },
       });
       notifyDatabaseChanged({ source: "database-file-opened" });
+      await waitForDataSyncHandoff();
       setStorageInfo(result.storageInfo);
       setSuccessMessage(
         result.usedExistingFile
@@ -178,6 +215,8 @@ export default function Settings() {
         ),
       );
     } finally {
+      finishDataSyncFeedback(dataSyncOperationId);
+      setDataSyncMessage("");
       setIsSubmitting(false);
     }
   };
@@ -268,10 +307,18 @@ export default function Settings() {
       return;
     }
 
+    let dataSyncOperationId = "";
+
     try {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
+      const nextMessage = "Carregando dados";
+      dataSyncOperationId = startDataSyncFeedback({
+        label: nextMessage,
+        source: "backup-import",
+      });
+      setDataSyncMessage(nextMessage);
 
       const result = await importDatabaseBackup(selectedBackupFile, {
         emitChange: false,
@@ -287,6 +334,7 @@ export default function Settings() {
         },
       });
       notifyDatabaseChanged({ source: "backup-import" });
+      await waitForDataSyncHandoff();
       setStorageInfo(result.storageInfo);
       resetBackupFileSelection();
       setIsImportBackupConfirmOpen(false);
@@ -301,6 +349,8 @@ export default function Settings() {
         ),
       );
     } finally {
+      finishDataSyncFeedback(dataSyncOperationId);
+      setDataSyncMessage("");
       setIsSubmitting(false);
     }
   };
@@ -331,13 +381,27 @@ export default function Settings() {
         ) : storageInfo ? (
           <div className="space-y-3">
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-              <p className="text-sm text-[var(--muted)]">Status</p>
-              <p className="font-medium text-[var(--text-main)]">
-                {storageInfo.label}
-              </p>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                {storageInfo.description}
-              </p>
+              {isApplyingData ? (
+                <div role="status" aria-live="polite" aria-busy="true">
+                  <p className="text-sm text-[var(--muted)]">Status</p>
+                  <div className="mt-1">
+                    <Loader label={dataSyncMessage || "Carregando dados"} />
+                  </div>
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    Aplicando o arquivo selecionado e atualizando as telas do sistema.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-[var(--muted)]">Status</p>
+                  <p className="font-medium text-[var(--text-main)]">
+                    {storageInfo.label}
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    {storageInfo.description}
+                  </p>
+                </>
+              )}
             </div>
 
             {storageInfo.fileName ? (

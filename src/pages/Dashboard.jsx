@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import CopyableValue from "../components/ui/CopyableValue";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
+import { SkeletonCard } from "../components/ui/Skeleton";
 import {
   DemandIcon,
   DonorIcon,
@@ -19,6 +21,7 @@ import {
 import DetailList from "../features/dashboard/components/DetailList";
 import MetricCard from "../features/dashboard/components/MetricCard";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { getDashboardOverview } from "../services/dashboardService";
 import { formatCpf } from "../utils/cpf";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
@@ -65,6 +68,7 @@ export default function Dashboard() {
   const dashboardRequestIdRef = useRef(0);
   const restoredScrollTopRef = useRef(location.state?.dashboardScrollTop ?? null);
   const navigate = useNavigate();
+  const dataSyncFeedback = useDataSyncFeedback();
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
@@ -167,6 +171,11 @@ export default function Dashboard() {
     totals.demandCount > 0 ||
     totals.importCount > 0 ||
     totals.processedImportCount > 0;
+  const showDataRefreshLoading =
+    Boolean(dashboard) &&
+    (dataSyncFeedback.isActive ||
+      dataSyncFeedback.isVisible ||
+      (dataSyncFeedback.isSettling && isLoading));
 
   const renderDashboardModal = () => {
     if (!activeModal) {
@@ -539,40 +548,58 @@ export default function Dashboard() {
         />
       ) : null}
 
-      {!isLoading || dashboard ? (
+      {showDataRefreshLoading ? (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+        >
+          {Array.from({ length: 4 }).map((_, index) => (
+            <SkeletonCard key={index} />
+          ))}
+        </div>
+      ) : !isLoading || dashboard ? (
         <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Doadores ativos"
-          value={formatInteger(totals.donorCount)}
-          helper="Cadastros ativos no sistema."
-          onClick={() => setActiveModal("active-donors")}
-        />
-        <MetricCard
-          label="Demandas ativas"
-          value={formatInteger(totals.demandCount)}
-          helper="Demandas com cadastro ativo."
-          onClick={() => setActiveModal("active-demands")}
-        />
-        <MetricCard
-          label="Importações"
-          value={formatInteger(totals.importCount)}
-          helper={`${formatInteger(totals.processedImportCount)} processada(s) com sucesso.`}
-          onClick={() => setActiveModal("imports")}
-        />
-        <MetricCard
-          label="Último mês importado"
-          value={latestMonth ? formatMonthYear(latestMonth.referenceMonth) : "--"}
-          helper={
-            latestMonth
-              ? `${formatInteger(latestMonth.donorCount)} doador(es) conciliados.`
-              : "Aguardando primeira planilha."
-          }
-          onClick={latestMonth ? () => setActiveModal("latest-month") : undefined}
-        />
+          <MetricCard
+            label="Doadores ativos"
+            value={formatInteger(totals.donorCount)}
+            helper="Cadastros ativos no sistema."
+            onClick={() => setActiveModal("active-donors")}
+          />
+          <MetricCard
+            label="Demandas ativas"
+            value={formatInteger(totals.demandCount)}
+            helper="Demandas com cadastro ativo."
+            onClick={() => setActiveModal("active-demands")}
+          />
+          <MetricCard
+            label="Importações"
+            value={formatInteger(totals.importCount)}
+            helper={`${formatInteger(totals.processedImportCount)} processada(s) com sucesso.`}
+            onClick={() => setActiveModal("imports")}
+          />
+          <MetricCard
+            label="Último mês importado"
+            value={latestMonth ? formatMonthYear(latestMonth.referenceMonth) : "--"}
+            helper={
+              latestMonth
+                ? `${formatInteger(latestMonth.donorCount)} doador(es) conciliados.`
+                : "Aguardando primeira planilha."
+            }
+            onClick={latestMonth ? () => setActiveModal("latest-month") : undefined}
+          />
         </div>
       ) : null}
 
-      {!isLoading && !hasAnyData ? (
+      {showDataRefreshLoading ? (
+        <SectionCard title="Pontos para revisar">
+          <DataSyncSectionLoading
+            message={dataSyncFeedback.label}
+            rows={3}
+          />
+        </SectionCard>
+      ) : !isLoading && !hasAnyData ? (
         <EmptyState
           title="Ainda não há dados suficientes para o dashboard"
           description="Cadastre doadores, demandas e importe uma planilha para começar a visualizar os indicadores gerais."

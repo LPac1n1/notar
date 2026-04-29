@@ -42,6 +42,8 @@ body,
 html {
   background: var(--app-bg);
   scrollbar-gutter: stable;
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
 }
 
 body {
@@ -59,6 +61,33 @@ body {
 ::selection {
   background: rgba(255, 210, 77, 0.28);
   color: var(--text-main);
+}
+
+* {
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 button {

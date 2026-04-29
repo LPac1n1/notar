@@ -1477,7 +1477,10 @@ export async function createDatabaseFile() {
   return connectDatabaseFileHandle(handle, { preserveCurrentData: true });
 }
 
-export async function openDatabaseFile({ emitChange = true } = {}) {
+export async function openDatabaseFile({
+  emitChange = true,
+  onFileSelected,
+} = {}) {
   if (!supportsFileDatabaseSelection()) {
     throw new Error(
       "Este navegador nao suporta a abertura de arquivo local para o banco de dados.",
@@ -1499,6 +1502,8 @@ export async function openDatabaseFile({ emitChange = true } = {}) {
   if (!handle) {
     throw new Error("Nenhum arquivo foi selecionado.");
   }
+
+  onFileSelected?.(handle);
 
   return connectDatabaseFileHandle(handle, {
     emitChange,

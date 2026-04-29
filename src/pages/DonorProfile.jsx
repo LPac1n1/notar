@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Button from "../components/ui/Button";
 import CopyableValue from "../components/ui/CopyableValue";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -10,10 +11,15 @@ import SectionCard from "../components/ui/SectionCard";
 import StatusBadge from "../components/ui/StatusBadge";
 import { BackIcon } from "../components/ui/icons";
 import { getDonorProfile } from "../services/donorService";
-import { formatMonthYear } from "../utils/date";
+import {
+  formatDateTimePtBR,
+  formatDonationDuration,
+  formatMonthYear,
+} from "../utils/date";
 import { getErrorMessage } from "../utils/error";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 
 export default function DonorProfile() {
   const { donorId = "" } = useParams();
@@ -23,6 +29,11 @@ export default function DonorProfile() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const profileRequestIdRef = useRef(0);
+  const dataSyncFeedback = useDataSyncFeedback();
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive ||
+    dataSyncFeedback.isVisible ||
+    (dataSyncFeedback.isSettling && isLoading);
 
   const loadProfile = useCallback(async () => {
     const requestId = profileRequestIdRef.current + 1;
@@ -138,6 +149,14 @@ export default function DonorProfile() {
         </Button>
       </div>
 
+      {showDataRefreshLoading ? (
+        <DataSyncSectionLoading
+          className="mb-6"
+          message={dataSyncFeedback.label}
+          rows={3}
+        />
+      ) : null}
+
       <div className="mb-6 grid gap-3 md:grid-cols-4">
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Tipo</p>
@@ -167,8 +186,19 @@ export default function DonorProfile() {
           <p className="mt-1 font-semibold text-[var(--text-main)]">
             {donor.donationStartDate || "Nao informado"}
           </p>
+          {donor.donationStartDateValue ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              {formatDonationDuration(donor.donationStartDateValue)}
+            </p>
+          ) : null}
         </div>
       </div>
+
+      {donor.createdAt ? (
+        <p className="mb-6 text-xs text-[var(--muted)]">
+          Cadastro criado em {formatDateTimePtBR(donor.createdAt)}
+        </p>
+      ) : null}
 
       {donor.donorType === "auxiliary" ? (
         <SectionCard title="Vinculado a" className="mb-6">
@@ -294,7 +324,7 @@ export default function DonorProfile() {
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Notas históricas</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {profile.totals.totalNotes}
+            {formatInteger(profile.totals.totalNotes)}
           </p>
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
@@ -306,13 +336,13 @@ export default function DonorProfile() {
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Meses com abatimento</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {profile.totals.monthCount}
+            {formatInteger(profile.totals.monthCount)}
           </p>
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">CPFs de doação</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {profile.totals.linkedCpfCount}
+            {formatInteger(profile.totals.linkedCpfCount)}
           </p>
         </div>
       </div>
@@ -344,7 +374,7 @@ export default function DonorProfile() {
               </div>
               <p className="text-sm text-[var(--muted)]">
                 Início: {source.donationStartDate || "Nao informado"} •{" "}
-                {source.totalNotes} nota(s)
+                {formatInteger(source.totalNotes)} nota(s)
               </p>
             </div>
           ))}
@@ -376,7 +406,7 @@ export default function DonorProfile() {
                 <div>
                   <p className="text-sm text-[var(--muted)]">Notas</p>
                   <p className="font-medium text-[var(--text-main)]">
-                    {item.notesCount}
+                    {formatInteger(item.notesCount)}
                   </p>
                 </div>
                 <div>

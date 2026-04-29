@@ -3,6 +3,7 @@ import CopyableValue from "../../../components/ui/CopyableValue";
 import Modal from "../../../components/ui/Modal";
 import { formatCpf } from "../../../utils/cpf";
 import { formatMonthYear } from "../../../utils/date";
+import { formatInteger } from "../../../utils/format";
 
 export default function CpfSummaryDetailsModal({
   details,
@@ -56,13 +57,13 @@ export default function CpfSummaryDetailsModal({
           <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <p className="text-sm text-[var(--muted)]">Total de notas</p>
             <p className="mt-1 font-semibold text-[var(--text-main)]">
-              {details.notesCount}
+              {formatInteger(details.notesCount)}
             </p>
           </div>
           <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
             <p className="text-sm text-[var(--muted)]">Meses encontrados</p>
             <p className="mt-1 font-semibold text-[var(--text-main)]">
-              {details.monthCount}
+              {formatInteger(details.monthCount)}
             </p>
           </div>
           {details.demand ? (
@@ -123,7 +124,7 @@ export default function CpfSummaryDetailsModal({
                 {formatMonthYear(appearance.referenceMonth)}
               </p>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Notas no mês: {appearance.notesCount}
+                Notas no mês: {formatInteger(appearance.notesCount)}
               </p>
               <p className="mt-2 break-all text-sm text-[var(--muted)]">
                 Arquivo(s): {appearance.fileNames.join(", ")}

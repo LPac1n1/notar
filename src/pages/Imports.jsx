@@ -29,6 +29,7 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useAsync } from "../hooks/useAsync";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
+import { formatInteger } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
 import {
   getFirstValidationError,
@@ -38,6 +39,7 @@ import {
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 
 const INITIAL_IMPORT_FILTERS = {
   importId: "",
@@ -59,6 +61,7 @@ export default function Imports() {
   const [imports, setImports] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
   const [cpfSummary, setCpfSummary] = useState([]);
+  const [cpfSummaryOptionSource, setCpfSummaryOptionSource] = useState([]);
   const [uploadForm, setUploadForm] = useState({
     referenceMonth: "",
     valuePerNote: "",
@@ -92,7 +95,7 @@ export default function Imports() {
   const [selectedCpfSummaryDetails, setSelectedCpfSummaryDetails] = useState(null);
   const navigate = useNavigate();
   const importsPagination = usePagination(imports, {
-    initialPageSize: 10,
+    initialPageSize: 5,
   });
   const cpfSummaryPagination = usePagination(cpfSummary, {
     initialPageSize: 25,
@@ -101,11 +104,18 @@ export default function Imports() {
   const debouncedCpfFilters = useDebouncedValue(cpfFilters, 180);
   const importHistoryRequestIdRef = useRef(0);
   const cpfSummaryRequestIdRef = useRef(0);
+  const cpfSummaryOptionsRequestIdRef = useRef(0);
   const restoredScrollTopRef = useRef(location.state?.importsScrollTop ?? null);
   const initialImportFiltersRef = useRef(importFilters);
   const initialCpfFiltersRef = useRef(cpfFilters);
   const hasInitializedRef = useRef(false);
   const importOperation = useAsync({ reportGlobal: true });
+  const dataSyncFeedback = useDataSyncFeedback();
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive ||
+    dataSyncFeedback.isVisible ||
+    (dataSyncFeedback.isSettling &&
+      (isImportHistoryRefreshing || isCpfSummaryRefreshing));
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
@@ -134,30 +144,14 @@ export default function Imports() {
     [previewData],
   );
 
-  const importHistorySource = useMemo(() => {
-    const importMap = new Map(imports.map((item) => [item.id, item]));
-
-    if (importFilters.importId) {
-      const selectedImport = availableImports.find(
-        (item) => item.id === importFilters.importId,
-      );
-
-      if (selectedImport) {
-        importMap.set(selectedImport.id, selectedImport);
-      }
-    }
-
-    return Array.from(importMap.values());
-  }, [availableImports, importFilters.importId, imports]);
-
   const importHistoryOptions = useMemo(
     () =>
-      buildSelectOptions(importHistorySource, {
+      buildSelectOptions(availableImports, {
         getValue: (item) => item.id,
         getLabel: (item) => `${item.fileName} • ${formatMonthYear(item.referenceMonth)}`,
         emptyLabel: "Todos os arquivos",
       }),
-    [importHistorySource],
+    [availableImports],
   );
 
   const cpfSummaryImportOptions = useMemo(
@@ -191,35 +185,35 @@ export default function Imports() {
 
   const cpfOptions = useMemo(
     () =>
-      buildSelectOptions(cpfSummary, {
+      buildSelectOptions(cpfSummaryOptionSource, {
         getValue: (item) => item.cpf,
         getLabel: (item) => formatCpf(item.cpf),
         emptyLabel: "Todos os CPFs",
       }),
-    [cpfSummary],
+    [cpfSummaryOptionSource],
   );
 
   const donorOptions = useMemo(
     () =>
       buildSelectOptions(
-        cpfSummary.filter((item) => item.matchedDonorId),
+        cpfSummaryOptionSource.filter((item) => item.matchedDonorId),
         {
           getValue: (item) => item.matchedDonorId,
           getLabel: (item) => item.donorName,
           emptyLabel: "Todos os doadores",
         },
       ),
-    [cpfSummary],
+    [cpfSummaryOptionSource],
   );
 
   const demandOptions = useMemo(
     () =>
-      buildSelectOptions(cpfSummary, {
+      buildSelectOptions(cpfSummaryOptionSource, {
         getValue: (item) => item.demand,
         getLabel: (item) => item.demand,
         emptyLabel: "Todas as demandas",
       }),
-    [cpfSummary],
+    [cpfSummaryOptionSource],
   );
 
   const loadAvailableImports = useCallback(async () => {
@@ -295,6 +289,39 @@ export default function Imports() {
     }
   }, []);
 
+  const loadCpfSummaryOptions = useCallback(async (
+    currentFilters = INITIAL_CPF_FILTERS,
+  ) => {
+    const requestId = cpfSummaryOptionsRequestIdRef.current + 1;
+    cpfSummaryOptionsRequestIdRef.current = requestId;
+
+    try {
+      const cpfRows = await listImportCpfSummary({
+        importId: currentFilters.importId,
+        referenceMonth: currentFilters.referenceMonth,
+        cpf: "",
+        donorId: "",
+        demand: "",
+        registrationFilter: "all",
+      });
+
+      if (requestId !== cpfSummaryOptionsRequestIdRef.current) {
+        return;
+      }
+
+      setCpfSummaryOptionSource(cpfRows);
+    } catch (err) {
+      if (requestId !== cpfSummaryOptionsRequestIdRef.current) {
+        return;
+      }
+
+      console.error(
+        "Erro ao carregar opcoes de filtros de CPFs:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -304,6 +331,7 @@ export default function Imports() {
           loadAvailableImports(),
           loadImportHistory(initialImportFiltersRef.current),
           loadCpfSummary(initialCpfFiltersRef.current),
+          loadCpfSummaryOptions(initialCpfFiltersRef.current),
         ]);
       } catch (err) {
         console.error(
@@ -316,7 +344,12 @@ export default function Imports() {
         hasInitializedRef.current = true;
       }
     })();
-  }, [loadAvailableImports, loadCpfSummary, loadImportHistory]);
+  }, [
+    loadAvailableImports,
+    loadCpfSummary,
+    loadCpfSummaryOptions,
+    loadImportHistory,
+  ]);
 
   useEffect(() => {
     if (!hasInitializedRef.current) {
@@ -332,7 +365,8 @@ export default function Imports() {
     }
 
     loadCpfSummary(debouncedCpfFilters, { showRefreshing: true });
-  }, [debouncedCpfFilters, loadCpfSummary]);
+    loadCpfSummaryOptions(debouncedCpfFilters);
+  }, [debouncedCpfFilters, loadCpfSummary, loadCpfSummaryOptions]);
 
   useEffect(() => () => {
     if (previewData?.registeredFileName) {
@@ -345,12 +379,14 @@ export default function Imports() {
       loadAvailableImports(),
       loadImportHistory(importFilters, { showRefreshing: true }),
       loadCpfSummary(cpfFilters, { showRefreshing: true }),
+      loadCpfSummaryOptions(cpfFilters),
     ]);
   }, [
     cpfFilters,
     importFilters,
     loadAvailableImports,
     loadCpfSummary,
+    loadCpfSummaryOptions,
     loadImportHistory,
   ]);
 
@@ -546,6 +582,7 @@ export default function Imports() {
         loadAvailableImports(),
         loadImportHistory(importFilters),
         loadCpfSummary(cpfFilters),
+        loadCpfSummaryOptions(cpfFilters),
       ]);
       await resetImportSelection();
       setUploadForm({
@@ -587,6 +624,7 @@ export default function Imports() {
         loadAvailableImports(),
         loadImportHistory(importFilters),
         loadCpfSummary(cpfFilters),
+        loadCpfSummaryOptions(cpfFilters),
       ]);
       setImportPendingRemoval(null);
       setSuccessMessage("Importacao enviada para a lixeira com sucesso.");
@@ -624,14 +662,14 @@ export default function Imports() {
         entityType: "export",
         entityId: "imports-csv",
         label: "Histórico de importações CSV",
-        description: `${result.rowCount} importacao(oes) exportada(s) em CSV.`,
+        description: `${formatInteger(result.rowCount)} importacao(oes) exportada(s) em CSV.`,
         payload: {
           filters: importFilters,
           rowCount: result.rowCount,
         },
       });
       setSuccessMessage(
-        `${result.rowCount} importacao(oes) exportada(s) em CSV.`,
+        `${formatInteger(result.rowCount)} importacao(oes) exportada(s) em CSV.`,
       );
     } catch (err) {
       console.error(
@@ -661,14 +699,14 @@ export default function Imports() {
         entityType: "export",
         entityId: "import-cpfs-csv",
         label: "CPFs encontrados CSV",
-        description: `${result.rowCount} CPF(s) exportado(s) em CSV.`,
+        description: `${formatInteger(result.rowCount)} CPF(s) exportado(s) em CSV.`,
         payload: {
           filters: cpfFilters,
           rowCount: result.rowCount,
         },
       });
       setSuccessMessage(
-        `${result.rowCount} CPF(s) exportado(s) em CSV.`,
+        `${formatInteger(result.rowCount)} CPF(s) exportado(s) em CSV.`,
       );
     } catch (err) {
       console.error(
@@ -762,7 +800,8 @@ export default function Imports() {
         filters={importFilters}
         imports={imports}
         isExporting={isExportingImports}
-        isRefreshing={isImportHistoryRefreshing}
+        isRefreshing={isImportHistoryRefreshing || showDataRefreshLoading}
+        showRefreshSkeleton={showDataRefreshLoading}
         onClearFilters={handleClearImportFilters}
         onDelete={setImportPendingRemoval}
         onExport={handleExportImports}
@@ -780,7 +819,8 @@ export default function Imports() {
         filters={cpfFilters}
         importOptions={cpfSummaryImportOptions}
         isExporting={isExportingCpfSummary}
-        isRefreshing={isCpfSummaryRefreshing}
+        isRefreshing={isCpfSummaryRefreshing || showDataRefreshLoading}
+        showRefreshSkeleton={showDataRefreshLoading}
         onClearFilters={handleClearCpfFilters}
         onExport={handleExportCpfSummary}
         onFilterChange={handleCpfFilterChange}

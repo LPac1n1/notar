@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import FormModal from "../components/ui/FormModal";
@@ -30,6 +31,7 @@ import {
 import { getErrorMessage } from "../utils/error";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 
 const INITIAL_DEMAND_FILTERS = {
   name: "",
@@ -51,6 +53,7 @@ export default function Demands() {
     ...INITIAL_DEMAND_FILTERS,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +63,11 @@ export default function Demands() {
   const demandsPagination = usePagination(demands, {
     initialPageSize: 25,
   });
+  const dataSyncFeedback = useDataSyncFeedback();
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive ||
+    dataSyncFeedback.isVisible ||
+    (dataSyncFeedback.isSettling && isRefreshing);
 
   const loadDemands = useCallback(async (
     currentFilters = INITIAL_DEMAND_FILTERS,
@@ -71,6 +79,8 @@ export default function Demands() {
     try {
       if (showLoading) {
         setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
       }
 
       setError("");
@@ -94,6 +104,7 @@ export default function Demands() {
     } finally {
       if (requestId === demandsRequestIdRef.current) {
         setIsLoading(false);
+        setIsRefreshing(false);
       }
     }
   }, []);
@@ -326,7 +337,12 @@ export default function Demands() {
         tone="success"
       />
 
-      {!isLoading && demands.length === 0 ? (
+      {showDataRefreshLoading ? (
+        <DataSyncSectionLoading
+          message={dataSyncFeedback.label}
+          rows={4}
+        />
+      ) : !isLoading && demands.length === 0 ? (
         <EmptyState
           title="Nenhuma demanda cadastrada"
           description="Cadastre uma demanda para poder vinculá-la aos doadores."

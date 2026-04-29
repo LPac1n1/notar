@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "../components/ui/Button";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
@@ -14,9 +15,11 @@ import {
 } from "../features/history/constants";
 import { listActionHistory } from "../services/actionHistoryService";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { usePagination } from "../hooks/usePagination";
 import { getErrorMessage } from "../utils/error";
+import { formatInteger } from "../utils/format";
 
 const INITIAL_FILTERS = {
   actionType: "",
@@ -33,6 +36,9 @@ export default function ActionHistory() {
   const historyRequestIdRef = useRef(0);
   const hasInitializedRef = useRef(false);
   const historyPagination = usePagination(actions, { initialPageSize: 25 });
+  const dataSyncFeedback = useDataSyncFeedback();
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive || dataSyncFeedback.isVisible;
 
   const loadHistory = useCallback(async (
     currentFilters = INITIAL_FILTERS,
@@ -123,7 +129,7 @@ export default function ActionHistory() {
     <div>
       <PageHeader
         title="Histórico"
-        subtitle={`${actions.length} ação(ões) encontrada(s).`}
+        subtitle={`${formatInteger(actions.length)} ação(ões) encontrada(s).`}
         className="mb-6"
       />
 
@@ -167,29 +173,36 @@ export default function ActionHistory() {
       </SectionCard>
 
       <SectionCard title="Ações registradas">
-        <div className="space-y-4">
-          <PaginationControls
-            endItem={historyPagination.endItem}
-            onPageChange={historyPagination.setPage}
-            onPageSizeChange={historyPagination.handlePageSizeChange}
-            page={historyPagination.page}
-            pageSize={historyPagination.pageSize}
-            totalItems={historyPagination.totalItems}
-            totalPages={historyPagination.totalPages}
-          />
+        {showDataRefreshLoading ? (
+        <DataSyncSectionLoading
+          message={dataSyncFeedback.label}
+          rows={4}
+        />
+      ) : (
+          <div className="space-y-4">
+            <PaginationControls
+              endItem={historyPagination.endItem}
+              onPageChange={historyPagination.setPage}
+              onPageSizeChange={historyPagination.handlePageSizeChange}
+              page={historyPagination.page}
+              pageSize={historyPagination.pageSize}
+              totalItems={historyPagination.totalItems}
+              totalPages={historyPagination.totalPages}
+            />
 
-          <ActionHistoryList actions={historyPagination.visibleItems} />
+            <ActionHistoryList actions={historyPagination.visibleItems} />
 
-          <PaginationControls
-            endItem={historyPagination.endItem}
-            onPageChange={historyPagination.setPage}
-            onPageSizeChange={historyPagination.handlePageSizeChange}
-            page={historyPagination.page}
-            pageSize={historyPagination.pageSize}
-            totalItems={historyPagination.totalItems}
-            totalPages={historyPagination.totalPages}
-          />
-        </div>
+            <PaginationControls
+              endItem={historyPagination.endItem}
+              onPageChange={historyPagination.setPage}
+              onPageSizeChange={historyPagination.handlePageSizeChange}
+              page={historyPagination.page}
+              pageSize={historyPagination.pageSize}
+              totalItems={historyPagination.totalItems}
+              totalPages={historyPagination.totalPages}
+            />
+          </div>
+      )}
       </SectionCard>
     </div>
   );

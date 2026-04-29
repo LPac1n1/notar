@@ -329,6 +329,7 @@ function mapDonorRow(row) {
       : "",
     donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
     isActive: Boolean(row.is_active),
+    createdAt: row.created_at ?? "",
     linkedCpfCount: Number(row.linked_cpf_count ?? 0),
     auxiliaryCount: Number(row.auxiliary_count ?? 0),
     auxiliaryDonors,
@@ -396,6 +397,7 @@ export async function listDonors(filters = {}) {
       holder_active_donors.id AS active_holder_donor_id,
       strftime(donors.donation_start_date, '%Y-%m-01') AS donation_start_date,
       donors.is_active,
+      strftime(donors.created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
       coalesce((
         SELECT count(*)
         FROM donor_cpf_links
@@ -955,7 +957,8 @@ export async function getDonorProfile(donorId) {
       holder_people.cpf AS holder_cpf,
       holder_active_donors.id AS active_holder_donor_id,
       strftime(donors.donation_start_date, '%Y-%m-01') AS donation_start_date,
-      donors.is_active
+      donors.is_active,
+      strftime(donors.created_at, '%Y-%m-%d %H:%M:%S') AS created_at
     FROM donors
     LEFT JOIN people AS holder_people
       ON holder_people.id = donors.holder_person_id
@@ -1048,6 +1051,7 @@ export async function getDonorProfile(donorId) {
         : "",
       donationStartDate: formatMonthYear(donor.donation_start_date ?? ""),
       isActive: Boolean(donor.is_active),
+      createdAt: donor.created_at ?? "",
     },
     auxiliaryDonors: auxiliaryRows.map((row) => ({
       id: row.id,

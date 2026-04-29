@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import CopyableValue from "../components/ui/CopyableValue";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import FormModal from "../components/ui/FormModal";
@@ -35,6 +36,9 @@ import {
 } from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { formatDateTimePtBR } from "../utils/date";
+import { formatInteger } from "../utils/format";
 
 const EMPTY_PERSON_FORM = {
   name: "",
@@ -64,9 +68,14 @@ export default function People() {
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const peoplePagination = usePagination(people, { initialPageSize: 25 });
+  const dataSyncFeedback = useDataSyncFeedback();
   const debouncedFilters = useDebouncedValue(filters, 180);
   const peopleRequestIdRef = useRef(0);
   const hasInitializedRef = useRef(false);
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive ||
+    dataSyncFeedback.isVisible ||
+    (dataSyncFeedback.isSettling && isRefreshing);
 
   const loadPeople = useCallback(async (currentFilters, { showLoading = false } = {}) => {
     const requestId = peopleRequestIdRef.current + 1;
@@ -299,7 +308,7 @@ export default function People() {
     <div>
       <PageHeader
         title="Pessoas"
-        subtitle={`${people.length} pessoa(s) sem papel de doador.`}
+        subtitle={`${formatInteger(people.length)} pessoa(s) sem papel de doador.`}
         className="mb-6"
       />
 
@@ -342,9 +351,11 @@ export default function People() {
             Limpar filtros
           </Button>
           <p className="text-xs text-[var(--muted)]">
-            {isRefreshing
-              ? "Atualizando resultados..."
-              : `${people.length} resultado(s) na lista.`}
+            {showDataRefreshLoading
+              ? dataSyncFeedback.label
+              : isRefreshing
+                ? "Atualizando resultados..."
+                : `${formatInteger(people.length)} resultado(s) na lista.`}
           </p>
         </div>
       </SectionCard>
@@ -360,7 +371,12 @@ export default function People() {
         tone="success"
       />
 
-      {!isLoading && people.length === 0 ? (
+      {showDataRefreshLoading ? (
+        <DataSyncSectionLoading
+          message={dataSyncFeedback.label}
+          rows={4}
+        />
+      ) : !isLoading && people.length === 0 ? (
         <EmptyState
           title="Nenhuma pessoa sem papel de doador"
           description="Cadastre pessoas que possam ser usadas como referência em vínculos de auxiliares."
@@ -382,7 +398,7 @@ export default function People() {
           {peoplePagination.visibleItems.map((person) => (
             <li
               key={person.id}
-              className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between"
             >
               <div className="min-w-0 flex-1">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -409,13 +425,19 @@ export default function People() {
 
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {person.referencedByAuxiliaries > 0
-                    ? `Referência de ${person.referencedByAuxiliaries} auxiliar(es).`
+                    ? `Referência de ${formatInteger(person.referencedByAuxiliaries)} auxiliar(es).`
                     : "Disponível para vínculo com auxiliar."}
                 </p>
+                {person.createdAt ? (
+                  <p className="mt-5 text-xs text-[var(--muted)]">
+                    Cadastrada em {formatDateTimePtBR(person.createdAt)}
+                  </p>
+                ) : null}
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-col gap-2 md:w-40 md:self-stretch">
                 <Button
+                  className="w-full md:flex-1"
                   variant="subtle"
                   onClick={() => {
                     setError("");
@@ -433,6 +455,7 @@ export default function People() {
                   Editar
                 </Button>
                 <Button
+                  className="w-full md:flex-1"
                   variant="danger"
                   onClick={() => setPersonPendingRemoval(person)}
                   leftIcon={<TrashIcon className="h-4 w-4" />}

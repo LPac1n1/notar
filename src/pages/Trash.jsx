@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
@@ -14,7 +15,9 @@ import {
   restoreTrashItem,
 } from "../services/trashService";
 import { getErrorMessage } from "../utils/error";
+import { formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 
 export default function Trash() {
   const [trashItems, setTrashItems] = useState([]);
@@ -26,6 +29,9 @@ export default function Trash() {
     useState(null);
   const [isClearTrashConfirmOpen, setIsClearTrashConfirmOpen] = useState(false);
   const trashRequestIdRef = useRef(0);
+  const dataSyncFeedback = useDataSyncFeedback();
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive || dataSyncFeedback.isVisible;
 
   const refreshTrashItems = useCallback(async () => {
     const requestId = trashRequestIdRef.current + 1;
@@ -143,7 +149,7 @@ export default function Trash() {
     <div>
       <PageHeader
         title="Lixeira"
-        subtitle={`${trashItems.length} item(ns) disponível(is) para restauração.`}
+        subtitle={`${formatInteger(trashItems.length)} item(ns) disponível(is) para restauração.`}
         className="mb-6"
       />
       <FeedbackMessage
@@ -155,7 +161,12 @@ export default function Trash() {
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard title="Itens removidos">
-        {trashItems.length === 0 ? (
+        {showDataRefreshLoading ? (
+          <DataSyncSectionLoading
+            message={dataSyncFeedback.label}
+            rows={3}
+          />
+        ) : trashItems.length === 0 ? (
           <EmptyState
             title="Lixeira vazia"
             description="Quando você remover doadores, demandas ou importações, eles aparecerão aqui."

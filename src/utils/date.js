@@ -99,6 +99,41 @@ export function formatDateTimePtBR(value) {
   }).format(date);
 }
 
+export function formatDonationDuration(startMonth, now = new Date()) {
+  const normalizedStartMonth = startOfMonth(startMonth);
+
+  if (!normalizedStartMonth) {
+    return "";
+  }
+
+  const [startYear, startMonthNumber] = normalizedStartMonth
+    .split("-")
+    .map(Number);
+  const currentYear = now.getFullYear();
+  const currentMonthNumber = now.getMonth() + 1;
+  const totalMonths =
+    (currentYear - startYear) * 12 + (currentMonthNumber - startMonthNumber) + 1;
+
+  if (!Number.isFinite(totalMonths) || totalMonths <= 0) {
+    return "Ainda não iniciado";
+  }
+
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+
+  if (years === 0) {
+    return `${totalMonths} ${totalMonths === 1 ? "mês" : "meses"}`;
+  }
+
+  if (months === 0) {
+    return `${years} ${years === 1 ? "ano" : "anos"}`;
+  }
+
+  return `${years} ${years === 1 ? "ano" : "anos"} e ${months} ${
+    months === 1 ? "mês" : "meses"
+  }`;
+}
+
 export function subtractOneMonth(value) {
   if (!value) {
     return "";

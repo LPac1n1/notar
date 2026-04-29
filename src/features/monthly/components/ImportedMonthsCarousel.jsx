@@ -5,7 +5,7 @@ import {
   ChevronRightIcon,
 } from "../../../components/ui/icons";
 import { formatDatePtBR, formatMonthYear } from "../../../utils/date";
-import { formatCurrency } from "../../../utils/format";
+import { formatCurrency, formatInteger } from "../../../utils/format";
 
 export default function ImportedMonthsCarousel({
   imports,
@@ -35,7 +35,7 @@ export default function ImportedMonthsCarousel({
             Meses importados
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            {imports.length} mês(es) com planilha processada
+            {formatInteger(imports.length)} mês(es) com planilha processada
           </p>
         </div>
 
@@ -87,7 +87,7 @@ export default function ImportedMonthsCarousel({
                     {formatMonthYear(item.referenceMonth)}
                   </p>
                   <p className="mt-1 text-sm text-[var(--muted)]">
-                    {item.matchedDonors} doador(es) que doaram
+                    {formatInteger(item.matchedDonors)} doador(es) que doaram
                   </p>
                 </div>
                 <span

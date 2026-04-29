@@ -1,4 +1,3 @@
-import { AnimatePresence } from "framer-motion";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import PageTransition from "../components/layout/PageTransition";
@@ -19,22 +18,20 @@ function AnimatedRoutes() {
 
   return (
     <Layout>
-      <AnimatePresence mode="wait" initial={false}>
-        <PageTransition key={location.pathname}>
-          <Routes location={location}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/doadores" element={<Donors />} />
-            <Route path="/doadores/:donorId" element={<DonorProfile />} />
-            <Route path="/pessoas" element={<People />} />
-            <Route path="/demandas" element={<Demands />} />
-            <Route path="/mensal" element={<Monthly />} />
-            <Route path="/importacoes" element={<Imports />} />
-            <Route path="/lixeira" element={<Trash />} />
-            <Route path="/historico" element={<ActionHistory />} />
-            <Route path="/configuracoes" element={<Settings />} />
-          </Routes>
-        </PageTransition>
-      </AnimatePresence>
+      <PageTransition key={location.pathname}>
+        <Routes location={location}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/doadores" element={<Donors />} />
+          <Route path="/doadores/:donorId" element={<DonorProfile />} />
+          <Route path="/pessoas" element={<People />} />
+          <Route path="/demandas" element={<Demands />} />
+          <Route path="/mensal" element={<Monthly />} />
+          <Route path="/importacoes" element={<Imports />} />
+          <Route path="/lixeira" element={<Trash />} />
+          <Route path="/historico" element={<ActionHistory />} />
+          <Route path="/configuracoes" element={<Settings />} />
+        </Routes>
+      </PageTransition>
     </Layout>
   );
 }

@@ -57,6 +57,7 @@ function mapPersonRow(row) {
       ? String(row.donation_start_date).slice(0, 7)
       : "",
     donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
+    createdAt: row.created_at ?? "",
     referencedByAuxiliaries: Number(row.referenced_by_auxiliaries ?? 0),
     role: role.role,
     roleLabel: role.roleLabel,
@@ -74,6 +75,7 @@ async function queryPersonRows(conditions = []) {
       people.name,
       people.cpf,
       people.is_active,
+      strftime(people.created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
       (
         SELECT donors.id
         FROM donors

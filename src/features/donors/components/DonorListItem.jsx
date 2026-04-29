@@ -6,6 +6,8 @@ import {
   TrashIcon,
   UserIcon,
 } from "../../../components/ui/icons";
+import { formatDateTimePtBR } from "../../../utils/date";
+import { formatInteger } from "../../../utils/format";
 
 export default function DonorListItem({
   donor,
@@ -14,7 +16,7 @@ export default function DonorListItem({
   onRemove,
 }) {
   return (
-    <li className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between">
+    <li className="flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between">
       <div className="min-w-0 flex-1">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <CopyableValue
@@ -47,6 +49,11 @@ export default function DonorListItem({
         <p className="text-sm text-[var(--muted)]">
           Início: {donor.donationStartDate || "Nao informado"}
         </p>
+        {donor.createdAt ? (
+          <p className="mt-5 text-xs text-[var(--muted)]">
+            Cadastrado em {formatDateTimePtBR(donor.createdAt)}
+          </p>
+        ) : null}
 
         {donor.donorType === "auxiliary" ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -100,15 +107,16 @@ export default function DonorListItem({
             ))}
             {donor.auxiliaryDonors.length > 3 ? (
               <span className="text-xs text-[var(--muted)]">
-                +{donor.auxiliaryDonors.length - 3}
+                +{formatInteger(donor.auxiliaryDonors.length - 3)}
               </span>
             ) : null}
           </div>
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex w-full flex-col gap-2 md:w-40 md:self-stretch">
         <Button
+          className="w-full md:flex-1"
           onClick={() => onOpenProfile(donor.id)}
           variant="subtle"
           leftIcon={<UserIcon className="h-4 w-4" />}
@@ -116,6 +124,7 @@ export default function DonorListItem({
           Perfil
         </Button>
         <Button
+          className="w-full md:flex-1"
           onClick={() => onEdit(donor)}
           variant="subtle"
           leftIcon={<EditIcon className="h-4 w-4" />}
@@ -123,6 +132,7 @@ export default function DonorListItem({
           Editar
         </Button>
         <Button
+          className="w-full md:flex-1"
           onClick={() => onRemove(donor)}
           variant="danger"
           leftIcon={<TrashIcon className="h-4 w-4" />}

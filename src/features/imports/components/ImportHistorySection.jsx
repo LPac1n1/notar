@@ -6,6 +6,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import SelectInput from "../../../components/ui/SelectInput";
 import { SkeletonRows } from "../../../components/ui/Skeleton";
 import { DownloadIcon } from "../../../components/ui/icons";
+import { formatInteger } from "../../../utils/format";
 import ImportHistoryItem from "./ImportHistoryItem";
 
 export default function ImportHistorySection({
@@ -14,6 +15,7 @@ export default function ImportHistorySection({
   imports,
   isExporting,
   isRefreshing,
+  showRefreshSkeleton = false,
   onClearFilters,
   onDelete,
   onExport,
@@ -23,26 +25,34 @@ export default function ImportHistorySection({
   statusOptions,
 }) {
   return (
-    <SectionCard title="Histórico de importações" className="mb-8">
-      <div className="mb-4 flex flex-wrap gap-3">
-        <Button
-          variant="subtle"
-          onClick={onExport}
-          disabled={isExporting}
-          isLoading={isExporting}
-          loadingLabel="Exportando..."
-          leftIcon={<DownloadIcon className="h-4 w-4" />}
-        >
-          Exportar histórico CSV
-        </Button>
-        <Button variant="subtle" onClick={onClearFilters}>
-          Limpar filtros
-        </Button>
-        <p className="text-xs text-[var(--muted)]">
-          {isRefreshing
-            ? "Atualizando histórico..."
-            : `${imports.length} importação(ões) listada(s).`}
-        </p>
+    <SectionCard className="mb-8">
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="font-[var(--font-display)] text-xl font-bold text-[var(--text-main)]">
+            Histórico de importações
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {isRefreshing
+              ? "Atualizando histórico..."
+              : `${formatInteger(imports.length)} importação(ões) listada(s).`}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <Button
+            variant="subtle"
+            onClick={onExport}
+            disabled={isExporting}
+            isLoading={isExporting}
+            loadingLabel="Exportando..."
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+          >
+            Exportar histórico CSV
+          </Button>
+          <Button variant="subtle" onClick={onClearFilters}>
+            Limpar filtros
+          </Button>
+        </div>
       </div>
 
       <div className="mb-5 grid gap-3 md:grid-cols-3">
@@ -74,7 +84,7 @@ export default function ImportHistorySection({
         />
       </div>
 
-      {isRefreshing && imports.length === 0 ? (
+      {isRefreshing && (imports.length === 0 || showRefreshSkeleton) ? (
         <SkeletonRows rows={3} />
       ) : imports.length === 0 ? (
         <EmptyState

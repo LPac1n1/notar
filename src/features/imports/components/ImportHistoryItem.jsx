@@ -1,7 +1,7 @@
 import Button from "../../../components/ui/Button";
 import { TrashIcon } from "../../../components/ui/icons";
 import { formatMonthYear } from "../../../utils/date";
-import { formatCurrency } from "../../../utils/format";
+import { formatCurrency, formatInteger } from "../../../utils/format";
 
 function getStatusClassName(status) {
   if (status === "processed") {
@@ -59,17 +59,17 @@ export default function ImportHistoryItem({
       </div>
       <div>
         <p className="text-sm text-[var(--muted)]">Linhas</p>
-        <p className="font-medium">{item.totalRows}</p>
+        <p className="font-medium">{formatInteger(item.totalRows)}</p>
       </div>
       <div>
         <p className="text-sm text-[var(--muted)]">Linhas compatíveis</p>
-        <p className="font-medium">{item.matchedRows}</p>
+        <p className="font-medium">{formatInteger(item.matchedRows)}</p>
       </div>
       <div>
         <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
-        <p className="font-medium">{item.matchedDonors}</p>
+        <p className="font-medium">{formatInteger(item.matchedDonors)}</p>
       </div>
-      <div className="md:col-span-6">
+      <div className="flex justify-end md:col-span-6">
         <Button
           variant="danger"
           onClick={() => onDelete(item)}

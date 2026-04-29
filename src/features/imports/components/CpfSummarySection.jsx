@@ -6,6 +6,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import SelectInput from "../../../components/ui/SelectInput";
 import { SkeletonRows } from "../../../components/ui/Skeleton";
 import { DownloadIcon } from "../../../components/ui/icons";
+import { formatInteger } from "../../../utils/format";
 import CpfSummaryItem from "./CpfSummaryItem";
 
 export default function CpfSummarySection({
@@ -17,6 +18,7 @@ export default function CpfSummarySection({
   importOptions,
   isExporting,
   isRefreshing,
+  showRefreshSkeleton = false,
   onClearFilters,
   onExport,
   onFilterChange,
@@ -26,26 +28,34 @@ export default function CpfSummarySection({
   registrationFilterOptions,
 }) {
   return (
-    <SectionCard title="CPFs encontrados">
-      <div className="mb-4 flex flex-wrap gap-3">
-        <Button
-          variant="subtle"
-          onClick={onExport}
-          disabled={isExporting}
-          isLoading={isExporting}
-          loadingLabel="Exportando..."
-          leftIcon={<DownloadIcon className="h-4 w-4" />}
-        >
-          Exportar CSV
-        </Button>
-        <Button variant="subtle" onClick={onClearFilters}>
-          Limpar filtros
-        </Button>
-        <p className="text-xs text-[var(--muted)]">
-          {isRefreshing
-            ? "Atualizando CPFs encontrados..."
-            : `${cpfSummary.length} CPF(s) consolidado(s).`}
-        </p>
+    <SectionCard>
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="font-[var(--font-display)] text-xl font-bold text-[var(--text-main)]">
+            CPFs encontrados
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {isRefreshing
+              ? "Atualizando CPFs encontrados..."
+              : `${formatInteger(cpfSummary.length)} CPF(s) consolidado(s).`}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <Button
+            variant="subtle"
+            onClick={onExport}
+            disabled={isExporting}
+            isLoading={isExporting}
+            loadingLabel="Exportando..."
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+          >
+            Exportar CSV
+          </Button>
+          <Button variant="subtle" onClick={onClearFilters}>
+            Limpar filtros
+          </Button>
+        </div>
       </div>
 
       <div className="mb-5 grid gap-3 md:grid-cols-3">
@@ -112,7 +122,7 @@ export default function CpfSummarySection({
         />
       </div>
 
-      {isRefreshing && cpfSummary.length === 0 ? (
+      {isRefreshing && (cpfSummary.length === 0 || showRefreshSkeleton) ? (
         <SkeletonRows rows={4} />
       ) : cpfSummary.length === 0 ? (
         <EmptyState

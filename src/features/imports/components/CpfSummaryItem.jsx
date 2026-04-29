@@ -2,6 +2,7 @@ import Button from "../../../components/ui/Button";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { formatCpf } from "../../../utils/cpf";
+import { formatInteger } from "../../../utils/format";
 
 export default function CpfSummaryItem({
   item,
@@ -76,7 +77,7 @@ export default function CpfSummaryItem({
 
       <div>
         <p className="text-sm text-[var(--muted)]">Total de notas</p>
-        <p className="font-medium">{item.notesCount}</p>
+        <p className="font-medium">{formatInteger(item.notesCount)}</p>
       </div>
 
       <div>
@@ -100,11 +101,11 @@ export default function CpfSummaryItem({
       <div>
         <p className="text-sm text-[var(--muted)]">Meses</p>
         <p className="font-medium">
-          {item.monthCount} {item.monthCount === 1 ? "mês" : "meses"}
+          {formatInteger(item.monthCount)} {item.monthCount === 1 ? "mês" : "meses"}
         </p>
       </div>
 
-      <div className="md:col-span-4">
+      <div className="flex justify-end md:col-span-4">
         <Button variant="subtle" onClick={() => onOpenDetails(item)}>
           Ver meses e arquivos
         </Button>

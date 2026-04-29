@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import FormModal from "../components/ui/FormModal";
@@ -30,6 +31,7 @@ import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
+import { formatInteger } from "../utils/format";
 import {
   getFirstValidationError,
   hasValidationErrors,
@@ -38,6 +40,7 @@ import {
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
+import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 
 const EMPTY_DONOR_FORM = {
   name: "",
@@ -92,11 +95,16 @@ export default function Donors() {
   const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
   const donorsPagination = usePagination(donors, { initialPageSize: 25 });
+  const dataSyncFeedback = useDataSyncFeedback();
   const debouncedFilters = useDebouncedValue(filters, 180);
   const donorsRequestIdRef = useRef(0);
   const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
   const initialFiltersRef = useRef(filters);
   const hasInitializedRef = useRef(false);
+  const showDataRefreshLoading =
+    dataSyncFeedback.isActive ||
+    dataSyncFeedback.isVisible ||
+    (dataSyncFeedback.isSettling && isRefreshing);
 
   const openDonorProfile = useCallback(
     (donorId) => {
@@ -542,7 +550,7 @@ export default function Donors() {
     <div>
       <PageHeader
         title="Doadores"
-        subtitle={`${donors.length} doador(es) cadastrado(s).`}
+        subtitle={`${formatInteger(donors.length)} doador(es) cadastrado(s).`}
         className="mb-6"
       />
 
@@ -604,9 +612,11 @@ export default function Donors() {
             Limpar filtros
           </Button>
           <p className="text-xs text-[var(--muted)]">
-            {isRefreshing
-              ? "Atualizando resultados..."
-              : `${donors.length} resultado(s) na lista.`}
+            {showDataRefreshLoading
+              ? dataSyncFeedback.label
+              : isRefreshing
+                ? "Atualizando resultados..."
+                : `${formatInteger(donors.length)} resultado(s) na lista.`}
           </p>
         </div>
       </SectionCard>
@@ -622,7 +632,12 @@ export default function Donors() {
         tone="success"
       />
 
-      {!isLoading && donors.length === 0 ? (
+      {showDataRefreshLoading ? (
+        <DataSyncSectionLoading
+          message={dataSyncFeedback.label}
+          rows={4}
+        />
+      ) : !isLoading && donors.length === 0 ? (
         <EmptyState
           title="Nenhum doador cadastrado"
           description="Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."

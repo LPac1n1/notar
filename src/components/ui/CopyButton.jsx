@@ -1,16 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, CopyIcon } from "./icons";
 
-async function copyToClipboard(value) {
-  const text = String(value ?? "");
-
-  if (!text) {
+function fallbackCopyToClipboard(text) {
+  if (!text || typeof document === "undefined") {
     return false;
-  }
-
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return true;
   }
 
   const textarea = document.createElement("textarea");
@@ -19,14 +12,40 @@ async function copyToClipboard(value) {
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
   textarea.style.pointerEvents = "none";
+  textarea.style.top = "0";
   document.body.append(textarea);
+  try {
+    textarea.focus({ preventScroll: true });
+  } catch {
+    textarea.focus();
+  }
   textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
 
   try {
     return document.execCommand("copy");
   } finally {
     textarea.remove();
   }
+}
+
+async function copyToClipboard(value) {
+  const text = String(value ?? "");
+
+  if (!text) {
+    return false;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return fallbackCopyToClipboard(text);
+    }
+  }
+
+  return fallbackCopyToClipboard(text);
 }
 
 export default function CopyButton({
@@ -41,7 +60,6 @@ export default function CopyButton({
   const isMountedRef = useRef(true);
   const isCopied = status === "copied";
   const isError = status === "error";
-  const hasFeedback = isCopied || isError;
 
   useEffect(
     () => () => {
@@ -61,8 +79,13 @@ export default function CopyButton({
       window.clearTimeout(timeoutRef.current);
     }
 
+    if (isMountedRef.current) {
+      setStatus("copied");
+    }
+
     try {
       const didCopy = await copyToClipboard(value);
+
       if (isMountedRef.current) {
         setStatus(didCopy ? "copied" : "error");
       }
@@ -80,42 +103,31 @@ export default function CopyButton({
       if (isMountedRef.current) {
         setStatus("idle");
       }
-    }, 1500);
+    }, 1800);
   };
 
   return (
     <button
       type="button"
       onClick={handleCopy}
-      title={isCopied ? copiedLabel : label}
-      aria-label={isCopied ? copiedLabel : label}
-      className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-xs font-semibold transition-colors ${
+      title={isCopied ? copiedLabel : isError ? errorLabel : label}
+      aria-label={isCopied ? copiedLabel : isError ? errorLabel : label}
+      className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${
         isCopied
-          ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]"
+          ? "scale-105 border-[var(--success-line)] bg-[var(--success)] text-[#10151d] shadow-[0_0_0_4px_rgba(75,193,126,0.18)]"
         : isError
-            ? "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]"
+            ? "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)] shadow-[0_0_0_3px_rgba(255,91,91,0.12)]"
             : "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--muted-strong)] hover:border-[var(--line-strong)] hover:text-[var(--text-main)]"
       } ${className}`.trim()}
     >
       {isCopied ? (
-        <CheckIcon className="h-3.5 w-3.5" />
+        <CheckIcon className="h-3.5 w-3.5 scale-110 transition-transform duration-200 ease-out" />
       ) : (
-        <CopyIcon className="h-3.5 w-3.5" />
+        <CopyIcon className="h-3.5 w-3.5 transition-transform duration-200 ease-out" />
       )}
       <span className="sr-only">
         {isCopied ? copiedLabel : isError ? errorLabel : label}
       </span>
-      {hasFeedback ? (
-        <span
-          className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border bg-[var(--surface-elevated)] px-2 py-1 text-[11px] font-semibold opacity-100 shadow-lg ${
-            isCopied
-              ? "border-[var(--success-line)] text-[var(--success)]"
-              : "border-[var(--danger-line)] text-[var(--danger)]"
-          }`}
-        >
-          {isCopied ? copiedLabel : errorLabel}
-        </span>
-      ) : null}
     </button>
   );
 }
