@@ -11,6 +11,16 @@ import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDet
 import CpfSummarySection from "../features/imports/components/CpfSummarySection";
 import ImportHistorySection from "../features/imports/components/ImportHistorySection";
 import ImportUploadModal from "../features/imports/components/ImportUploadModal";
+import {
+  CPF_REGISTRATION_FILTER_OPTIONS,
+  IMPORT_STATUS_OPTIONS,
+  getCpfOptions,
+  getCpfSummaryImportOptions,
+  getDemandOptions,
+  getDonorOptions,
+  getImportHistoryOptions,
+  getPreviewColumnOptions,
+} from "../features/imports/utils/options";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { releaseRegisteredFile } from "../services/db";
 import {
@@ -28,16 +38,13 @@ import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useAsync } from "../hooks/useAsync";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
-import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
-import { formatMonthYear } from "../utils/date";
 import {
   getFirstValidationError,
   hasValidationErrors,
   validateImportUpload,
 } from "../utils/preventiveValidation";
-import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
@@ -137,82 +144,32 @@ export default function Imports() {
   };
 
   const previewColumnOptions = useMemo(
-    () =>
-      buildSelectOptions(previewData?.columns ?? [], {
-        emptyLabel: "Selecione a coluna de CPF",
-      }),
+    () => getPreviewColumnOptions(previewData),
     [previewData],
   );
 
   const importHistoryOptions = useMemo(
-    () =>
-      buildSelectOptions(availableImports, {
-        getValue: (item) => item.id,
-        getLabel: (item) => `${item.fileName} • ${formatMonthYear(item.referenceMonth)}`,
-        emptyLabel: "Todos os arquivos",
-      }),
+    () => getImportHistoryOptions(availableImports),
     [availableImports],
   );
 
   const cpfSummaryImportOptions = useMemo(
-    () =>
-      buildSelectOptions(availableImports, {
-        getValue: (item) => item.id,
-        getLabel: (item) => `${formatMonthYear(item.referenceMonth)} • ${item.fileName}`,
-        emptyLabel: "Todas as importações",
-      }),
+    () => getCpfSummaryImportOptions(availableImports),
     [availableImports],
   );
 
-  const importStatusOptions = useMemo(
-    () => [
-      { value: "", label: "Todos os status" },
-      { value: "processed", label: "Processadas", tone: "success" },
-      { value: "pending", label: "Pendentes", tone: "warning" },
-      { value: "error", label: "Com erro", tone: "danger" },
-    ],
-    [],
-  );
-
-  const registrationFilterOptions = useMemo(
-    () => [
-      { value: "all", label: "Todos" },
-      { value: "registered", label: "Somente vinculados", tone: "success" },
-      { value: "unregistered", label: "Somente não vinculados", tone: "danger" },
-    ],
-    [],
-  );
-
   const cpfOptions = useMemo(
-    () =>
-      buildSelectOptions(cpfSummaryOptionSource, {
-        getValue: (item) => item.cpf,
-        getLabel: (item) => formatCpf(item.cpf),
-        emptyLabel: "Todos os CPFs",
-      }),
+    () => getCpfOptions(cpfSummaryOptionSource),
     [cpfSummaryOptionSource],
   );
 
   const donorOptions = useMemo(
-    () =>
-      buildSelectOptions(
-        cpfSummaryOptionSource.filter((item) => item.matchedDonorId),
-        {
-          getValue: (item) => item.matchedDonorId,
-          getLabel: (item) => item.donorName,
-          emptyLabel: "Todos os doadores",
-        },
-      ),
+    () => getDonorOptions(cpfSummaryOptionSource),
     [cpfSummaryOptionSource],
   );
 
   const demandOptions = useMemo(
-    () =>
-      buildSelectOptions(cpfSummaryOptionSource, {
-        getValue: (item) => item.demand,
-        getLabel: (item) => item.demand,
-        emptyLabel: "Todas as demandas",
-      }),
+    () => getDemandOptions(cpfSummaryOptionSource),
     [cpfSummaryOptionSource],
   );
 
@@ -806,7 +763,7 @@ export default function Imports() {
         onFilterChange={handleImportFilterChange}
         options={importHistoryOptions}
         pagination={importsPagination}
-        statusOptions={importStatusOptions}
+        statusOptions={IMPORT_STATUS_OPTIONS}
       />
 
       <CpfSummarySection
@@ -825,7 +782,7 @@ export default function Imports() {
         onOpenDetails={setSelectedCpfSummaryDetails}
         onOpenDonorProfile={openDonorProfile}
         pagination={cpfSummaryPagination}
-        registrationFilterOptions={registrationFilterOptions}
+        registrationFilterOptions={CPF_REGISTRATION_FILTER_OPTIONS}
       />
 
       <AnimatePresence>
