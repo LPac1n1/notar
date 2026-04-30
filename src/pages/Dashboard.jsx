@@ -20,44 +20,14 @@ import {
 } from "../components/ui/icons";
 import DetailList from "../features/dashboard/components/DetailList";
 import MetricCard from "../features/dashboard/components/MetricCard";
+import CopyableCpf from "../features/donors/components/CopyableCpf";
+import CopyableDonorName from "../features/donors/components/CopyableDonorName";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { getDashboardOverview } from "../services/dashboardService";
-import { formatCpf } from "../utils/cpf";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
-
-function CopyableDonorName({ className = "", name, onClick }) {
-  return (
-    <CopyableValue
-      copyLabel="Copiar nome"
-      value={name}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        className={`text-left font-medium text-[var(--text-main)] underline-offset-4 transition hover:text-[var(--accent)] hover:underline ${className}`.trim()}
-      >
-        {name}
-      </button>
-    </CopyableValue>
-  );
-}
-
-function CopyableCpf({ className = "", value }) {
-  const formattedCpf = formatCpf(value);
-
-  return (
-    <CopyableValue
-      className={className}
-      copyLabel="Copiar CPF"
-      value={formattedCpf}
-    >
-      <span>{formattedCpf}</span>
-    </CopyableValue>
-  );
-}
 
 export default function Dashboard() {
   const location = useLocation();
