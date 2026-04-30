@@ -307,7 +307,7 @@ export async function updateDonor({
 
   if (existingPerson && existingPerson.id !== currentPerson.id) {
     throw new Error(
-      "Ja existe outra pessoa com esse CPF. Use o cadastro existente para evitar duplicidade.",
+      "Já existe outra pessoa com esse CPF. Use o cadastro existente para evitar duplicidade.",
     );
   }
 

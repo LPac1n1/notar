@@ -166,7 +166,7 @@ async function restoreDemand(payload) {
 
     if (existingDemand.length > 0) {
       throw new Error(
-        "Ja existe uma demanda com esse nome. Renomeie ou remova a demanda atual antes de restaurar.",
+        "Já existe uma demanda com esse nome. Renomeie ou remova a demanda atual antes de restaurar.",
       );
     }
   }
@@ -190,7 +190,7 @@ async function restorePerson(payload) {
 
   if (existingPerson.length > 0) {
     throw new Error(
-      "Ja existe uma pessoa com esse CPF. Remova ou edite o cadastro atual antes de restaurar.",
+      "Já existe uma pessoa com esse CPF. Remova ou edite o cadastro atual antes de restaurar.",
     );
   }
 
@@ -214,7 +214,7 @@ async function restoreDonor(payload) {
 
     if (existingLinks.length > 0) {
       throw new Error(
-        "Ja existe um doador usando o CPF deste item. Remova ou edite o cadastro atual antes de restaurar.",
+        "Já existe um doador usando o CPF deste item. Remova ou edite o cadastro atual antes de restaurar.",
       );
     }
   }

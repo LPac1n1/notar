@@ -167,7 +167,7 @@ export async function getHolderPersonContext({
 
   if (activeDonor && activeDonor.donor_type !== "holder") {
     throw new Error(
-      "Um auxiliar so pode ser vinculado a um doador titular ou a uma pessoa sem papel de doador.",
+      "Um auxiliar só pode ser vinculado a um doador titular ou a uma pessoa sem papel de doador.",
     );
   }
 
@@ -226,7 +226,7 @@ export async function resolveCreatePersonContext({
   if (existingPerson) {
     if (existingPerson.name !== normalizedName) {
       throw new Error(
-        "Ja existe uma pessoa com esse CPF. Selecione o cadastro existente para evitar duplicidade.",
+        "Já existe uma pessoa com esse CPF. Selecione o cadastro existente para evitar duplicidade.",
       );
     }
 
