@@ -1,3 +1,4 @@
+import { APP_SCROLL_CONTAINER_ID } from "../../utils/appScroll";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
@@ -12,7 +13,7 @@ export default function Layout({ children }) {
 
           <main className="min-h-0 flex-1 overflow-hidden">
             <div
-              id="app-scroll-container"
+              id={APP_SCROLL_CONTAINER_ID}
               className="h-full overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-4 md:p-5 lg:p-6"
             >
               {children}

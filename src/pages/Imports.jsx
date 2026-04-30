@@ -27,6 +27,7 @@ import {
 import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useAsync } from "../hooks/useAsync";
+import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -127,8 +128,7 @@ export default function Imports() {
             state: {
               importFilters,
               cpfFilters,
-              importsScrollTop:
-                document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+              importsScrollTop: getAppScrollTop(),
             },
           },
         },
@@ -421,9 +421,7 @@ export default function Imports() {
     restoredScrollTopRef.current = null;
 
     window.requestAnimationFrame(() => {
-      document
-        .getElementById("app-scroll-container")
-        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+      scrollAppTo(scrollTop);
     });
   }, [isLoading]);
 

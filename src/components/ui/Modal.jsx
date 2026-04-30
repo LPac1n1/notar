@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion as Motion } from "framer-motion";
+import { getAppScrollContainer } from "../../utils/appScroll";
 import { CloseIcon, FileIcon } from "./icons";
 
 const SIZE_CLASSES = {
@@ -100,7 +101,7 @@ export default function Modal({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    const appScrollContainer = document.getElementById("app-scroll-container");
+    const appScrollContainer = getAppScrollContainer();
     appScrollTopRef.current = appScrollContainer?.scrollTop ?? 0;
     const restoreAppScroll = () => {
       appScrollContainer?.scrollTo({

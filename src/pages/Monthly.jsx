@@ -36,6 +36,7 @@ import {
   updateAbatementStatuses,
   updateAbatementStatusesWithHistory,
 } from "../services/monthlyService";
+import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
@@ -249,9 +250,7 @@ export default function Monthly() {
     restoredScrollTopRef.current = null;
 
     window.requestAnimationFrame(() => {
-      document
-        .getElementById("app-scroll-container")
-        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+      scrollAppTo(scrollTop);
     });
   }, [isLoading]);
 
@@ -262,8 +261,7 @@ export default function Monthly() {
         pathname: "/mensal",
         state: {
           monthlyFilters: filters,
-          monthlyScrollTop:
-            document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+          monthlyScrollTop: getAppScrollTop(),
         },
       },
     }),

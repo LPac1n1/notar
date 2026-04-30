@@ -29,6 +29,7 @@ import { exportDonorsCsv } from "../services/exportService";
 import { listPeople } from "../services/personService";
 import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -115,8 +116,7 @@ export default function Donors() {
             pathname: "/doadores",
             state: {
               donorFilters: filters,
-              donorScrollTop:
-                document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+              donorScrollTop: getAppScrollTop(),
             },
           },
         },
@@ -296,9 +296,7 @@ export default function Donors() {
     restoredScrollTopRef.current = null;
 
     window.requestAnimationFrame(() => {
-      document
-        .getElementById("app-scroll-container")
-        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+      scrollAppTo(scrollTop);
     });
   }, [isLoading]);
 

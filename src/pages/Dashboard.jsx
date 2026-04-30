@@ -25,6 +25,7 @@ import CopyableDonorName from "../features/donors/components/CopyableDonorName";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { getDashboardOverview } from "../services/dashboardService";
+import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
@@ -48,8 +49,7 @@ export default function Dashboard() {
             label: "Voltar para dashboard",
             pathname: "/",
             state: {
-              dashboardScrollTop:
-                document.getElementById("app-scroll-container")?.scrollTop ?? 0,
+              dashboardScrollTop: getAppScrollTop(),
             },
           },
         },
@@ -108,9 +108,7 @@ export default function Dashboard() {
     restoredScrollTopRef.current = null;
 
     window.requestAnimationFrame(() => {
-      document
-        .getElementById("app-scroll-container")
-        ?.scrollTo({ top: scrollTop, behavior: "auto" });
+      scrollAppTo(scrollTop);
     });
   }, [isLoading]);
 
