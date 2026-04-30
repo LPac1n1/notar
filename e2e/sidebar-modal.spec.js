@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("sidebar stays stable when opening a modal after scrolling content", async ({ page }) => {
   await page.goto("/pessoas");
-  await expect(page.getByRole("heading", { name: "Pessoas" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pessoas", exact: true })).toBeVisible();
 
   const sidebar = page.locator("aside > div").first();
   const addPersonButton = page.getByRole("button", { name: "Adicionar pessoa" });
