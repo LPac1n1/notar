@@ -4,7 +4,6 @@ import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { SkeletonRows } from "../components/ui/Skeleton";
@@ -15,10 +14,9 @@ import {
 } from "../components/ui/icons";
 import { INITIAL_MONTHLY_FILTERS } from "../features/monthly/constants";
 import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
-import GroupSection from "../features/monthly/components/GroupSection";
 import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
 import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
-import MonthlySummaryRow from "../features/monthly/components/MonthlySummaryRow";
+import MonthlySummaryList from "../features/monthly/components/MonthlySummaryList";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { exportMonthlySummariesCsv } from "../services/exportService";
@@ -895,69 +893,15 @@ export default function Monthly() {
             }
           />
         ) : (
-          <div className="space-y-5">
-            <PaginationControls
-              endItem={monthlyPagination.endItem}
-              onPageChange={monthlyPagination.setPage}
-              onPageSizeChange={monthlyPagination.handlePageSizeChange}
-              page={monthlyPagination.page}
-              pageSize={monthlyPagination.pageSize}
-              totalItems={monthlyPagination.totalItems}
-              totalPages={monthlyPagination.totalPages}
-            />
-
-            {visibleDonatedSummaries.length > 0 ? (
-              <GroupSection
-                icon={<MonthlyIcon className="h-4 w-4" />}
-                title="Com doação no mês"
-                description="Abatimentos gerados a partir das notas conciliadas no período."
-                countLabel={`${formatInteger(visibleDonatedSummaries.length)} nesta página`}
-                tone="success"
-              >
-                {visibleDonatedSummaries.map((summary) => (
-                  <MonthlySummaryRow
-                    key={summary.id}
-                    summary={summary}
-                    isUpdating={updatingSummaryId === summary.id}
-                    onNavigate={handleOpenDonorProfile}
-                    onStatusChange={handleStatusChange}
-                    showReferenceMonth={!hasSelectedReferenceMonth}
-                  />
-                ))}
-              </GroupSection>
-            ) : null}
-
-            {visibleNotDonatedSummaries.length > 0 ? (
-              <GroupSection
-                icon={<WarningIcon className="h-4 w-4" />}
-                title="Sem doação no mês"
-                description="Doadores ativos que seguem visíveis para acompanhamento, mesmo sem notas no período."
-                countLabel={`${formatInteger(visibleNotDonatedSummaries.length)} nesta página`}
-                tone="warning"
-              >
-                {visibleNotDonatedSummaries.map((summary) => (
-                  <MonthlySummaryRow
-                    key={summary.id}
-                    summary={summary}
-                    isUpdating={updatingSummaryId === summary.id}
-                    onNavigate={handleOpenDonorProfile}
-                    onStatusChange={handleStatusChange}
-                    showReferenceMonth={!hasSelectedReferenceMonth}
-                  />
-                ))}
-              </GroupSection>
-            ) : null}
-
-            <PaginationControls
-              endItem={monthlyPagination.endItem}
-              onPageChange={monthlyPagination.setPage}
-              onPageSizeChange={monthlyPagination.handlePageSizeChange}
-              page={monthlyPagination.page}
-              pageSize={monthlyPagination.pageSize}
-              totalItems={monthlyPagination.totalItems}
-              totalPages={monthlyPagination.totalPages}
-            />
-          </div>
+          <MonthlySummaryList
+            pagination={monthlyPagination}
+            donatedSummaries={visibleDonatedSummaries}
+            notDonatedSummaries={visibleNotDonatedSummaries}
+            updatingSummaryId={updatingSummaryId}
+            onNavigate={handleOpenDonorProfile}
+            onStatusChange={handleStatusChange}
+            showReferenceMonth={!hasSelectedReferenceMonth}
+          />
         )}
       </SectionCard>
     </div>
