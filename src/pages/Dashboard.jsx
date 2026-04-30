@@ -144,6 +144,12 @@ export default function Dashboard() {
     (dataSyncFeedback.isActive ||
       dataSyncFeedback.isVisible ||
       (dataSyncFeedback.isSettling && isLoading));
+  const showInitialLoading = isLoading && !dashboard && !error;
+  const showRefreshing = showDataRefreshLoading;
+  const showCards = !showRefreshing && (!isLoading || Boolean(dashboard));
+  const showSectionsAsContent = !showRefreshing && !isLoading;
+  const showEmpty = showSectionsAsContent && !hasAnyData;
+  const showSectionsData = showSectionsAsContent && hasAnyData;
 
   const renderDashboardModal = () => {
     if (!activeModal) {
@@ -509,14 +515,14 @@ export default function Dashboard() {
       />
       <FeedbackMessage message={error} tone="error" />
 
-      {isLoading && !dashboard && !error ? (
+      {showInitialLoading ? (
         <LoadingScreen
           title="Montando o dashboard"
           description="Carregando indicadores."
         />
       ) : null}
 
-      {showDataRefreshLoading ? (
+      {showRefreshing ? (
         <div
           role="status"
           aria-live="polite"
@@ -527,7 +533,9 @@ export default function Dashboard() {
             <SkeletonCard key={index} />
           ))}
         </div>
-      ) : !isLoading || dashboard ? (
+      ) : null}
+
+      {showCards ? (
         <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Doadores ativos"
@@ -560,19 +568,23 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {showDataRefreshLoading ? (
+      {showRefreshing ? (
         <SectionCard title="Pontos para revisar">
           <DataSyncSectionLoading
             message={dataSyncFeedback.label}
             rows={3}
           />
         </SectionCard>
-      ) : !isLoading && !hasAnyData ? (
+      ) : null}
+
+      {showEmpty ? (
         <EmptyState
           title="Ainda não há dados suficientes para o dashboard"
           description="Cadastre doadores, demandas e importe uma planilha para começar a visualizar os indicadores gerais."
         />
-      ) : !isLoading ? (
+      ) : null}
+
+      {showSectionsData ? (
         <div className="space-y-6">
           <SectionCard
             title="Pontos para revisar"
