@@ -4,26 +4,20 @@ import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import MonthInput from "../components/ui/MonthInput";
 import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
-import SelectInput from "../components/ui/SelectInput";
 import { SkeletonRows } from "../components/ui/Skeleton";
 import {
   DonorIcon,
   MonthlyIcon,
   WarningIcon,
 } from "../components/ui/icons";
-import {
-  ABATEMENT_SORT_OPTIONS,
-  ABATEMENT_STATUS_OPTIONS,
-  DONATION_ACTIVITY_OPTIONS,
-  INITIAL_MONTHLY_FILTERS,
-} from "../features/monthly/constants";
+import { INITIAL_MONTHLY_FILTERS } from "../features/monthly/constants";
 import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
 import GroupSection from "../features/monthly/components/GroupSection";
 import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
+import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
 import MonthlySummaryRow from "../features/monthly/components/MonthlySummaryRow";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
@@ -856,78 +850,15 @@ export default function Monthly() {
           </p>
         ) : null}
 
-        <div
-          className={`mb-5 grid gap-3 md:grid-cols-2 ${
-            hasSelectedReferenceMonth ? "xl:grid-cols-5" : "xl:grid-cols-3"
-          }`}
-        >
-          <MonthInput
-            name="referenceMonth"
-            value={filters.referenceMonth}
-            onChange={handleFilterChange}
-          />
-
-          <SelectInput
-            name="donorId"
-            value={filters.donorId}
-            onChange={handleFilterChange}
-            options={donorOptions}
-            placeholder="Todos os doadores"
-            searchable
-            searchPlaceholder="Buscar doador..."
-          />
-
-          {hasSelectedReferenceMonth ? (
-            <SelectInput
-              name="donationActivity"
-              value={filters.donationActivity}
-              onChange={handleFilterChange}
-              options={DONATION_ACTIVITY_OPTIONS}
-              placeholder="Todos os doadores"
-            />
-          ) : null}
-
-          {hasSelectedReferenceMonth ? (
-            <SelectInput
-              name="abatementStatus"
-              value={filters.abatementStatus}
-              onChange={handleFilterChange}
-              options={ABATEMENT_STATUS_OPTIONS}
-              placeholder="Todos os status"
-              disabled={isNotDonatedFilterActive}
-            />
-          ) : null}
-
-          <SelectInput
-            name="abatementSort"
-            value={filters.abatementSort}
-            onChange={handleFilterChange}
-            options={ABATEMENT_SORT_OPTIONS}
-            placeholder="Ordenar por abatimento"
-          />
-        </div>
-
-        <div className="mb-5 grid gap-3 md:grid-cols-2">
-          <SelectInput
-            name="cpf"
-            value={filters.cpf}
-            onChange={handleFilterChange}
-            options={cpfOptions}
-            placeholder="Todos os CPFs"
-            searchable
-            searchPlaceholder="Buscar CPF..."
-          />
-
-          <SelectInput
-            name="demand"
-            value={filters.demand}
-            onChange={handleFilterChange}
-            options={demandOptions}
-            placeholder="Todas as demandas"
-            searchable
-            searchPlaceholder="Buscar demanda..."
-          />
-        </div>
+        <MonthlyFiltersBar
+          filters={filters}
+          donorOptions={donorOptions}
+          cpfOptions={cpfOptions}
+          demandOptions={demandOptions}
+          hasSelectedReferenceMonth={hasSelectedReferenceMonth}
+          isNotDonatedFilterActive={isNotDonatedFilterActive}
+          onChange={handleFilterChange}
+        />
 
         {!hasSelectedReferenceMonth ? (
           isDataSyncRefreshLoading ? (
