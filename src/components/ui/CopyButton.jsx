@@ -79,25 +79,18 @@ export default function CopyButton({
       window.clearTimeout(timeoutRef.current);
     }
 
-    if (isMountedRef.current) {
-      setStatus("copied");
-    }
-
+    let didCopy = false;
     try {
-      const didCopy = await copyToClipboard(value);
-
-      if (isMountedRef.current) {
-        setStatus(didCopy ? "copied" : "error");
-      }
+      didCopy = await copyToClipboard(value);
     } catch {
-      if (isMountedRef.current) {
-        setStatus("error");
-      }
+      didCopy = false;
     }
 
     if (!isMountedRef.current) {
       return;
     }
+
+    setStatus(didCopy ? "copied" : "error");
 
     timeoutRef.current = window.setTimeout(() => {
       if (isMountedRef.current) {
@@ -114,10 +107,10 @@ export default function CopyButton({
       aria-label={isCopied ? copiedLabel : isError ? errorLabel : label}
       className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${
         isCopied
-          ? "scale-105 border-[var(--success-line)] bg-[var(--success)] text-[#10151d] shadow-[0_0_0_4px_rgba(75,193,126,0.18)]"
+          ? "scale-105 border-[color:var(--success-line)] bg-[color:var(--success)] text-[#10151d] shadow-[0_0_0_4px_rgba(75,193,126,0.18)]"
         : isError
-            ? "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)] shadow-[0_0_0_3px_rgba(255,91,91,0.12)]"
-            : "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--muted-strong)] hover:border-[var(--line-strong)] hover:text-[var(--text-main)]"
+            ? "border-[color:var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] shadow-[0_0_0_3px_rgba(255,91,91,0.12)]"
+            : "border-[color:var(--line)] bg-[color:var(--surface-strong)] text-[color:var(--muted-strong)] hover:border-[color:var(--line-strong)] hover:text-[color:var(--text-main)]"
       } ${className}`.trim()}
     >
       {isCopied ? (
