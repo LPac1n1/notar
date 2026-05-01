@@ -99,19 +99,36 @@ export default function CopyButton({
     }, 1800);
   };
 
+  const buttonStyle = isCopied
+    ? {
+        backgroundColor: "var(--success)",
+        borderColor: "var(--success-line)",
+        color: "#10151d",
+        transform: "scale(1.05)",
+        boxShadow: "0 0 0 4px rgba(75, 193, 126, 0.18)",
+      }
+    : isError
+      ? {
+          backgroundColor: "var(--danger-soft)",
+          borderColor: "var(--danger-line)",
+          color: "var(--danger)",
+          boxShadow: "0 0 0 3px rgba(255, 91, 91, 0.12)",
+        }
+      : {
+          backgroundColor: "var(--surface-strong)",
+          borderColor: "var(--line)",
+          color: "var(--muted-strong)",
+        };
+
   return (
     <button
       type="button"
       onClick={handleCopy}
       title={isCopied ? copiedLabel : isError ? errorLabel : label}
       aria-label={isCopied ? copiedLabel : isError ? errorLabel : label}
-      className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${
-        isCopied
-          ? "scale-105 border-[color:var(--success-line)] bg-[color:var(--success)] text-[#10151d] shadow-[0_0_0_4px_rgba(75,193,126,0.18)]"
-        : isError
-            ? "border-[color:var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] shadow-[0_0_0_3px_rgba(255,91,91,0.12)]"
-            : "border-[color:var(--line)] bg-[color:var(--surface-strong)] text-[color:var(--muted-strong)] hover:border-[color:var(--line-strong)] hover:text-[color:var(--text-main)]"
-      } ${className}`.trim()}
+      data-status={status}
+      style={buttonStyle}
+      className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${className}`.trim()}
     >
       {isCopied ? (
         <CheckIcon className="h-3.5 w-3.5 scale-110 transition-transform duration-200 ease-out" />
