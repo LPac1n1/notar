@@ -201,7 +201,7 @@ export default function ConsolidatedPendingDonors({
                           Meses com doação
                         </p>
                         <p className="text-xs text-[var(--muted)]">
-                          Clique nos pendentes para selecionar
+                          Clique nos pendentes para selecionar ou nos realizados para desmarcar
                         </p>
                       </div>
 
@@ -209,28 +209,37 @@ export default function ConsolidatedPendingDonors({
                         {donor.months.map((month) => {
                           const isApplied = month.abatementStatus === "applied";
                           const isSelected = selectedMonthIdSet.has(month.id);
+                          const tooltip = isApplied
+                            ? `${formatMonthYear(month.referenceMonth)} • ${formatCurrency(month.abatementAmount)} • Clique para desmarcar`
+                            : `${formatMonthYear(month.referenceMonth)} • ${formatCurrency(month.abatementAmount)}`;
 
                           return (
                             <button
                               key={month.id}
                               type="button"
-                              disabled={isUpdating || isApplied}
+                              disabled={isUpdating}
                               aria-pressed={isSelected}
-                              title={`${formatMonthYear(month.referenceMonth)} • ${formatCurrency(month.abatementAmount)}`}
-                              onClick={() =>
+                              title={tooltip}
+                              onClick={() => {
+                                if (isApplied) {
+                                  onStatusChange?.(donor, "pending", {
+                                    operation: "undo-applied",
+                                    summaryIds: [month.id],
+                                  });
+                                  return;
+                                }
+
                                 toggleMonthSelection(
                                   donor.donorId,
                                   month.id,
                                   validMonthIdSet,
-                                )
-                              }
+                                );
+                              }}
                               className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${getMonthButtonClassName({
                                 isApplied,
                                 isSelected,
                               })} ${
-                                isUpdating || isApplied
-                                  ? "cursor-not-allowed opacity-75"
-                                  : ""
+                                isUpdating ? "cursor-not-allowed opacity-75" : ""
                               }`.trim()}
                             >
                               {formatMonthYear(month.referenceMonth)}

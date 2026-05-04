@@ -415,7 +415,7 @@ export default function Monthly() {
     status,
     { monthLimit = "", operation = "manual", summaryIds = [] } = {},
   ) => {
-    if (!donor || status !== "applied") {
+    if (!donor || (status !== "applied" && status !== "pending")) {
       return;
     }
 
@@ -448,7 +448,10 @@ export default function Monthly() {
         status,
       });
       await loadSummaries();
-      const message = `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como realizado.`;
+      const statusLabel = status === "applied" ? "realizado" : "pendente";
+      const previousStatusLabel =
+        status === "applied" ? "pendente(s)" : "realizado(s)";
+      const message = `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como ${statusLabel}.`;
       setSuccessMessage(message);
       setSuccessAction({
         label: "Desfazer",
@@ -464,9 +467,9 @@ export default function Monthly() {
               donor,
               months: changedMonths,
               operation: "undo",
-              status: "pending",
+              status: status === "applied" ? "pending" : "applied",
             }),
-            message: "Abatimentos do doador restaurados como pendentes.",
+            message: `Abatimentos do doador restaurados como ${previousStatusLabel}.`,
           }),
       });
     } catch (err) {
