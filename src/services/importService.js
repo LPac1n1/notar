@@ -12,7 +12,9 @@ import {
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import {
+  INVALID_ORDER_STATUS_PATTERNS,
   detectCpfColumn,
+  detectOrderStatusColumn,
   getImportFileExtension,
   isExcelImportExtension,
   isSupportedImportExtension,
@@ -565,12 +567,26 @@ export async function processImportedFile({
       escapeIdentifier(cpfColumn),
     );
 
+    const fileColumns = await query(`
+      DESCRIBE SELECT *
+      FROM ${buildCsvSource(registeredFileName)}
+    `);
+    const fileColumnNames = fileColumns.map((column) => column.column_name);
+    const orderStatusColumn = detectOrderStatusColumn(fileColumnNames);
+    const orderStatusFilter = orderStatusColumn
+      ? `AND NOT (${INVALID_ORDER_STATUS_PATTERNS.map(
+          (pattern) =>
+            `lower(coalesce(${escapeIdentifier(orderStatusColumn)}, '')) LIKE '%${escapeSqlString(pattern)}%'`,
+        ).join(" OR ")})`
+      : "";
+
     const cpfCounts = await query(`
       SELECT
         ${normalizedCpfExpression} AS cpf,
         count(*) AS notes_count
       FROM ${buildCsvSource(registeredFileName)}
       WHERE length(${normalizedCpfExpression}) = 11
+        ${orderStatusFilter}
       GROUP BY 1
       ORDER BY notes_count DESC, cpf ASC
     `);

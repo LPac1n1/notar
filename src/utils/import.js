@@ -38,6 +38,20 @@ export function detectCpfColumn(columnNames = []) {
   );
 }
 
+export function detectOrderStatusColumn(columnNames = []) {
+  return (
+    columnNames.find((columnName) => {
+      const normalized = normalizeColumnName(columnName);
+      return normalized.includes("statusdopedido");
+    }) ?? ""
+  );
+}
+
+export const INVALID_ORDER_STATUS_PATTERNS = [
+  "não foi possível encontrar o documento",
+  "não pode ser doado",
+];
+
 export function getImportFileExtension(fileName = "") {
   return String(fileName).split(".").pop()?.toLowerCase() ?? "";
 }
