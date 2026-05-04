@@ -682,6 +682,21 @@ export default function Monthly() {
           left.donorName.localeCompare(right.donorName, "pt-BR"),
       );
   }, [donationSummaries]);
+  const filteredConsolidatedDonors = useMemo(() => {
+    if (filters.abatementStatus === "pending") {
+      return consolidatedPendingDonors.filter(
+        (donor) => donor.totalPending > 0,
+      );
+    }
+
+    if (filters.abatementStatus === "applied") {
+      return consolidatedPendingDonors.filter(
+        (donor) => donor.totalPending === 0,
+      );
+    }
+
+    return consolidatedPendingDonors;
+  }, [consolidatedPendingDonors, filters.abatementStatus]);
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
   );
@@ -867,7 +882,7 @@ export default function Monthly() {
             />
           ) : (
             <ConsolidatedPendingDonors
-              donors={consolidatedPendingDonors}
+              donors={filteredConsolidatedDonors}
               onOpenDonor={handleOpenDonorProfile}
               onStatusChange={handleConsolidatedDonorStatusChange}
               updatingDonorId={updatingDonorId}

@@ -19,7 +19,7 @@ export default function MonthlyFiltersBar({
     <>
       <div
         className={`mb-5 grid gap-3 md:grid-cols-2 ${
-          hasSelectedReferenceMonth ? "xl:grid-cols-5" : "xl:grid-cols-3"
+          hasSelectedReferenceMonth ? "xl:grid-cols-5" : "xl:grid-cols-4"
         }`}
       >
         <MonthInput
@@ -48,16 +48,14 @@ export default function MonthlyFiltersBar({
           />
         ) : null}
 
-        {hasSelectedReferenceMonth ? (
-          <SelectInput
-            name="abatementStatus"
-            value={filters.abatementStatus}
-            onChange={onChange}
-            options={ABATEMENT_STATUS_OPTIONS}
-            placeholder="Todos os status"
-            disabled={isNotDonatedFilterActive}
-          />
-        ) : null}
+        <SelectInput
+          name="abatementStatus"
+          value={filters.abatementStatus}
+          onChange={onChange}
+          options={ABATEMENT_STATUS_OPTIONS}
+          placeholder="Todos os status"
+          disabled={isNotDonatedFilterActive}
+        />
 
         <SelectInput
           name="abatementSort"
