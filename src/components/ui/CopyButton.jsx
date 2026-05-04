@@ -61,15 +61,15 @@ export default function CopyButton({
   const isCopied = status === "copied";
   const isError = status === "error";
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
       isMountedRef.current = false;
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   const handleCopy = async (event) => {
     event.preventDefault();
