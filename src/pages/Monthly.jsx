@@ -597,6 +597,7 @@ export default function Monthly() {
       donationActivity: "all",
       abatementStatus: "all",
       abatementSort: "",
+      donationStartDate: "all",
     }));
   };
 

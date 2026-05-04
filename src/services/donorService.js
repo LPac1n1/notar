@@ -36,6 +36,7 @@ export async function listDonors(filters = {}) {
     cpf = "",
     demand = "",
     donorType = "",
+    donationStartDate = "all",
   } = filters;
   const conditions = ["donors.is_active = TRUE"];
 
@@ -73,6 +74,14 @@ export async function listDonors(filters = {}) {
     conditions.push(
       `donors.donor_type = '${escapeSqlString(normalizeDonorType(donorType))}'`,
     );
+  }
+
+  if (donationStartDate === "with-date") {
+    conditions.push("donors.donation_start_date IS NOT NULL");
+  }
+
+  if (donationStartDate === "without-date") {
+    conditions.push("donors.donation_start_date IS NULL");
   }
 
   const rows = await query(`

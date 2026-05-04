@@ -4,6 +4,7 @@ import {
   ABATEMENT_SORT_OPTIONS,
   ABATEMENT_STATUS_OPTIONS,
   DONATION_ACTIVITY_OPTIONS,
+  DONATION_START_DATE_OPTIONS,
   DONOR_TYPE_OPTIONS,
 } from "../constants";
 
@@ -67,13 +68,21 @@ export default function MonthlyFiltersBar({
         />
       </div>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <SelectInput
           name="donorType"
           value={filters.donorType}
           onChange={onChange}
           options={DONOR_TYPE_OPTIONS}
           placeholder="Titulares e auxiliares"
+        />
+
+        <SelectInput
+          name="donationStartDate"
+          value={filters.donationStartDate}
+          onChange={onChange}
+          options={DONATION_START_DATE_OPTIONS}
+          placeholder="Com ou sem data de início"
         />
 
         <SelectInput

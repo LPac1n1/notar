@@ -7,6 +7,7 @@ export const INITIAL_MONTHLY_FILTERS = {
   donationActivity: "all",
   abatementStatus: "all",
   abatementSort: "",
+  donationStartDate: "all",
 };
 
 export const ABATEMENT_STATUS_OPTIONS = [
@@ -25,6 +26,12 @@ export const DONOR_TYPE_OPTIONS = [
   { value: "all", label: "Titulares e auxiliares" },
   { value: "holder", label: "Apenas titulares", tone: "info" },
   { value: "auxiliary", label: "Apenas auxiliares", tone: "default" },
+];
+
+export const DONATION_START_DATE_OPTIONS = [
+  { value: "all", label: "Com ou sem data de início" },
+  { value: "with-date", label: "Com data de início", tone: "success" },
+  { value: "without-date", label: "Sem data de início", tone: "warning" },
 ];
 
 export const ABATEMENT_SORT_OPTIONS = [

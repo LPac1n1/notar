@@ -152,6 +152,7 @@ function buildDonorConditions({
   donorType = "all",
   cpf = "",
   demand = "",
+  donationStartDate = "all",
 } = {}) {
   const conditions = ["donors.is_active = TRUE"];
 
@@ -181,6 +182,14 @@ function buildDonorConditions({
     );
   }
 
+  if (donationStartDate === "with-date") {
+    conditions.push("donors.donation_start_date IS NOT NULL");
+  }
+
+  if (donationStartDate === "without-date") {
+    conditions.push("donors.donation_start_date IS NULL");
+  }
+
   return conditions;
 }
 
@@ -193,6 +202,7 @@ async function listMonthlySummariesByMonth({
   abatementStatus = "all",
   donationActivity = "all",
   abatementSort = "",
+  donationStartDate = "all",
 } = {}) {
   const normalizedReferenceMonth = startOfMonth(referenceMonth);
   const donorConditions = buildDonorConditions({
@@ -200,6 +210,7 @@ async function listMonthlySummariesByMonth({
     donorType,
     cpf,
     demand,
+    donationStartDate,
   });
   const donorWhereClause =
     donorConditions.length > 0 ? `WHERE ${donorConditions.join(" AND ")}` : "";
@@ -398,6 +409,7 @@ async function listHistoricalMonthlySummaries({
   abatementStatus = "all",
   donationActivity = "all",
   abatementSort = "",
+  donationStartDate = "all",
 } = {}) {
   const conditions = [];
   conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
@@ -416,6 +428,14 @@ async function listHistoricalMonthlySummaries({
 
   if (donorType === "holder" || donorType === "auxiliary") {
     conditions.push(`donors.donor_type = '${escapeSqlString(donorType)}'`);
+  }
+
+  if (donationStartDate === "with-date") {
+    conditions.push("donors.donation_start_date IS NOT NULL");
+  }
+
+  if (donationStartDate === "without-date") {
+    conditions.push("donors.donation_start_date IS NULL");
   }
 
   if (cpf.trim()) {
@@ -541,6 +561,7 @@ export async function listMonthlySummaries({
   abatementStatus = "all",
   donationActivity = "all",
   abatementSort = "",
+  donationStartDate = "all",
 } = {}) {
   if (referenceMonth) {
     return listMonthlySummariesByMonth({
@@ -552,6 +573,7 @@ export async function listMonthlySummaries({
       abatementStatus,
       donationActivity,
       abatementSort,
+      donationStartDate,
     });
   }
 
@@ -564,6 +586,7 @@ export async function listMonthlySummaries({
     abatementStatus,
     donationActivity,
     abatementSort,
+    donationStartDate,
   });
 }
 

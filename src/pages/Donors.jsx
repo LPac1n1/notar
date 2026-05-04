@@ -57,12 +57,19 @@ const INITIAL_DONOR_FILTERS = {
   cpf: "",
   demand: "",
   donorType: "",
+  donationStartDate: "all",
 };
 
 const DONOR_TYPE_OPTIONS = [
   { value: "", label: "Todos os tipos" },
   { value: "holder", label: "Titulares", tone: "default" },
   { value: "auxiliary", label: "Auxiliares", tone: "default" },
+];
+
+const DONATION_START_DATE_OPTIONS = [
+  { value: "all", label: "Com ou sem data de início" },
+  { value: "with-date", label: "Com data de início", tone: "success" },
+  { value: "without-date", label: "Sem data de início", tone: "warning" },
 ];
 
 const DONOR_FORM_TYPE_OPTIONS = [
@@ -570,7 +577,7 @@ export default function Donors() {
       </div>
 
       <SectionCard title="Buscar doadores" className="mb-4">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <TextInput
             label="Nome"
             name="name"
@@ -602,6 +609,14 @@ export default function Donors() {
             onChange={handleFilterChange}
             options={DONOR_TYPE_OPTIONS}
             placeholder="Todos os tipos"
+          />
+          <SelectInput
+            label="Início das doações"
+            name="donationStartDate"
+            value={filters.donationStartDate}
+            onChange={handleFilterChange}
+            options={DONATION_START_DATE_OPTIONS}
+            placeholder="Com ou sem data de início"
           />
         </div>
 
