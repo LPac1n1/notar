@@ -149,6 +149,7 @@ function sortSummariesByAbatement(rows, sortDirection = "") {
 
 function buildDonorConditions({
   donorId = "",
+  donorType = "all",
   cpf = "",
   demand = "",
 } = {}) {
@@ -156,6 +157,10 @@ function buildDonorConditions({
 
   if (donorId.trim()) {
     conditions.push(`donors.id = '${escapeSqlString(donorId.trim())}'`);
+  }
+
+  if (donorType === "holder" || donorType === "auxiliary") {
+    conditions.push(`donors.donor_type = '${escapeSqlString(donorType)}'`);
   }
 
   if (cpf.trim()) {
@@ -182,6 +187,7 @@ function buildDonorConditions({
 async function listMonthlySummariesByMonth({
   referenceMonth,
   donorId = "",
+  donorType = "all",
   cpf = "",
   demand = "",
   abatementStatus = "all",
@@ -189,7 +195,12 @@ async function listMonthlySummariesByMonth({
   abatementSort = "",
 } = {}) {
   const normalizedReferenceMonth = startOfMonth(referenceMonth);
-  const donorConditions = buildDonorConditions({ donorId, cpf, demand });
+  const donorConditions = buildDonorConditions({
+    donorId,
+    donorType,
+    cpf,
+    demand,
+  });
   const donorWhereClause =
     donorConditions.length > 0 ? `WHERE ${donorConditions.join(" AND ")}` : "";
 
@@ -381,6 +392,7 @@ async function listMonthlySummariesByMonth({
 async function listHistoricalMonthlySummaries({
   referenceMonth = "",
   donorId = "",
+  donorType = "all",
   cpf = "",
   demand = "",
   abatementStatus = "all",
@@ -400,6 +412,10 @@ async function listHistoricalMonthlySummaries({
     conditions.push(
       `monthly_donor_summary.donor_id = '${escapeSqlString(donorId.trim())}'`,
     );
+  }
+
+  if (donorType === "holder" || donorType === "auxiliary") {
+    conditions.push(`donors.donor_type = '${escapeSqlString(donorType)}'`);
   }
 
   if (cpf.trim()) {
@@ -519,6 +535,7 @@ async function listHistoricalMonthlySummaries({
 export async function listMonthlySummaries({
   referenceMonth = "",
   donorId = "",
+  donorType = "all",
   cpf = "",
   demand = "",
   abatementStatus = "all",
@@ -529,6 +546,7 @@ export async function listMonthlySummaries({
     return listMonthlySummariesByMonth({
       referenceMonth,
       donorId,
+      donorType,
       cpf,
       demand,
       abatementStatus,
@@ -540,6 +558,7 @@ export async function listMonthlySummaries({
   return listHistoricalMonthlySummaries({
     referenceMonth,
     donorId,
+    donorType,
     cpf,
     demand,
     abatementStatus,

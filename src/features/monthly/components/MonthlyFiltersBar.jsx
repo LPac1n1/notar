@@ -4,6 +4,7 @@ import {
   ABATEMENT_SORT_OPTIONS,
   ABATEMENT_STATUS_OPTIONS,
   DONATION_ACTIVITY_OPTIONS,
+  DONOR_TYPE_OPTIONS,
 } from "../constants";
 
 export default function MonthlyFiltersBar({
@@ -66,7 +67,15 @@ export default function MonthlyFiltersBar({
         />
       </div>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-2">
+      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <SelectInput
+          name="donorType"
+          value={filters.donorType}
+          onChange={onChange}
+          options={DONOR_TYPE_OPTIONS}
+          placeholder="Titulares e auxiliares"
+        />
+
         <SelectInput
           name="cpf"
           value={filters.cpf}

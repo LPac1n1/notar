@@ -1,6 +1,7 @@
 export const INITIAL_MONTHLY_FILTERS = {
   referenceMonth: "",
   donorId: "",
+  donorType: "all",
   cpf: "",
   demand: "",
   donationActivity: "all",
@@ -18,6 +19,12 @@ export const DONATION_ACTIVITY_OPTIONS = [
   { value: "all", label: "Todos os doadores" },
   { value: "donated", label: "Doaram no mês", tone: "success" },
   { value: "not-donated", label: "Não doaram no mês", tone: "default" },
+];
+
+export const DONOR_TYPE_OPTIONS = [
+  { value: "all", label: "Titulares e auxiliares" },
+  { value: "holder", label: "Apenas titulares", tone: "info" },
+  { value: "auxiliary", label: "Apenas auxiliares", tone: "default" },
 ];
 
 export const ABATEMENT_SORT_OPTIONS = [

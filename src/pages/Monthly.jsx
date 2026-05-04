@@ -591,6 +591,7 @@ export default function Monthly() {
     setFilters((current) => ({
       ...current,
       donorId: "",
+      donorType: "all",
       cpf: "",
       demand: "",
       donationActivity: "all",
