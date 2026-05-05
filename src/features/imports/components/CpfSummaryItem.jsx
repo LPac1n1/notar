@@ -98,17 +98,18 @@ export default function CpfSummaryItem({
         ) : null}
       </div>
 
-      <div>
-        <p className="text-sm text-[var(--muted)]">Meses</p>
-        <p className="font-medium">
-          {formatInteger(item.monthCount)} {item.monthCount === 1 ? "mês" : "meses"}
-        </p>
-      </div>
-
-      <div className="flex justify-end md:col-span-4">
-        <Button variant="subtle" onClick={() => onOpenDetails(item)}>
-          Ver meses e arquivos
-        </Button>
+      <div className="flex flex-col justify-between gap-3">
+        <div>
+          <p className="text-sm text-[var(--muted)]">Meses</p>
+          <p className="font-medium">
+            {formatInteger(item.monthCount)} {item.monthCount === 1 ? "mês" : "meses"}
+          </p>
+        </div>
+        <div className="flex justify-end">
+          <Button variant="subtle" onClick={() => onOpenDetails(item)}>
+            Ver meses e arquivos
+          </Button>
+        </div>
       </div>
     </div>
   );

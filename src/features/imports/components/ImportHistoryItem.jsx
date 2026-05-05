@@ -65,21 +65,23 @@ export default function ImportHistoryItem({
         <p className="text-sm text-[var(--muted)]">Linhas compatíveis</p>
         <p className="font-medium">{formatInteger(item.matchedRows)}</p>
       </div>
-      <div>
-        <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
-        <p className="font-medium">{formatInteger(item.matchedDonors)}</p>
-      </div>
-      <div className="flex justify-end md:col-span-6">
-        <Button
-          variant="danger"
-          onClick={() => onDelete(item)}
-          disabled={deletingImportId === item.id}
-          leftIcon={<TrashIcon className="h-4 w-4" />}
-        >
-          {deletingImportId === item.id
-            ? "Excluindo..."
-            : "Excluir importação"}
-        </Button>
+      <div className="flex flex-col justify-between gap-3">
+        <div>
+          <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
+          <p className="font-medium">{formatInteger(item.matchedDonors)}</p>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            variant="danger"
+            onClick={() => onDelete(item)}
+            disabled={deletingImportId === item.id}
+            leftIcon={<TrashIcon className="h-4 w-4" />}
+          >
+            {deletingImportId === item.id
+              ? "Excluindo..."
+              : "Excluir importação"}
+          </Button>
+        </div>
       </div>
     </div>
   );
