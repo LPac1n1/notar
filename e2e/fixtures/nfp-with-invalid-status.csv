@@ -1,0 +1,6 @@
+CPF,Status do Pedido,Descricao
+12345678909,Documento processado com sucesso,Nota valida 1
+12345678909,Documento processado com sucesso,Nota valida 2
+12345678909,Não foi possível encontrar o documento com as informações digitadas,Nota invalida 1
+12345678909,Documento encontrado com destinatário. Não pode ser doado.,Nota invalida 2
+12345678909,Não foi possível encontrar o documento com as informações digitadas,Nota invalida 3
