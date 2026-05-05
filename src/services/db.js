@@ -110,6 +110,14 @@ const RESTORE_TABLE_COLUMNS = {
     "created_at",
     "updated_at",
   ],
+  notes: [
+    "id",
+    "title",
+    "content",
+    "color",
+    "created_at",
+    "updated_at",
+  ],
   action_history: [
     "id",
     "action_type",
@@ -348,6 +356,17 @@ async function initSchema({ structural = true } = {}) {
   `);
 
     await conn.query(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT,
+      title TEXT,
+      content TEXT,
+      color TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+    await conn.query(`
     CREATE TABLE IF NOT EXISTS action_history (
       id TEXT,
       action_type TEXT,
@@ -488,6 +507,16 @@ async function initSchema({ structural = true } = {}) {
     await conn.query(`
     ALTER TABLE import_cpf_summary
     ADD COLUMN IF NOT EXISTS matched_source_id TEXT
+  `);
+
+    await conn.query(`
+    ALTER TABLE notes
+    ADD COLUMN IF NOT EXISTS color TEXT
+  `);
+
+    await conn.query(`
+    ALTER TABLE notes
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   `);
   }
 
@@ -993,6 +1022,10 @@ async function initSchema({ structural = true } = {}) {
     await conn.query(`
       CREATE INDEX IF NOT EXISTS idx_action_history_entity ON action_history(entity_type, created_at)
     `).catch(() => null);
+
+    await conn.query(`
+      CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at)
+    `).catch(() => null);
   }
 
 }
@@ -1255,6 +1288,18 @@ async function exportDatabaseSnapshot() {
     ORDER BY deleted_at DESC, id ASC
   `);
 
+  const notes = await query(`
+    SELECT
+      id,
+      title,
+      content,
+      color,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM notes
+    ORDER BY updated_at DESC, created_at DESC, id ASC
+  `);
+
   const actionHistory = await query(`
     SELECT
       id,
@@ -1277,6 +1322,7 @@ async function exportDatabaseSnapshot() {
     imports,
     importCpfSummary,
     monthlyDonorSummary,
+    notes,
     actionHistory,
     trashItems,
   };
@@ -1307,6 +1353,7 @@ async function restoreDatabaseSnapshot(
 
   const tableOrderToClear = [
     "action_history",
+    "notes",
     "monthly_donor_summary",
     "import_cpf_summary",
     "imports",
@@ -1324,6 +1371,7 @@ async function restoreDatabaseSnapshot(
     ["imports", normalizedSnapshot.imports],
     ["import_cpf_summary", normalizedSnapshot.importCpfSummary],
     ["monthly_donor_summary", normalizedSnapshot.monthlyDonorSummary],
+    ["notes", normalizedSnapshot.notes],
     ["action_history", normalizedSnapshot.actionHistory],
     ["trash_items", normalizedSnapshot.trashItems],
   ];

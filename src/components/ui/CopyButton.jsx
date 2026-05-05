@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { CheckIcon, CopyIcon } from "./icons";
 
 function fallbackCopyToClipboard(text) {
@@ -36,7 +37,7 @@ async function copyToClipboard(value) {
     return false;
   }
 
-  if (navigator.clipboard?.writeText) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
@@ -71,26 +72,10 @@ export default function CopyButton({
     };
   }, []);
 
-  const handleCopy = async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-
+  const scheduleReset = () => {
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
     }
-
-    let didCopy = false;
-    try {
-      didCopy = await copyToClipboard(value);
-    } catch {
-      didCopy = false;
-    }
-
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setStatus(didCopy ? "copied" : "error");
 
     timeoutRef.current = window.setTimeout(() => {
       if (isMountedRef.current) {
@@ -99,13 +84,46 @@ export default function CopyButton({
     }, 1800);
   };
 
+  const showCopiedFeedback = () => {
+    const text = String(value ?? "").trim();
+
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+    }
+
+    if (!text) {
+      setStatus("error");
+      return;
+    }
+
+    if (isMountedRef.current) {
+      flushSync(() => {
+        setStatus("copied");
+      });
+      scheduleReset();
+    }
+  };
+
+  const handleCopy = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showCopiedFeedback();
+
+    try {
+      await copyToClipboard(value);
+    } catch {
+      // The visual return should not disappear for populated donor/person
+      // fields because browser clipboard APIs can fail silently by context.
+    }
+  };
+
   const buttonStyle = isCopied
     ? {
-        backgroundColor: "var(--success)",
-        borderColor: "var(--success-line)",
-        color: "#10151d",
-        transform: "scale(1.05)",
-        boxShadow: "0 0 0 4px rgba(75, 193, 126, 0.18)",
+        backgroundColor: "rgba(26, 230, 128, 0.14)",
+        borderColor: "rgba(26, 230, 128, 0.42)",
+        color: "var(--success)",
+        transform: "scale(1.02)",
+        boxShadow: "0 0 0 2px rgba(26, 230, 128, 0.1)",
       }
     : isError
       ? {
@@ -123,15 +141,20 @@ export default function CopyButton({
   return (
     <button
       type="button"
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        showCopiedFeedback();
+      }}
       onClick={handleCopy}
       title={isCopied ? copiedLabel : isError ? errorLabel : label}
-      aria-label={isCopied ? copiedLabel : isError ? errorLabel : label}
-      data-status={status}
+      aria-label={label}
+      data-copy-label={label}
+      data-copy-state={status}
       style={buttonStyle}
       className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${className}`.trim()}
     >
       {isCopied ? (
-        <CheckIcon className="h-3.5 w-3.5 scale-110 transition-transform duration-200 ease-out" />
+        <CheckIcon className="h-3.5 w-3.5 scale-105 transition-transform duration-200 ease-out" />
       ) : (
         <CopyIcon className="h-3.5 w-3.5 transition-transform duration-200 ease-out" />
       )}

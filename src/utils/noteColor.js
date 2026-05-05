@@ -1,0 +1,8 @@
+import {
+  DEFAULT_DEMAND_COLOR,
+  DEMAND_COLOR_PALETTE,
+} from "./demandColor";
+
+export const DEFAULT_NOTE_COLOR = DEFAULT_DEMAND_COLOR;
+
+export const NOTE_COLOR_PALETTE = DEMAND_COLOR_PALETTE;

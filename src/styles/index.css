@@ -101,6 +101,132 @@ textarea {
   -webkit-user-select: text;
 }
 
+.note-rich-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.note-rich-content > * + * {
+  margin-top: 0.5rem;
+}
+
+.note-rich-content h2 {
+  color: var(--text-main);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.note-rich-content h3 {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.note-rich-content p,
+.note-rich-content li,
+.note-rich-content [data-note-checklist="true"] {
+  color: var(--text-soft);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.note-rich-content ul,
+.note-rich-content ol {
+  color: var(--text-soft);
+  margin-left: 1.25rem;
+  overflow-wrap: anywhere;
+  padding-left: 1rem;
+}
+
+.note-rich-content ul {
+  list-style: disc;
+}
+
+.note-rich-content ol {
+  list-style: decimal;
+}
+
+.note-rich-content strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.note-rich-content em {
+  font-style: italic;
+}
+
+.note-rich-content s {
+  color: var(--muted);
+}
+
+.note-rich-content [data-note-checklist="true"] {
+  border-radius: 0.375rem;
+  min-height: 1.75rem;
+  padding-left: 1.85rem;
+  position: relative;
+}
+
+.note-rich-content [data-note-checklist="true"]::before {
+  border: 1px solid var(--line-strong);
+  border-radius: 0.25rem;
+  content: "";
+  height: 1rem;
+  left: 0.25rem;
+  position: absolute;
+  top: 0.34rem;
+  width: 1rem;
+}
+
+.note-rich-content [data-note-checklist="true"][data-checked="true"] {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.note-rich-content [data-note-checklist="true"][data-checked="true"]::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.note-rich-content [data-note-checklist="true"][data-checked="true"]::after {
+  color: #12151c;
+  content: "✓";
+  font-size: 0.75rem;
+  font-weight: 800;
+  left: 0.46rem;
+  line-height: 1;
+  position: absolute;
+  top: 0.48rem;
+}
+
+.note-rich-editor {
+  caret-color: var(--accent);
+  max-width: 100%;
+  overflow-x: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.note-rich-editor:empty::before {
+  color: var(--muted);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.note-card-preview {
+  max-height: 12rem;
+  min-height: 8rem;
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

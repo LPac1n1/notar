@@ -5,6 +5,7 @@ import {
   HistoryIcon,
   ImportIcon,
   MonthlyIcon,
+  NotesIcon,
   SettingsIcon,
   TrashIcon,
   UserIcon,
@@ -47,6 +48,12 @@ export const NAV_ITEMS = [
     label: "Importações",
     description: "Planilhas, conciliação e histórico",
     icon: ImportIcon,
+  },
+  {
+    to: "/anotacoes",
+    label: "Anotações",
+    description: "Registros internos rápidos",
+    icon: NotesIcon,
   },
   {
     to: "/lixeira",
