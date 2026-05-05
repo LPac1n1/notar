@@ -47,9 +47,13 @@ export function detectOrderStatusColumn(columnNames = []) {
   );
 }
 
+// Patterns usam `_` (LIKE wildcard de 1 caractere) no lugar de letras
+// acentuadas para casar tanto o conteúdo correto em UTF-8 quanto arquivos em
+// Windows-1252/Latin-1, onde o DuckDB lê acentos como o caractere de
+// substituição (U+FFFD).
 export const INVALID_ORDER_STATUS_PATTERNS = [
-  "não foi possível encontrar o documento",
-  "não pode ser doado",
+  "n_o foi poss_vel encontrar o documento",
+  "n_o pode ser doado",
 ];
 
 export function getImportFileExtension(fileName = "") {
