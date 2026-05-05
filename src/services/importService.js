@@ -489,8 +489,13 @@ export async function saveImportCpfSummary({
       for (const item of cpfCounts) {
         const normalizedCpf = normalizeCpf(item.cpf);
         const notesCount = toPositiveInteger(item.notesCount);
+        const invalidNotesCount = toPositiveInteger(item.invalidNotesCount);
 
-        if (normalizedCpf.length !== 11 || notesCount === 0) {
+        if (normalizedCpf.length !== 11) {
+          continue;
+        }
+
+        if (notesCount === 0 && invalidNotesCount === 0) {
           continue;
         }
 
@@ -503,6 +508,7 @@ export async function saveImportCpfSummary({
             reference_month,
             cpf,
             notes_count,
+            invalid_notes_count,
             is_registered_donor,
             updated_at
           )
@@ -512,6 +518,7 @@ export async function saveImportCpfSummary({
             '${escapeSqlString(normalizedMonth)}',
             '${escapeSqlString(normalizedCpf)}',
             ${notesCount},
+            ${invalidNotesCount},
             FALSE,
             CURRENT_TIMESTAMP
           )
@@ -573,22 +580,22 @@ export async function processImportedFile({
     `);
     const fileColumnNames = fileColumns.map((column) => column.column_name);
     const orderStatusColumn = detectOrderStatusColumn(fileColumnNames);
-    const orderStatusFilter = orderStatusColumn
-      ? `AND NOT (${INVALID_ORDER_STATUS_PATTERNS.map(
+    const invalidStatusExpression = orderStatusColumn
+      ? `(${INVALID_ORDER_STATUS_PATTERNS.map(
           (pattern) =>
             `lower(coalesce(${escapeIdentifier(orderStatusColumn)}, '')) LIKE '%${escapeSqlString(pattern)}%'`,
         ).join(" OR ")})`
-      : "";
+      : "FALSE";
 
     const cpfCounts = await query(`
       SELECT
         ${normalizedCpfExpression} AS cpf,
-        count(*) AS notes_count
+        count(*) FILTER (WHERE NOT ${invalidStatusExpression}) AS notes_count,
+        count(*) FILTER (WHERE ${invalidStatusExpression}) AS invalid_notes_count
       FROM ${buildCsvSource(registeredFileName)}
       WHERE length(${normalizedCpfExpression}) = 11
-        ${orderStatusFilter}
       GROUP BY 1
-      ORDER BY notes_count DESC, cpf ASC
+      ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
     `);
 
     await saveImportCpfSummary({
@@ -597,6 +604,7 @@ export async function processImportedFile({
       cpfCounts: cpfCounts.map((row) => ({
         cpf: row.cpf,
         notesCount: Number(row.notes_count ?? 0),
+        invalidNotesCount: Number(row.invalid_notes_count ?? 0),
       })),
     }, { emitChange: false });
 
@@ -832,7 +840,8 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
           donors.cpf AS donor_cpf,
           donors.name AS donor_name,
           donors.demand AS demand,
-          sum(import_cpf_summary.notes_count) AS notes_count
+          sum(import_cpf_summary.notes_count) AS notes_count,
+          sum(coalesce(import_cpf_summary.invalid_notes_count, 0)) AS invalid_notes_count
         FROM import_cpf_summary
         INNER JOIN donor_cpf_links
           ON donor_cpf_links.id = import_cpf_summary.matched_source_id
@@ -852,6 +861,7 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
 
       for (const row of matchedRows) {
         const notesCount = Number(row.notes_count ?? 0);
+        const invalidNotesCount = Number(row.invalid_notes_count ?? 0);
         const valuePerNote = importValuePerNote;
         const abatementAmount = notesCount * valuePerNote;
         const existingSummary = summaryStatusByDonorId.get(row.donor_id);
@@ -868,6 +878,7 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
             donor_name,
             demand,
             notes_count,
+            invalid_notes_count,
             value_per_note,
             abatement_amount,
             abatement_status,
@@ -883,6 +894,7 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
             '${escapeSqlString(row.donor_name)}',
             '${escapeSqlString(row.demand ?? "")}',
             ${notesCount},
+            ${invalidNotesCount},
             ${valuePerNote},
             ${abatementAmount},
             '${escapeSqlString(abatementStatus)}',

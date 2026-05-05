@@ -101,6 +101,13 @@ export default function ConsolidatedPendingDonors({
                       </div>
                     ) : null}
 
+                    {donor.invalidNotesCount > 0 ? (
+                      <p className="text-sm text-[var(--warning)]">
+                        {formatInteger(donor.invalidNotesCount)} nota(s)
+                        descartada(s) por status do pedido inválido.
+                      </p>
+                    ) : null}
+
                     <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-3">
                       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm font-semibold text-[var(--text-main)]">

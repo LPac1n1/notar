@@ -657,6 +657,7 @@ export default function Monthly() {
         months: [],
         totalPending: 0,
         totalApplied: 0,
+        invalidNotesCount: 0,
       };
 
       current.months.push({
@@ -665,6 +666,7 @@ export default function Monthly() {
         abatementAmount: summary.abatementAmount,
         abatementStatus: summary.abatementStatus,
       });
+      current.invalidNotesCount += Number(summary.invalidNotesCount ?? 0);
       if (summary.abatementStatus === "applied") {
         current.totalApplied += summary.abatementAmount;
       } else {

@@ -88,6 +88,7 @@ const RESTORE_TABLE_COLUMNS = {
     "reference_month",
     "cpf",
     "notes_count",
+    "invalid_notes_count",
     "matched_donor_id",
     "matched_source_id",
     "is_registered_donor",
@@ -103,6 +104,7 @@ const RESTORE_TABLE_COLUMNS = {
     "donor_name",
     "demand",
     "notes_count",
+    "invalid_notes_count",
     "value_per_note",
     "abatement_amount",
     "abatement_status",
@@ -317,6 +319,7 @@ async function initSchema({ structural = true } = {}) {
       reference_month DATE,
       cpf TEXT,
       notes_count INTEGER,
+      invalid_notes_count INTEGER DEFAULT 0,
       matched_donor_id TEXT,
       matched_source_id TEXT,
       is_registered_donor BOOLEAN DEFAULT FALSE,
@@ -335,6 +338,7 @@ async function initSchema({ structural = true } = {}) {
       donor_name TEXT,
       demand TEXT,
       notes_count INTEGER,
+      invalid_notes_count INTEGER DEFAULT 0,
       value_per_note DOUBLE,
       abatement_amount DOUBLE,
       abatement_status TEXT DEFAULT 'pending',
@@ -507,6 +511,16 @@ async function initSchema({ structural = true } = {}) {
     await conn.query(`
     ALTER TABLE import_cpf_summary
     ADD COLUMN IF NOT EXISTS matched_source_id TEXT
+  `);
+
+    await conn.query(`
+    ALTER TABLE import_cpf_summary
+    ADD COLUMN IF NOT EXISTS invalid_notes_count INTEGER DEFAULT 0
+  `);
+
+    await conn.query(`
+    ALTER TABLE monthly_donor_summary
+    ADD COLUMN IF NOT EXISTS invalid_notes_count INTEGER DEFAULT 0
   `);
 
     await conn.query(`

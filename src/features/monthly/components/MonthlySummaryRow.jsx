@@ -127,6 +127,13 @@ export default function MonthlySummaryRow({
               vinculado(s) apareceram antes do início de doação informado.
             </p>
           ) : null}
+
+          {summary.invalidNotesCount > 0 ? (
+            <p className="mt-2 text-sm text-[var(--warning)]">
+              {formatInteger(summary.invalidNotesCount)} nota(s) descartada(s)
+              por status do pedido inválido.
+            </p>
+          ) : null}
         </div>
 
         <div

@@ -45,6 +45,7 @@ function mapSummaryRow(row) {
     donorName: row.donor_name,
     demand: row.demand ?? "",
     notesCount,
+    invalidNotesCount: Number(row.invalid_notes_count ?? 0),
     valuePerNote: Number(row.value_per_note ?? 0),
     abatementAmount: Number(row.abatement_amount ?? 0),
     abatementStatus: row.abatement_status ?? "pending",
@@ -76,6 +77,7 @@ function mapDonorWithoutDonation(row, { referenceMonth, valuePerNote = 0 }) {
     donorName: row.name,
     demand: row.demand ?? "",
     notesCount: 0,
+    invalidNotesCount: Number(row.invalid_notes_count ?? 0),
     valuePerNote: Number(valuePerNote ?? 0),
     abatementAmount: 0,
     abatementStatus: "none",
@@ -260,7 +262,16 @@ async function listMonthlySummariesByMonth({
           FROM donor_cpf_links
           WHERE donor_cpf_links.donor_id = donors.id
             AND donor_cpf_links.is_active = TRUE
-        ), 0) AS source_cpf_count
+        ), 0) AS source_cpf_count,
+        coalesce((
+          SELECT sum(coalesce(import_cpf_summary.invalid_notes_count, 0))
+          FROM import_cpf_summary
+          INNER JOIN donor_cpf_links
+            ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+          WHERE donor_cpf_links.donor_id = donors.id
+            AND donor_cpf_links.is_active = TRUE
+            AND import_cpf_summary.reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
+        ), 0) AS invalid_notes_count
       FROM donors
       LEFT JOIN people AS holder_people
         ON holder_people.id = donors.holder_person_id
@@ -281,6 +292,7 @@ async function listMonthlySummariesByMonth({
         monthly_donor_summary.donor_name,
         monthly_donor_summary.demand,
         monthly_donor_summary.notes_count,
+        coalesce(monthly_donor_summary.invalid_notes_count, 0) AS invalid_notes_count,
         monthly_donor_summary.value_per_note,
         monthly_donor_summary.abatement_amount,
         monthly_donor_summary.abatement_status,
@@ -469,6 +481,7 @@ async function listHistoricalMonthlySummaries({
       monthly_donor_summary.donor_name,
       monthly_donor_summary.demand,
       monthly_donor_summary.notes_count,
+      coalesce(monthly_donor_summary.invalid_notes_count, 0) AS invalid_notes_count,
       monthly_donor_summary.value_per_note,
       monthly_donor_summary.abatement_amount,
       monthly_donor_summary.abatement_status,
