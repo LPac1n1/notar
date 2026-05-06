@@ -1,4 +1,12 @@
 export const STATUS_CONFIG = {
+  active: {
+    label: "Ativo",
+    tone: "success",
+  },
+  inactive: {
+    label: "Inativo",
+    tone: "neutral",
+  },
   applied: {
     label: "Realizado",
     tone: "success",

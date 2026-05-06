@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Button from "../components/ui/Button";
 import CopyableValue from "../components/ui/CopyableValue";
@@ -10,7 +11,13 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import StatusBadge from "../components/ui/StatusBadge";
 import { BackIcon } from "../components/ui/icons";
-import { getDonorProfile } from "../services/donorService";
+import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
+import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
+import {
+  deactivateDonor,
+  getDonorProfile,
+  reactivateDonor,
+} from "../services/donorService";
 import {
   formatDateTimePtBR,
   formatDonationDuration,
@@ -28,6 +35,11 @@ export default function DonorProfile() {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
   const profileRequestIdRef = useRef(0);
   const dataSyncFeedback = useDataSyncFeedback();
   const showDataRefreshLoading =
@@ -82,6 +94,38 @@ export default function DonorProfile() {
       state: backTarget.state ?? null,
     });
   };
+  const handleDeactivate = async (referenceMonth) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsDeactivating(true);
+      await deactivateDonor(donorId, referenceMonth);
+      setShowDeactivateModal(false);
+      setSuccessMessage("Doador desativado com sucesso.");
+      await loadProfile();
+    } catch (err) {
+      setError(err.message ?? "Não foi possível desativar o doador.");
+    } finally {
+      setIsDeactivating(false);
+    }
+  };
+
+  const handleReactivate = async (referenceMonth) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setIsReactivating(true);
+      await reactivateDonor(donorId, referenceMonth);
+      setShowReactivateModal(false);
+      setSuccessMessage("Doador reativado com sucesso.");
+      await loadProfile();
+    } catch (err) {
+      setError(err.message ?? "Não foi possível reativar o doador.");
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
   const navigateToRelatedDonor = (nextDonorId) => {
     navigate(`/doadores/${encodeURIComponent(nextDonorId)}`, {
       state: location.state,
@@ -138,8 +182,9 @@ export default function DonorProfile() {
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
+      <FeedbackMessage message={successMessage} tone="success" />
 
-      <div className="mb-6 flex flex-wrap gap-3">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <Button
           variant="subtle"
           onClick={handleBack}
@@ -147,6 +192,26 @@ export default function DonorProfile() {
         >
           {backTarget.label}
         </Button>
+
+        {donor.isActive ? (
+          <Button
+            variant="subtle"
+            onClick={() => setShowDeactivateModal(true)}
+          >
+            Desativar doador
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={() => setShowReactivateModal(true)}
+          >
+            Reativar doador
+          </Button>
+        )}
+
+        {!donor.isActive ? (
+          <StatusBadge status="inactive" />
+        ) : null}
       </div>
 
       {showDataRefreshLoading ? (
@@ -157,7 +222,7 @@ export default function DonorProfile() {
         />
       ) : null}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <div className="mb-6 grid gap-3 md:grid-cols-5">
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Tipo</p>
           <div className="mt-2">
@@ -189,6 +254,17 @@ export default function DonorProfile() {
           {donor.donationStartDateValue ? (
             <p className="mt-1 text-xs text-[var(--muted)]">
               {formatDonationDuration(donor.donationStartDateValue)}
+            </p>
+          ) : null}
+        </div>
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm text-[var(--muted)]">Status</p>
+          <div className="mt-2">
+            <StatusBadge status={donor.isActive ? "active" : "inactive"} />
+          </div>
+          {!donor.isActive && donor.deactivatedSince ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Desde {formatMonthYear(`${donor.deactivatedSince}-01`)}
             </p>
           ) : null}
         </div>
@@ -381,6 +457,34 @@ export default function DonorProfile() {
         </div>
       </SectionCard>
 
+      {profile.activityHistory.length > 0 ? (
+        <SectionCard
+          title="Histórico de atividade"
+          description="Registro de ativações e desativações do doador."
+          className="mb-6"
+        >
+          <div className="space-y-2">
+            {profile.activityHistory.map((entry, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3"
+              >
+                <StatusBadge
+                  status={entry.eventType === "activated" ? "active" : "inactive"}
+                  label={entry.eventType === "activated" ? "Ativado" : "Desativado"}
+                />
+                <span className="text-sm text-[var(--text-soft)]">
+                  a partir de{" "}
+                  <span className="font-medium text-[var(--text-main)]">
+                    {entry.referenceMonthFormatted}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+
       <SectionCard
         title="Histórico mensal"
         description="Meses em que este doador teve abatimento calculado."
@@ -424,6 +528,28 @@ export default function DonorProfile() {
           </div>
         )}
       </SectionCard>
+
+      <AnimatePresence>
+        {showDeactivateModal ? (
+          <DeactivateDonorModal
+            donor={donor}
+            isSubmitting={isDeactivating}
+            onClose={() => setShowDeactivateModal(false)}
+            onConfirm={handleDeactivate}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReactivateModal ? (
+          <ReactivateDonorModal
+            donor={donor}
+            isSubmitting={isReactivating}
+            onClose={() => setShowReactivateModal(false)}
+            onConfirm={handleReactivate}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

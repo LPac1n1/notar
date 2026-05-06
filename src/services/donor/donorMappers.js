@@ -47,6 +47,9 @@ export function mapDonorRow(row) {
       : "",
     donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
     isActive: Boolean(row.is_active),
+    deactivatedSince: row.deactivated_since
+      ? String(row.deactivated_since).slice(0, 7)
+      : "",
     createdAt: row.created_at ?? "",
     linkedCpfCount: Number(row.linked_cpf_count ?? 0),
     auxiliaryCount: Number(row.auxiliary_count ?? 0),

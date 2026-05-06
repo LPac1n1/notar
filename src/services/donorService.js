@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import {
   escapeSqlString,
   execute,
@@ -37,8 +38,15 @@ export async function listDonors(filters = {}) {
     demand = "",
     donorType = "",
     donationStartDate = "all",
+    activeStatus = "active",
   } = filters;
-  const conditions = ["donors.is_active = TRUE"];
+  const conditions = [];
+
+  if (activeStatus === "active") {
+    conditions.push("donors.is_active = TRUE");
+  } else if (activeStatus === "inactive") {
+    conditions.push("donors.is_active = FALSE");
+  }
 
   if (name.trim()) {
     conditions.push(
@@ -101,6 +109,14 @@ export async function listDonors(filters = {}) {
       donors.is_active,
       strftime(donors.created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
       coalesce((
+        SELECT strftime(donor_activity_history.reference_month, '%Y-%m-01')
+        FROM donor_activity_history
+        WHERE donor_activity_history.donor_id = donors.id
+          AND donor_activity_history.event_type = 'deactivated'
+        ORDER BY donor_activity_history.reference_month DESC
+        LIMIT 1
+      ), '') AS deactivated_since,
+      coalesce((
         SELECT count(*)
         FROM donor_cpf_links
         WHERE donor_cpf_links.donor_id = donors.id
@@ -130,7 +146,7 @@ export async function listDonors(filters = {}) {
       ON holder_active_donors.person_id = donors.holder_person_id
       AND holder_active_donors.donor_type = 'holder'
       AND holder_active_donors.is_active = TRUE
-    WHERE ${conditions.join(" AND ")}
+    ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
     ORDER BY donors.created_at DESC, donors.name ASC
   `);
 
@@ -733,6 +749,18 @@ export async function getDonorProfile(donorId) {
     0,
   );
 
+  const activityRows = await query(`
+    SELECT
+      event_type,
+      strftime(reference_month, '%Y-%m-01') AS reference_month,
+      strftime(created_at, '%Y-%m-%d %H:%M:%S') AS created_at
+    FROM donor_activity_history
+    WHERE donor_id = '${escapeSqlString(donorId)}'
+    ORDER BY reference_month ASC, created_at ASC
+  `);
+
+  const lastDeactivation = activityRows.filter((r) => r.event_type === "deactivated").at(-1);
+
   return {
     donor: {
       id: donor.id,
@@ -753,6 +781,9 @@ export async function getDonorProfile(donorId) {
         : "",
       donationStartDate: formatMonthYear(donor.donation_start_date ?? ""),
       isActive: Boolean(donor.is_active),
+      deactivatedSince: lastDeactivation
+        ? String(lastDeactivation.reference_month).slice(0, 7)
+        : "",
       createdAt: donor.created_at ?? "",
     },
     auxiliaryDonors: auxiliaryRows.map((row) => ({
@@ -781,6 +812,12 @@ export async function getDonorProfile(donorId) {
       abatementAmount: Number(row.abatement_amount ?? 0),
       abatementStatus: row.abatement_status ?? "pending",
     })),
+    activityHistory: activityRows.map((row) => ({
+      eventType: row.event_type,
+      referenceMonth: String(row.reference_month).slice(0, 7),
+      referenceMonthFormatted: formatMonthYear(row.reference_month ?? ""),
+      createdAt: row.created_at ?? "",
+    })),
     totals: {
       totalNotes,
       totalAbatement,
@@ -789,4 +826,110 @@ export async function getDonorProfile(donorId) {
       auxiliaryCount: auxiliaryRows.length,
     },
   };
+}
+
+export async function deactivateDonor(donorId, referenceMonth) {
+  const donorRows = await query(`
+    SELECT id, name, is_active
+    FROM donors
+    WHERE id = '${escapeSqlString(donorId)}'
+    LIMIT 1
+  `);
+
+  if (donorRows.length === 0) {
+    throw new Error("Doador não encontrado.");
+  }
+
+  if (!donorRows[0].is_active) {
+    throw new Error("O doador já está inativo.");
+  }
+
+  const normalizedMonth = referenceMonth
+    ? `${String(referenceMonth).slice(0, 7)}-01`
+    : null;
+
+  if (!normalizedMonth) {
+    throw new Error("Mês de desativação inválido.");
+  }
+
+  await runInTransaction(async () => {
+    await execute(`
+      UPDATE donors
+      SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+      WHERE id = '${escapeSqlString(donorId)}'
+    `);
+
+    await execute(`
+      INSERT INTO donor_activity_history (id, donor_id, event_type, reference_month, created_at)
+      VALUES (
+        '${escapeSqlString(nanoid())}',
+        '${escapeSqlString(donorId)}',
+        'deactivated',
+        '${escapeSqlString(normalizedMonth)}',
+        CURRENT_TIMESTAMP
+      )
+    `);
+  });
+
+  await createActionHistoryEntry({
+    actionType: "update",
+    entityType: "donor",
+    entityId: donorId,
+    label: donorRows[0].name,
+    description: `Doador ${donorRows[0].name} desativado a partir de ${referenceMonth}.`,
+    payload: { referenceMonth },
+  });
+}
+
+export async function reactivateDonor(donorId, referenceMonth) {
+  const donorRows = await query(`
+    SELECT id, name, is_active
+    FROM donors
+    WHERE id = '${escapeSqlString(donorId)}'
+    LIMIT 1
+  `);
+
+  if (donorRows.length === 0) {
+    throw new Error("Doador não encontrado.");
+  }
+
+  if (donorRows[0].is_active) {
+    throw new Error("O doador já está ativo.");
+  }
+
+  const normalizedMonth = referenceMonth
+    ? `${String(referenceMonth).slice(0, 7)}-01`
+    : null;
+
+  if (!normalizedMonth) {
+    throw new Error("Mês de reativação inválido.");
+  }
+
+  await runInTransaction(async () => {
+    await execute(`
+      UPDATE donors
+      SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP
+      WHERE id = '${escapeSqlString(donorId)}'
+    `);
+
+    await execute(`
+      INSERT INTO donor_activity_history (id, donor_id, event_type, reference_month, created_at)
+      VALUES (
+        '${escapeSqlString(nanoid())}',
+        '${escapeSqlString(donorId)}',
+        'activated',
+        '${escapeSqlString(normalizedMonth)}',
+        CURRENT_TIMESTAMP
+      )
+    `);
+  });
+
+  await createActionHistoryEntry({
+    actionType: "update",
+    entityType: "donor",
+    entityId: donorId,
+    label: donorRows[0].name,
+    description: `Doador ${donorRows[0].name} reativado a partir de ${referenceMonth}.`,
+    payload: { referenceMonth },
+  });
 }

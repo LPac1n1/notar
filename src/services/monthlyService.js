@@ -155,8 +155,15 @@ function buildDonorConditions({
   cpf = "",
   demand = "",
   donationStartDate = "all",
+  donorActiveStatus = "active",
 } = {}) {
-  const conditions = ["donors.is_active = TRUE"];
+  const conditions = [];
+
+  if (donorActiveStatus === "active") {
+    conditions.push("donors.is_active = TRUE");
+  } else if (donorActiveStatus === "inactive") {
+    conditions.push("donors.is_active = FALSE");
+  }
 
   if (donorId.trim()) {
     conditions.push(`donors.id = '${escapeSqlString(donorId.trim())}'`);
@@ -205,15 +212,27 @@ async function listMonthlySummariesByMonth({
   donationActivity = "all",
   abatementSort = "",
   donationStartDate = "all",
+  donorActiveStatus = "active",
 } = {}) {
   const normalizedReferenceMonth = startOfMonth(referenceMonth);
+  const activeDonorConditions = buildDonorConditions({
+    donorId,
+    donorType,
+    cpf,
+    demand,
+    donationStartDate,
+    donorActiveStatus: "active",
+  });
   const donorConditions = buildDonorConditions({
     donorId,
     donorType,
     cpf,
     demand,
     donationStartDate,
+    donorActiveStatus,
   });
+  const activeDonorWhereClause =
+    activeDonorConditions.length > 0 ? `WHERE ${activeDonorConditions.join(" AND ")}` : "";
   const donorWhereClause =
     donorConditions.length > 0 ? `WHERE ${donorConditions.join(" AND ")}` : "";
 
@@ -279,7 +298,7 @@ async function listMonthlySummariesByMonth({
         ON holder_active_donors.person_id = donors.holder_person_id
         AND holder_active_donors.donor_type = 'holder'
         AND holder_active_donors.is_active = TRUE
-      ${donorWhereClause}
+      ${activeDonorWhereClause}
       ORDER BY donors.name ASC
     `),
     query(`
@@ -364,7 +383,8 @@ async function listMonthlySummariesByMonth({
         AND holder_active_donors.donor_type = 'holder'
         AND holder_active_donors.is_active = TRUE
       WHERE monthly_donor_summary.reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
-        AND donors.is_active = TRUE
+        ${donorActiveStatus === "active" ? "AND donors.is_active = TRUE" : ""}
+        ${donorActiveStatus === "inactive" ? "AND donors.is_active = FALSE" : ""}
         ${donorId.trim() ? `AND donors.id = '${escapeSqlString(donorId.trim())}'` : ""}
         ${cpf.trim() ? `
           AND EXISTS (
@@ -393,15 +413,26 @@ async function listMonthlySummariesByMonth({
   const summaryByDonorId = new Map(
     monthlyRows.map((row) => [row.donor_id, mapSummaryRow(row)]),
   );
+  const activeDonorIds = new Set(donorRows.map((r) => r.id));
   const monthValuePerNote = Number(importContextRows[0]?.value_per_note ?? 0);
 
-  const mergedRows = donorRows.map((row) =>
+  const activeMerged = donorRows.map((row) =>
     summaryByDonorId.get(row.id) ??
     mapDonorWithoutDonation(row, {
       referenceMonth: normalizedReferenceMonth,
       valuePerNote: monthValuePerNote,
     }),
   );
+
+  const inactiveSummaries = donorActiveStatus !== "active"
+    ? monthlyRows
+        .filter((row) => !activeDonorIds.has(row.donor_id))
+        .map(mapSummaryRow)
+    : [];
+
+  const mergedRows = donorActiveStatus === "inactive"
+    ? inactiveSummaries
+    : [...activeMerged, ...inactiveSummaries];
 
   return sortSummariesByAbatement(
     applySummaryFilters(mergedRows, {
@@ -422,9 +453,15 @@ async function listHistoricalMonthlySummaries({
   donationActivity = "all",
   abatementSort = "",
   donationStartDate = "all",
+  donorActiveStatus = "active",
 } = {}) {
   const conditions = [];
-  conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
+
+  if (donorActiveStatus === "active") {
+    conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
+  } else if (donorActiveStatus === "inactive") {
+    conditions.push("donors.is_active = FALSE");
+  }
 
   if (referenceMonth) {
     conditions.push(
@@ -575,6 +612,7 @@ export async function listMonthlySummaries({
   donationActivity = "all",
   abatementSort = "",
   donationStartDate = "all",
+  donorActiveStatus = "active",
 } = {}) {
   if (referenceMonth) {
     return listMonthlySummariesByMonth({
@@ -587,6 +625,7 @@ export async function listMonthlySummaries({
       donationActivity,
       abatementSort,
       donationStartDate,
+      donorActiveStatus,
     });
   }
 
@@ -600,6 +639,7 @@ export async function listMonthlySummaries({
     donationActivity,
     abatementSort,
     donationStartDate,
+    donorActiveStatus,
   });
 }
 

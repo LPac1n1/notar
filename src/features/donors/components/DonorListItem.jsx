@@ -6,13 +6,15 @@ import {
   TrashIcon,
   UserIcon,
 } from "../../../components/ui/icons";
-import { formatDateTimePtBR } from "../../../utils/date";
+import { formatDateTimePtBR, formatMonthYear } from "../../../utils/date";
 import { formatInteger } from "../../../utils/format";
 
 export default function DonorListItem({
   donor,
+  onDeactivate,
   onEdit,
   onOpenProfile,
+  onReactivate,
   onRemove,
 }) {
   return (
@@ -32,7 +34,16 @@ export default function DonorListItem({
             </button>
           </CopyableValue>
           <StatusBadge status={donor.donorType} />
+          {!donor.isActive ? (
+            <StatusBadge status="inactive" />
+          ) : null}
         </div>
+
+        {!donor.isActive && donor.deactivatedSince ? (
+          <p className="mb-1 text-xs text-[var(--muted)]">
+            Inativo desde {formatMonthYear(`${donor.deactivatedSince}-01`)}
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
           <span>CPF:</span>
@@ -123,14 +134,33 @@ export default function DonorListItem({
         >
           Perfil
         </Button>
-        <Button
-          className="w-full md:flex-1"
-          onClick={() => onEdit(donor)}
-          variant="subtle"
-          leftIcon={<EditIcon className="h-4 w-4" />}
-        >
-          Editar
-        </Button>
+        {donor.isActive ? (
+          <Button
+            className="w-full md:flex-1"
+            onClick={() => onEdit(donor)}
+            variant="subtle"
+            leftIcon={<EditIcon className="h-4 w-4" />}
+          >
+            Editar
+          </Button>
+        ) : null}
+        {donor.isActive ? (
+          <Button
+            className="w-full md:flex-1"
+            onClick={() => onDeactivate(donor)}
+            variant="subtle"
+          >
+            Desativar
+          </Button>
+        ) : (
+          <Button
+            className="w-full md:flex-1"
+            onClick={() => onReactivate(donor)}
+            variant="subtle"
+          >
+            Reativar
+          </Button>
+        )}
         <Button
           className="w-full md:flex-1"
           onClick={() => onRemove(donor)}

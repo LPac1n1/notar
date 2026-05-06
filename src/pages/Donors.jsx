@@ -17,12 +17,16 @@ import TextInput from "../components/ui/TextInput";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import DonorForm from "../features/donors/components/DonorForm";
 import DonorListItem from "../features/donors/components/DonorListItem";
+import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
+import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { listDemands } from "../services/demandService";
 import {
   createDonor,
+  deactivateDonor,
   deleteDonor,
   listDonors,
+  reactivateDonor,
   updateDonor,
 } from "../services/donorService";
 import { exportDonorsCsv } from "../services/exportService";
@@ -58,6 +62,7 @@ const INITIAL_DONOR_FILTERS = {
   demand: "",
   donorType: "",
   donationStartDate: "all",
+  activeStatus: "active",
 };
 
 const DONOR_TYPE_OPTIONS = [
@@ -77,6 +82,12 @@ const DONOR_FORM_TYPE_OPTIONS = [
   { value: "auxiliary", label: "Auxiliar" },
 ];
 
+const ACTIVE_STATUS_OPTIONS = [
+  { value: "active", label: "Apenas ativos", tone: "success" },
+  { value: "inactive", label: "Apenas inativos", tone: "default" },
+  { value: "all", label: "Todos", tone: "default" },
+];
+
 export default function Donors() {
   const location = useLocation();
   const [donors, setDonors] = useState([]);
@@ -88,6 +99,10 @@ export default function Donors() {
   const [editFormErrors, setEditFormErrors] = useState({});
   const [editingDonor, setEditingDonor] = useState(null);
   const [donorPendingRemoval, setDonorPendingRemoval] = useState(null);
+  const [donorPendingDeactivation, setDonorPendingDeactivation] = useState(null);
+  const [donorPendingReactivation, setDonorPendingReactivation] = useState(null);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filters, setFilters] = useState({
     ...INITIAL_DONOR_FILTERS,
@@ -531,6 +546,46 @@ export default function Donors() {
     }
   };
 
+  const handleConfirmDeactivate = async (referenceMonth) => {
+    if (!donorPendingDeactivation) return;
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsDeactivating(true);
+      await deactivateDonor(donorPendingDeactivation.id, referenceMonth);
+      setDonorPendingDeactivation(null);
+      setSuccessMessage(`${donorPendingDeactivation.name} foi desativado com sucesso.`);
+      await loadDonors(filters);
+    } catch (err) {
+      console.error("Erro ao desativar doador:", getErrorMessage(err, "Erro desconhecido."));
+      setError(getErrorMessage(err, "Não foi possível desativar o doador."));
+    } finally {
+      setIsDeactivating(false);
+    }
+  };
+
+  const handleConfirmReactivate = async (referenceMonth) => {
+    if (!donorPendingReactivation) return;
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsReactivating(true);
+      await reactivateDonor(donorPendingReactivation.id, referenceMonth);
+      setDonorPendingReactivation(null);
+      setSuccessMessage(`${donorPendingReactivation.name} foi reativado com sucesso.`);
+      await loadDonors(filters);
+    } catch (err) {
+      console.error("Erro ao reativar doador:", getErrorMessage(err, "Erro desconhecido."));
+      setError(getErrorMessage(err, "Não foi possível reativar o doador."));
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
   const handleClearFilters = () => {
     setFilters({ ...INITIAL_DONOR_FILTERS });
   };
@@ -618,6 +673,14 @@ export default function Donors() {
             options={DONATION_START_DATE_OPTIONS}
             placeholder="Com ou sem data de início"
           />
+          <SelectInput
+            label="Status"
+            name="activeStatus"
+            value={filters.activeStatus}
+            onChange={handleFilterChange}
+            options={ACTIVE_STATUS_OPTIONS}
+            placeholder="Apenas ativos"
+          />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -673,8 +736,10 @@ export default function Donors() {
             <DonorListItem
               key={donor.id}
               donor={donor}
+              onDeactivate={setDonorPendingDeactivation}
               onEdit={handleOpenEditModal}
               onOpenProfile={openDonorProfile}
+              onReactivate={setDonorPendingReactivation}
               onRemove={setDonorPendingRemoval}
             />
           ))}
@@ -751,6 +816,28 @@ export default function Donors() {
             isLoading={isDeleting}
             onCancel={() => setDonorPendingRemoval(null)}
             onConfirm={handleConfirmRemove}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {donorPendingDeactivation ? (
+          <DeactivateDonorModal
+            donor={donorPendingDeactivation}
+            isSubmitting={isDeactivating}
+            onClose={() => setDonorPendingDeactivation(null)}
+            onConfirm={handleConfirmDeactivate}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {donorPendingReactivation ? (
+          <ReactivateDonorModal
+            donor={donorPendingReactivation}
+            isSubmitting={isReactivating}
+            onClose={() => setDonorPendingReactivation(null)}
+            onConfirm={handleConfirmReactivate}
           />
         ) : null}
       </AnimatePresence>

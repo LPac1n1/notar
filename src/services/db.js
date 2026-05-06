@@ -130,6 +130,13 @@ const RESTORE_TABLE_COLUMNS = {
     "payload_json",
     "created_at",
   ],
+  donor_activity_history: [
+    "id",
+    "donor_id",
+    "event_type",
+    "reference_month",
+    "created_at",
+  ],
   trash_items: [
     "id",
     "entity_type",
@@ -379,6 +386,16 @@ async function initSchema({ structural = true } = {}) {
       label TEXT,
       description TEXT,
       payload_json TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+    await conn.query(`
+    CREATE TABLE IF NOT EXISTS donor_activity_history (
+      id TEXT,
+      donor_id TEXT,
+      event_type TEXT,
+      reference_month DATE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
