@@ -9,59 +9,74 @@ import {
   getZipReportFileName,
 } from "./donationReportRenderer";
 
-async function createDonationReportJpeg(reportData) {
+function getPageFileName(baseFileName, pageIndex, totalPages) {
+  if (totalPages === 1) {
+    return baseFileName;
+  }
+
+  const pageSuffix = `-p${String(pageIndex + 1).padStart(2, "0")}`;
+  return baseFileName.replace(/\.jpg$/, `${pageSuffix}.jpg`);
+}
+
+async function buildDemandPages(reportData, group) {
+  const singleDemandData = { ...reportData, groups: [group] };
+  const baseFileName = getDemandReportFileName(singleDemandData, group, "jpg");
+
   const doc = new SimpleImageDocument();
-  drawDonationReport(doc, reportData);
-  return doc.build();
+  drawDonationReport(doc, singleDemandData);
+  const pageBytes = await doc.build();
+
+  return pageBytes.map((bytes, pageIndex) => ({
+    fileName: getPageFileName(baseFileName, pageIndex, pageBytes.length),
+    bytes,
+    rowCount: getDemandRowCount(group),
+  }));
 }
 
 export async function exportDonationReportJpeg(filters = {}) {
   const reportData = await buildDonationReportData(filters);
 
-  const files = await Promise.all(
-    reportData.groups.map(async (group) => {
-      const singleDemandData = { ...reportData, groups: [group] };
-
-      return {
-        fileName: getDemandReportFileName(singleDemandData, group, "jpg"),
-        bytes: await createDonationReportJpeg(singleDemandData),
-        rowCount: getDemandRowCount(group),
-      };
-    }),
+  const demandPages = await Promise.all(
+    reportData.groups.map((group) => buildDemandPages(reportData, group)),
   );
 
-  if (files.length > 1) {
-    const archiveName = getZipReportFileName(reportData).replace(
-      /\.zip$/,
-      "-jpeg.zip",
-    );
-    const archiveBytes = createZipArchive(
-      files.map((file) => ({ name: file.fileName, bytes: file.bytes })),
-    );
+  const allFiles = demandPages.flat();
 
+  if (allFiles.length === 1) {
     downloadFile({
-      fileName: archiveName,
-      content: archiveBytes,
-      mimeType: "application/zip",
+      fileName: allFiles[0].fileName,
+      content: allFiles[0].bytes,
+      mimeType: "image/jpeg",
     });
 
     return {
-      archiveName,
-      demandCount: files.length,
-      fileNames: files.map((file) => file.fileName),
-      rowCount: files.reduce((total, file) => total + file.rowCount, 0),
+      demandCount: reportData.groups.length,
+      fileNames: allFiles.map((f) => f.fileName),
+      rowCount: allFiles[0].rowCount,
     };
   }
 
+  const archiveName = getZipReportFileName(reportData).replace(
+    /\.zip$/,
+    "-jpeg.zip",
+  );
+  const archiveBytes = createZipArchive(
+    allFiles.map((f) => ({ name: f.fileName, bytes: f.bytes })),
+  );
+
   downloadFile({
-    fileName: files[0].fileName,
-    content: files[0].bytes,
-    mimeType: "image/jpeg",
+    fileName: archiveName,
+    content: archiveBytes,
+    mimeType: "application/zip",
   });
 
   return {
-    demandCount: files.length,
-    fileNames: files.map((file) => file.fileName),
-    rowCount: files.reduce((total, file) => total + file.rowCount, 0),
+    archiveName,
+    demandCount: reportData.groups.length,
+    fileNames: allFiles.map((f) => f.fileName),
+    rowCount: demandPages.reduce(
+      (total, pages) => total + (pages[0]?.rowCount ?? 0),
+      0,
+    ),
   };
 }

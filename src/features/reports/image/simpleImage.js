@@ -38,6 +38,41 @@ function applyText(ctx, command) {
   ctx.fillText(command.text ?? "", command.x, command.y);
 }
 
+function renderPageToJpeg(commands, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(width * RENDER_SCALE);
+  canvas.height = Math.ceil(height * RENDER_SCALE);
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RENDER_SCALE, RENDER_SCALE);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, width, height);
+
+  for (const command of commands) {
+    if (command.type === "rect") {
+      applyRect(ctx, command);
+    } else if (command.type === "line") {
+      applyLine(ctx, command);
+    } else if (command.type === "text") {
+      applyText(ctx, command);
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blobToBytes(blob));
+        } else {
+          reject(new Error("Falha ao gerar imagem JPEG."));
+        }
+      },
+      "image/jpeg",
+      JPEG_QUALITY,
+    );
+  });
+}
+
 function blobToBytes(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -125,48 +160,6 @@ export class SimpleImageDocument {
   }
 
   async build() {
-    const pageCount = this.pages.length;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(this.width * RENDER_SCALE);
-    canvas.height = Math.ceil(this.height * pageCount * RENDER_SCALE);
-
-    const ctx = canvas.getContext("2d");
-    ctx.scale(RENDER_SCALE, RENDER_SCALE);
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, this.width, this.height * pageCount);
-
-    this.pages.forEach((commands, pageIndex) => {
-      ctx.save();
-      ctx.translate(0, pageIndex * this.height);
-
-      for (const command of commands) {
-        if (command.type === "rect") {
-          applyRect(ctx, command);
-        } else if (command.type === "line") {
-          applyLine(ctx, command);
-        } else if (command.type === "text") {
-          applyText(ctx, command);
-        }
-      }
-
-      ctx.restore();
-    });
-
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (result) => {
-          if (result) {
-            resolve(result);
-            return;
-          }
-
-          reject(new Error("Falha ao gerar imagem JPEG."));
-        },
-        "image/jpeg",
-        JPEG_QUALITY,
-      );
-    });
-
-    return blobToBytes(blob);
+    return Promise.all(this.pages.map((commands) => renderPageToJpeg(commands, this.width, this.height)));
   }
 }
