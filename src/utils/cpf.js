@@ -10,3 +10,14 @@ export function formatCpf(value) {
     .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
     .replace(/\.(\d{3})(\d)/, ".$1-$2");
 }
+
+export function parseCpfList(rawText) {
+  if (!rawText) {
+    return [];
+  }
+
+  return String(rawText)
+    .split(/[\s,;]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}

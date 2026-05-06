@@ -7,6 +7,7 @@ import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import { PlusIcon } from "../components/ui/icons";
+import CpfListSearchSection from "../features/imports/components/CpfListSearchSection";
 import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDetailsModal";
 import CpfSummarySection from "../features/imports/components/CpfSummarySection";
 import ImportHistorySection from "../features/imports/components/ImportHistorySection";
@@ -784,6 +785,8 @@ export default function Imports() {
         pagination={cpfSummaryPagination}
         registrationFilterOptions={CPF_REGISTRATION_FILTER_OPTIONS}
       />
+
+      <CpfListSearchSection onOpenDonorProfile={openDonorProfile} />
 
       <AnimatePresence>
         {selectedCpfSummaryDetails ? (

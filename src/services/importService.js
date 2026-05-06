@@ -945,6 +945,149 @@ export async function reconcileAllImports({ emitChange = true } = {}) {
   }
 }
 
+export async function searchImportedCpfs(rawCpfs = []) {
+  const seenCpfs = new Set();
+  const normalizedCpfs = [];
+  let invalidCount = 0;
+  let duplicateCount = 0;
+
+  for (const rawCpf of rawCpfs) {
+    const trimmed = String(rawCpf ?? "").trim();
+    if (!trimmed) continue;
+
+    const normalized = normalizeCpf(trimmed);
+
+    if (normalized.length !== 11) {
+      invalidCount += 1;
+      continue;
+    }
+
+    if (seenCpfs.has(normalized)) {
+      duplicateCount += 1;
+      continue;
+    }
+
+    seenCpfs.add(normalized);
+    normalizedCpfs.push(normalized);
+  }
+
+  if (normalizedCpfs.length === 0) {
+    return {
+      registeredWithDonations: [],
+      unregisteredWithDonations: [],
+      registeredWithoutDonations: [],
+      unregisteredWithoutDonations: [],
+      stats: {
+        inputCount: rawCpfs.length,
+        validCount: 0,
+        duplicateCount,
+        invalidCount,
+      },
+    };
+  }
+
+  const cpfList = normalizedCpfs
+    .map((cpf) => `'${escapeSqlString(cpf)}'`)
+    .join(", ");
+
+  const summaryRows = await query(`
+    SELECT
+      cpf,
+      strftime(reference_month, '%Y-%m-01') AS reference_month,
+      sum(notes_count) AS notes_count
+    FROM import_cpf_summary
+    WHERE cpf IN (${cpfList})
+    GROUP BY cpf, reference_month
+    ORDER BY cpf ASC, reference_month ASC
+  `);
+
+  const linkRows = await query(`
+    SELECT
+      donor_cpf_links.cpf,
+      donor_cpf_links.donor_id,
+      donor_cpf_links.name AS source_name,
+      donors.name AS donor_name,
+      donors.is_active AS donor_is_active
+    FROM donor_cpf_links
+    LEFT JOIN donors ON donors.id = donor_cpf_links.donor_id
+    WHERE donor_cpf_links.cpf IN (${cpfList})
+      AND donor_cpf_links.is_active = TRUE
+  `);
+
+  const cpfMap = new Map();
+  for (const cpf of normalizedCpfs) {
+    cpfMap.set(cpf, {
+      cpf,
+      donorId: "",
+      donorName: "",
+      sourceName: "",
+      isRegistered: false,
+      isActiveDonor: false,
+      months: [],
+      totalDonations: 0,
+    });
+  }
+
+  for (const row of linkRows) {
+    const entry = cpfMap.get(row.cpf);
+    if (!entry) continue;
+
+    entry.isRegistered = true;
+    entry.donorId = row.donor_id ?? "";
+    entry.donorName = row.donor_name ?? "";
+    entry.sourceName = row.source_name ?? "";
+    entry.isActiveDonor = Boolean(row.donor_is_active);
+  }
+
+  for (const row of summaryRows) {
+    const entry = cpfMap.get(row.cpf);
+    if (!entry) continue;
+
+    const referenceMonth = String(row.reference_month).slice(0, 7);
+    const count = Number(row.notes_count ?? 0);
+    entry.months.push({ referenceMonth, count });
+    entry.totalDonations += count;
+  }
+
+  const registeredWithDonations = [];
+  const unregisteredWithDonations = [];
+  const registeredWithoutDonations = [];
+  const unregisteredWithoutDonations = [];
+
+  for (const entry of cpfMap.values()) {
+    const hasDonations = entry.totalDonations > 0;
+
+    if (entry.isRegistered && hasDonations) {
+      registeredWithDonations.push(entry);
+    } else if (!entry.isRegistered && hasDonations) {
+      unregisteredWithDonations.push(entry);
+    } else if (entry.isRegistered) {
+      registeredWithoutDonations.push(entry);
+    } else {
+      unregisteredWithoutDonations.push(entry);
+    }
+  }
+
+  const sortByCpf = (left, right) => left.cpf.localeCompare(right.cpf);
+  registeredWithDonations.sort(sortByCpf);
+  unregisteredWithDonations.sort(sortByCpf);
+  registeredWithoutDonations.sort(sortByCpf);
+  unregisteredWithoutDonations.sort(sortByCpf);
+
+  return {
+    registeredWithDonations,
+    unregisteredWithDonations,
+    registeredWithoutDonations,
+    unregisteredWithoutDonations,
+    stats: {
+      inputCount: rawCpfs.length,
+      validCount: normalizedCpfs.length,
+      duplicateCount,
+      invalidCount,
+    },
+  };
+}
+
 export async function reconcileImportsForCpfs(cpfs = []) {
   const normalizedCpfs = Array.from(
     new Set(
