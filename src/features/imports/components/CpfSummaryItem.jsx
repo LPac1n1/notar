@@ -10,7 +10,7 @@ export default function CpfSummaryItem({
   onOpenDonorProfile,
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_120px_160px_1fr]">
+    <div className="grid grid-cols-2 gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[1fr_120px_160px_1fr_auto]">
       <div className="col-span-2 md:col-span-1">
         <CopyableValue
           copyLabel="Copiar CPF"
@@ -98,16 +98,18 @@ export default function CpfSummaryItem({
         ) : null}
       </div>
 
-      <div className="col-span-2 flex items-end justify-between gap-3 md:col-span-1 md:flex-col md:items-stretch">
+      <div className="col-span-2 flex items-end justify-between gap-3 md:contents">
         <div>
           <p className="text-sm text-[var(--muted)]">Meses</p>
           <p className="font-medium">
             {formatInteger(item.monthCount)} {item.monthCount === 1 ? "mês" : "meses"}
           </p>
         </div>
-        <Button variant="subtle" onClick={() => onOpenDetails(item)}>
-          Ver meses e arquivos
-        </Button>
+        <div className="flex items-center justify-end">
+          <Button variant="subtle" onClick={() => onOpenDetails(item)}>
+            Ver meses e arquivos
+          </Button>
+        </div>
       </div>
     </div>
   );

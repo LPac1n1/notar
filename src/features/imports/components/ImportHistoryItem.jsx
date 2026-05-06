@@ -10,7 +10,7 @@ export default function ImportHistoryItem({
   onDelete,
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[repeat(6,minmax(0,1fr))_auto]">
       <div className="col-span-2 min-w-0 md:col-span-1">
         <p className="text-sm text-[var(--muted)]">Arquivo</p>
         <p className="break-all font-medium" title={item.fileName}>
@@ -38,21 +38,23 @@ export default function ImportHistoryItem({
         <p className="text-sm text-[var(--muted)]">Linhas compatíveis</p>
         <p className="font-medium">{formatInteger(item.matchedRows)}</p>
       </div>
-      <div className="col-span-2 flex items-end justify-between gap-3 md:col-span-1 md:flex-col md:items-stretch">
+      <div className="col-span-2 flex items-end justify-between gap-3 md:contents">
         <div>
           <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
           <p className="font-medium">{formatInteger(item.matchedDonors)}</p>
         </div>
-        <Button
-          variant="danger"
-          onClick={() => onDelete(item)}
-          disabled={deletingImportId === item.id}
-          leftIcon={<TrashIcon className="h-4 w-4" />}
-        >
-          {deletingImportId === item.id
-            ? "Excluindo..."
-            : "Excluir importação"}
-        </Button>
+        <div className="flex items-center justify-end">
+          <Button
+            variant="danger"
+            onClick={() => onDelete(item)}
+            disabled={deletingImportId === item.id}
+            leftIcon={<TrashIcon className="h-4 w-4" />}
+          >
+            {deletingImportId === item.id
+              ? "Excluindo..."
+              : "Excluir importação"}
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -141,7 +141,7 @@ export default function BulkAbatementModal({ summaries, onApply, onClose, isAppl
       <Modal
         title="Abatimento em massa"
         description="Nenhum abatimento pendente encontrado para os filtros atuais."
-        icon={MonthlyIcon}
+        icon={<MonthlyIcon className="h-5 w-5" />}
         onClose={onClose}
         size="sm"
       >
@@ -158,7 +158,7 @@ export default function BulkAbatementModal({ summaries, onApply, onClose, isAppl
     <Modal
       title="Abatimento em massa"
       description="Selecione os meses que serão marcados como realizados para todos os doadores com doação pendente."
-      icon={MonthlyIcon}
+      icon={<MonthlyIcon className="h-5 w-5" />}
       onClose={onClose}
       size="md"
     >
