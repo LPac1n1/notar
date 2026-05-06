@@ -463,11 +463,11 @@ export default function DonorProfile() {
           description="Registro de ativações e desativações do doador."
           className="mb-6"
         >
-          <div className="space-y-2">
-            {profile.activityHistory.map((entry, index) => (
+          <div className="space-y-3">
+            {profile.activityHistory.map((entry) => (
               <div
-                key={index}
-                className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3"
+                key={`${entry.referenceMonth}-${entry.eventType}`}
+                className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
               >
                 <StatusBadge
                   status={entry.eventType === "activated" ? "active" : "inactive"}

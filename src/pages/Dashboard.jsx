@@ -743,6 +743,7 @@ export default function Dashboard() {
 
             <SectionCard
               title="Demandas no último mês"
+              description={latestMonth ? `Distribuição por demanda em ${formatMonthYear(latestMonth.referenceMonth)}.` : ""}
             >
               {dashboard?.demandBreakdown?.length ? (
                 <div className="space-y-3">

@@ -29,6 +29,7 @@ import {
   getContrastTextColor,
 } from "../utils/demandColor";
 import { getErrorMessage } from "../utils/error";
+import { formatInteger } from "../utils/format";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
@@ -309,20 +310,27 @@ export default function Demands() {
       </div>
 
       <SectionCard title="Buscar demandas" className="mb-4">
-        <div className="flex flex-col gap-3 md:flex-row">
+        <div className="grid gap-3">
           <TextInput
-            className="md:flex-1"
+            label="Nome"
             name="name"
-            placeholder="Buscar por nome"
+            placeholder="Filtrar por nome"
             value={filters.name}
             onChange={handleFilterChange}
           />
-          <Button
-            variant="subtle"
-            onClick={handleClearFilters}
-          >
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="subtle" onClick={handleClearFilters}>
             Limpar filtros
           </Button>
+          <p className="text-xs text-[var(--muted)]">
+            {showDataRefreshLoading
+              ? dataSyncFeedback.label
+              : isRefreshing
+                ? "Atualizando resultados..."
+                : `${formatInteger(demands.length)} resultado(s) na lista.`}
+          </p>
         </div>
       </SectionCard>
 
@@ -364,7 +372,7 @@ export default function Demands() {
           {demandsPagination.visibleItems.map((demand) => (
             <li
               key={demand.id}
-              className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <span
