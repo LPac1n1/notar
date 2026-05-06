@@ -35,31 +35,34 @@ export default function DonorListItem({
           </CopyableValue>
           <StatusBadge status={donor.donorType} />
           {!donor.isActive ? (
-            <StatusBadge status="inactive" />
+            <>
+              <StatusBadge status="inactive" />
+              {donor.deactivatedSince ? (
+                <span className="text-xs text-[var(--muted)]">
+                  desde {formatMonthYear(`${donor.deactivatedSince}-01`)}
+                </span>
+              ) : null}
+            </>
           ) : null}
         </div>
 
-        {!donor.isActive && donor.deactivatedSince ? (
-          <p className="mb-1 text-xs text-[var(--muted)]">
-            Inativo desde {formatMonthYear(`${donor.deactivatedSince}-01`)}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+            <span>CPF:</span>
+            <CopyableValue
+              copyLabel="Copiar CPF"
+              value={donor.cpf}
+            >
+              <span>{donor.cpf}</span>
+            </CopyableValue>
+          </div>
+          <p className="text-sm text-[var(--muted)]">
+            Demanda: {donor.demand || "Não informada"}
           </p>
-        ) : null}
-
-        <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
-          <span>CPF:</span>
-          <CopyableValue
-            copyLabel="Copiar CPF"
-            value={donor.cpf}
-          >
-            <span>{donor.cpf}</span>
-          </CopyableValue>
+          <p className="text-sm text-[var(--muted)]">
+            Início: {donor.donationStartDate || "Não informado"}
+          </p>
         </div>
-        <p className="text-sm text-[var(--muted)]">
-          Demanda: {donor.demand || "Não informada"}
-        </p>
-        <p className="text-sm text-[var(--muted)]">
-          Início: {donor.donationStartDate || "Não informado"}
-        </p>
         {donor.createdAt ? (
           <p className="mt-5 text-xs text-[var(--muted)]">
             Cadastrado em {formatDateTimePtBR(donor.createdAt)}

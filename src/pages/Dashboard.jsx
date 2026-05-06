@@ -175,11 +175,11 @@ export default function Dashboard() {
                   name={donor.donorName}
                   onClick={() => openDonorProfile(donor.donorId)}
                 />
-                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                   <CopyableCpf value={donor.cpf} />
                   <span>• Demanda: {donor.demand || "Não informada"}</span>
                 </p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-1.5 text-sm text-[var(--muted)]">
                   Início: {donor.donationStartDate ? formatMonthYear(donor.donationStartDate) : "Não informado"}
                 </p>
               </div>
@@ -324,11 +324,11 @@ export default function Dashboard() {
                   name={item.donorName}
                   onClick={() => openDonorProfile(item.donorId)}
                 />
-                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                   <CopyableCpf value={item.cpf} />
                   <span>• {item.demand}</span>
                 </p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-1.5 text-sm text-[var(--muted)]">
                   {formatInteger(item.notesCount)} nota(s) • {formatCurrency(item.abatementAmount)}
                 </p>
               </div>
@@ -387,7 +387,7 @@ export default function Dashboard() {
                     <span>{item.sourceName}</span>
                   </CopyableValue>
                 </p>
-                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                   <CopyableCpf value={item.cpf} />
                   <span>• Vinculado ao doador</span>
                   <CopyableDonorName
@@ -396,7 +396,7 @@ export default function Dashboard() {
                     onClick={() => openDonorProfile(item.donorId)}
                   />
                 </p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-1.5 text-sm text-[var(--muted)]">
                   Apareceu em {formatMonthYear(item.referenceMonth)}, mas o início é {formatMonthYear(item.donationStartDate)}.
                 </p>
               </div>
@@ -424,7 +424,7 @@ export default function Dashboard() {
                   name={item.donorName}
                   onClick={() => openDonorProfile(item.donorId)}
                 />
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-2 text-sm text-[var(--muted)]">
                   <CopyableCpf value={item.cpf} />
                 </p>
               </div>
@@ -453,11 +453,11 @@ export default function Dashboard() {
                     <span>{item.sourceName}</span>
                   </CopyableValue>
                 </p>
-                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                   <CopyableCpf value={item.cpf} />
                   <span>• {item.sourceType === "holder" ? "Titular" : "Auxiliar"}</span>
                 </p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-1.5 text-sm text-[var(--muted)]">
                   Doador{" "}
                   <CopyableDonorName
                     className="text-[var(--text-soft)]"

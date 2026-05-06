@@ -263,7 +263,7 @@ export default function DonorProfile() {
             <StatusBadge status={donor.isActive ? "active" : "inactive"} />
           </div>
           {!donor.isActive && donor.deactivatedSince ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">
+            <p className="mt-2 text-xs text-[var(--muted)]">
               Desde {formatMonthYear(`${donor.deactivatedSince}-01`)}
             </p>
           ) : null}
@@ -296,7 +296,7 @@ export default function DonorProfile() {
                     </button>
                   </CopyableValue>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                   <CopyableValue
                     copyLabel="Copiar CPF"
                     value={donor.holderCpf}
@@ -324,7 +324,7 @@ export default function DonorProfile() {
                   </CopyableValue>
                 </div>
                 {donor.holderCpf ? (
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                     <CopyableValue
                       copyLabel="Copiar CPF"
                       value={donor.holderCpf}
@@ -379,7 +379,7 @@ export default function DonorProfile() {
                         {auxiliary.name}
                       </button>
                     </CopyableValue>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                       <CopyableValue
                         copyLabel="Copiar CPF"
                         value={auxiliary.cpf}
@@ -440,7 +440,7 @@ export default function DonorProfile() {
               >
                 <span className="font-semibold text-[var(--text-main)]">{source.name}</span>
               </CopyableValue>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
                 <CopyableValue
                   copyLabel="Copiar CPF"
                   value={source.cpf}
@@ -448,7 +448,7 @@ export default function DonorProfile() {
                   <span>{source.cpf}</span>
                 </CopyableValue>
               </div>
-              <p className="text-sm text-[var(--muted)]">
+              <p className="mt-1.5 text-sm text-[var(--muted)]">
                 Início: {source.donationStartDate || "Não informado"} •{" "}
                 {formatInteger(source.totalNotes)} nota(s)
               </p>
