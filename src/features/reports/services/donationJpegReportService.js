@@ -1,6 +1,5 @@
 import { downloadFile } from "../../../utils/download";
-import { formatInteger } from "../../../utils/format";
-import { SimplePdfDocument } from "../pdf/simplePdf";
+import { SimpleImageDocument } from "../image/simpleImage";
 import { createZipArchive } from "../utils/simpleZip";
 import {
   buildDonationReportData,
@@ -10,26 +9,32 @@ import {
   getZipReportFileName,
 } from "./donationReportRenderer";
 
-function createDonationReportPdf(reportData) {
-  const pdf = new SimplePdfDocument();
-  drawDonationReport(pdf, reportData);
-  return pdf.build();
+async function createDonationReportJpeg(reportData) {
+  const doc = new SimpleImageDocument();
+  drawDonationReport(doc, reportData);
+  return doc.build();
 }
 
-export async function exportDonationReportPdf(filters = {}) {
+export async function exportDonationReportJpeg(filters = {}) {
   const reportData = await buildDonationReportData(filters);
-  const files = reportData.groups.map((group) => {
-    const singleDemandData = { ...reportData, groups: [group] };
 
-    return {
-      fileName: getDemandReportFileName(singleDemandData, group, "pdf"),
-      bytes: createDonationReportPdf(singleDemandData),
-      rowCount: getDemandRowCount(group),
-    };
-  });
+  const files = await Promise.all(
+    reportData.groups.map(async (group) => {
+      const singleDemandData = { ...reportData, groups: [group] };
+
+      return {
+        fileName: getDemandReportFileName(singleDemandData, group, "jpg"),
+        bytes: await createDonationReportJpeg(singleDemandData),
+        rowCount: getDemandRowCount(group),
+      };
+    }),
+  );
 
   if (files.length > 1) {
-    const archiveName = getZipReportFileName(reportData);
+    const archiveName = getZipReportFileName(reportData).replace(
+      /\.zip$/,
+      "-jpeg.zip",
+    );
     const archiveBytes = createZipArchive(
       files.map((file) => ({ name: file.fileName, bytes: file.bytes })),
     );
@@ -51,7 +56,7 @@ export async function exportDonationReportPdf(filters = {}) {
   downloadFile({
     fileName: files[0].fileName,
     content: files[0].bytes,
-    mimeType: "application/pdf",
+    mimeType: "image/jpeg",
   });
 
   return {

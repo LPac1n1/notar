@@ -10,8 +10,10 @@ export default function MonthlySummaryToolbar({
   onClearRefinements,
   onExportCsv,
   onExportPdf,
+  onExportJpeg,
   isExportingCsv,
   isExportingPdf,
+  isExportingJpeg,
   isPdfDisabled,
 }) {
   return (
@@ -55,6 +57,16 @@ export default function MonthlySummaryToolbar({
           leftIcon={<FileIcon className="h-4 w-4" />}
         >
           PDFs por demanda
+        </Button>
+        <Button
+          variant="subtle"
+          onClick={onExportJpeg}
+          disabled={isExportingJpeg || isPdfDisabled}
+          isLoading={isExportingJpeg}
+          loadingLabel="Gerando JPEG..."
+          leftIcon={<FileIcon className="h-4 w-4" />}
+        >
+          JPEGs por demanda
         </Button>
       </div>
     </div>

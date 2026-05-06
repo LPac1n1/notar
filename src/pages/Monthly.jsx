@@ -21,6 +21,7 @@ import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummary
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
+import { exportDonationReportJpeg } from "../features/reports/services/donationJpegReportService";
 import { listImports } from "../services/importService";
 import {
   listMonthlySummaries,
@@ -125,6 +126,7 @@ export default function Monthly() {
   const [updatingDonorId, setUpdatingDonorId] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingJpeg, setIsExportingJpeg] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
@@ -587,6 +589,40 @@ export default function Monthly() {
     }
   };
 
+  const handleExportJpeg = async () => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsExportingJpeg(true);
+      const result = await monthlyOperation.run(
+        () => exportDonationReportJpeg(filters),
+        {
+          loadingMessage: "Gerando JPEGs por demanda...",
+        },
+      );
+      if (result.archiveName) {
+        setSuccessMessage(
+          `ZIP gerado com ${formatInteger(result.demandCount)} JPEG(s) e ${formatInteger(result.rowCount)} pessoa(s).`,
+        );
+      } else {
+        setSuccessMessage(
+          `JPEG gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
+        );
+      }
+    } catch (err) {
+      console.error(
+        "Erro ao exportar JPEGs por demanda:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(
+        getErrorMessage(err, "Não foi possível gerar os JPEGs por demanda."),
+      );
+    } finally {
+      setIsExportingJpeg(false);
+    }
+  };
+
   const handleClearRefinements = () => {
     setFilters((current) => ({
       ...current,
@@ -858,8 +894,10 @@ export default function Monthly() {
           onClearRefinements={handleClearRefinements}
           onExportCsv={handleExport}
           onExportPdf={handleExportPdf}
+          onExportJpeg={handleExportJpeg}
           isExportingCsv={isExporting}
           isExportingPdf={isExportingPdf}
+          isExportingJpeg={isExportingJpeg}
           isPdfDisabled={summaries.length === 0}
         />
 
