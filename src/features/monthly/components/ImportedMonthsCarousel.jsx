@@ -13,6 +13,8 @@ export default function ImportedMonthsCarousel({
   onSelectMonth,
 }) {
   const railRef = useRef(null);
+  const trackRef = useRef(null);
+  const dragStateRef = useRef(null);
   const [scrollState, setScrollState] = useState({
     left: 0,
     scrollWidth: 0,
@@ -45,6 +47,44 @@ export default function ImportedMonthsCarousel({
     };
   }, [imports.length]);
 
+  useEffect(() => {
+    const handleMove = (event) => {
+      const dragState = dragStateRef.current;
+      const rail = railRef.current;
+
+      if (!dragState || !rail) {
+        return;
+      }
+
+      const deltaX = event.clientX - dragState.startX;
+      const scrollableTrack = dragState.trackWidth - dragState.thumbWidth;
+      const scrollableContent = rail.scrollWidth - rail.clientWidth;
+
+      if (scrollableTrack <= 0 || scrollableContent <= 0) {
+        return;
+      }
+
+      rail.scrollLeft =
+        dragState.startScrollLeft +
+        (deltaX / scrollableTrack) * scrollableContent;
+    };
+
+    const handleUp = () => {
+      dragStateRef.current = null;
+      document.body.style.removeProperty("user-select");
+    };
+
+    document.addEventListener("pointermove", handleMove);
+    document.addEventListener("pointerup", handleUp);
+    document.addEventListener("pointercancel", handleUp);
+
+    return () => {
+      document.removeEventListener("pointermove", handleMove);
+      document.removeEventListener("pointerup", handleUp);
+      document.removeEventListener("pointercancel", handleUp);
+    };
+  }, []);
+
   const isOverflowing = scrollState.scrollWidth > scrollState.clientWidth + 1;
   const thumbWidthPercent = isOverflowing
     ? Math.max(
@@ -59,6 +99,49 @@ export default function ImportedMonthsCarousel({
   const thumbLeftPercent = isOverflowing
     ? (scrollState.left / maxScrollLeft) * (100 - thumbWidthPercent)
     : 0;
+
+  const handleTrackPointerDown = (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const rail = railRef.current;
+    const track = trackRef.current;
+
+    if (!rail || !track || !isOverflowing) {
+      return;
+    }
+
+    const trackRect = track.getBoundingClientRect();
+    const thumbWidthPx = (trackRect.width * thumbWidthPercent) / 100;
+    const thumbLeftPx = (trackRect.width * thumbLeftPercent) / 100;
+    const clickX = event.clientX - trackRect.left;
+    const onThumb =
+      clickX >= thumbLeftPx && clickX <= thumbLeftPx + thumbWidthPx;
+    const scrollableContent = rail.scrollWidth - rail.clientWidth;
+    const scrollableTrack = trackRect.width - thumbWidthPx;
+
+    if (!onThumb && scrollableTrack > 0) {
+      const targetThumbLeft = Math.max(
+        0,
+        Math.min(clickX - thumbWidthPx / 2, scrollableTrack),
+      );
+      rail.scrollTo({
+        left: (targetThumbLeft / scrollableTrack) * scrollableContent,
+        behavior: "smooth",
+      });
+      return;
+    }
+
+    dragStateRef.current = {
+      startX: event.clientX,
+      startScrollLeft: rail.scrollLeft,
+      trackWidth: trackRect.width,
+      thumbWidth: thumbWidthPx,
+    };
+    document.body.style.userSelect = "none";
+    event.preventDefault();
+  };
 
   const scrollByPage = (direction) => {
     const rail = railRef.current;
@@ -167,9 +250,13 @@ export default function ImportedMonthsCarousel({
       </div>
 
       {isOverflowing ? (
-        <div className="mt-3 h-1.5 w-full rounded-full bg-[color:var(--line)]">
+        <div
+          ref={trackRef}
+          onPointerDown={handleTrackPointerDown}
+          className="mt-3 h-1.5 w-full cursor-pointer rounded-full bg-[color:var(--line)]"
+        >
           <div
-            className="h-full rounded-full bg-[color:var(--line-strong)]"
+            className="h-full rounded-full bg-[color:var(--line-strong)] transition-colors hover:bg-[color:var(--muted-strong)]"
             style={{
               width: `${thumbWidthPercent}%`,
               marginLeft: `${thumbLeftPercent}%`,
