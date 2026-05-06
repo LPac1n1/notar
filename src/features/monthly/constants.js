@@ -10,6 +10,15 @@ export const INITIAL_MONTHLY_FILTERS = {
   donationStartDate: "all",
 };
 
+export const ICON_TONE_CLASS_NAMES = {
+  default:
+    "border-[var(--line)] bg-[color:var(--surface-strong)] text-[var(--text-soft)]",
+  success:
+    "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
+  warning:
+    "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
+};
+
 export const ABATEMENT_STATUS_OPTIONS = [
   { value: "all", label: "Todos os status" },
   { value: "pending", label: "Pendentes", tone: "warning" },

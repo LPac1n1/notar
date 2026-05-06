@@ -1,31 +1,8 @@
 import Button from "../../../components/ui/Button";
+import StatusBadge from "../../../components/ui/StatusBadge";
 import { TrashIcon } from "../../../components/ui/icons";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
-
-function getStatusClassName(status) {
-  if (status === "processed") {
-    return "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]";
-  }
-
-  if (status === "error") {
-    return "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[var(--danger)]";
-  }
-
-  return "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]";
-}
-
-function getStatusLabel(status) {
-  if (status === "processed") {
-    return "Processada";
-  }
-
-  if (status === "error") {
-    return "Com erro";
-  }
-
-  return "Pendente";
-}
 
 export default function ImportHistoryItem({
   deletingImportId,
@@ -39,11 +16,7 @@ export default function ImportHistoryItem({
         <p className="break-all font-medium" title={item.fileName}>
           {item.fileName}
         </p>
-        <span
-          className={`mt-2 inline-flex rounded-md border px-2 py-1 text-xs font-semibold ${getStatusClassName(item.status)}`}
-        >
-          {getStatusLabel(item.status)}
-        </span>
+        <StatusBadge className="mt-2" status={item.status} />
       </div>
       <div>
         <p className="text-sm text-[var(--muted)]">Mês</p>

@@ -1,3 +1,5 @@
+import { ICON_TONE_CLASS_NAMES } from "../constants";
+
 export default function OverviewMetric({
   icon: Icon,
   label,
@@ -5,14 +7,7 @@ export default function OverviewMetric({
   helper = "",
   tone = "default",
 }) {
-  const toneClassName = {
-    default:
-      "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--text-soft)]",
-    success:
-      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
-    warning:
-      "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
-  }[tone];
+  const toneClassName = ICON_TONE_CLASS_NAMES[tone] ?? ICON_TONE_CLASS_NAMES.default;
 
   return (
     <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4">
