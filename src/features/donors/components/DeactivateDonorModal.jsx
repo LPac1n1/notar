@@ -5,16 +5,49 @@ import MonthInput from "../../../components/ui/MonthInput";
 import { UserIcon } from "../../../components/ui/icons";
 import { formatMonthYear } from "../../../utils/date";
 
-function buildConstraintHelper(donor) {
-  const startDate = donor?.donationStartDateValue ?? "";
-  const latest = donor?.latestActivityMonth ?? "";
+function getStartDate(donor) {
+  return donor?.donationStartDateValue ?? "";
+}
 
-  if (latest) {
-    return `Selecione um mês posterior a ${formatMonthYear(`${latest}-01`)} (última atividade registrada).`;
-  }
+function getLatestActivity(donor) {
+  return donor?.latestActivityMonth ?? "";
+}
+
+function buildDescription(donor) {
+  const startDate = getStartDate(donor);
+  const latestActivity = getLatestActivity(donor);
+  const baseLine = "A partir deste mês o doador não aparecerá como pendente na gestão mensal.";
+  const constraints = [];
 
   if (startDate) {
-    return `Selecione um mês a partir de ${formatMonthYear(`${startDate}-01`)} (início das doações).`;
+    constraints.push(`igual ou posterior ao início das doações (${formatMonthYear(`${startDate}-01`)})`);
+  }
+
+  if (latestActivity) {
+    constraints.push(`posterior à última atividade registrada (${formatMonthYear(`${latestActivity}-01`)})`);
+  }
+
+  if (constraints.length === 0) {
+    return baseLine;
+  }
+
+  return `${baseLine} O mês precisa ser ${constraints.join(" e ")}.`;
+}
+
+function validateMonth(donor, referenceMonth) {
+  if (!referenceMonth) {
+    return "";
+  }
+
+  const startDate = getStartDate(donor);
+  const latestActivity = getLatestActivity(donor);
+
+  if (startDate && referenceMonth < startDate) {
+    return `A desativação não pode ser anterior ao início das doações (${formatMonthYear(`${startDate}-01`)}).`;
+  }
+
+  if (latestActivity && referenceMonth <= latestActivity) {
+    return `A desativação precisa ser posterior à última atividade registrada (${formatMonthYear(`${latestActivity}-01`)}).`;
   }
 
   return "";
@@ -27,36 +60,25 @@ export default function DeactivateDonorModal({
   isSubmitting,
 }) {
   const [referenceMonth, setReferenceMonth] = useState("");
-  const [error, setError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
-  const startDate = donor?.donationStartDateValue ?? "";
-  const latestActivity = donor?.latestActivityMonth ?? "";
-  const constraintHelper = buildConstraintHelper(donor);
-  const description = constraintHelper
-    ? `A partir deste mês o doador não aparecerá como pendente na gestão mensal. ${constraintHelper}`
-    : "A partir deste mês o doador não aparecerá como pendente na gestão mensal.";
+  const description = buildDescription(donor);
+  const liveValidationError = validateMonth(donor, referenceMonth);
+  const displayedError = submitError || liveValidationError;
+  const canSubmit = Boolean(referenceMonth) && !liveValidationError && !isSubmitting;
 
   const handleConfirm = () => {
     if (!referenceMonth) {
-      setError("Informe o mês de início da inatividade.");
+      setSubmitError("Informe o mês de início da inatividade.");
       return;
     }
 
-    if (startDate && referenceMonth < startDate) {
-      setError(
-        `A desativação não pode ser anterior ao início das doações (${formatMonthYear(`${startDate}-01`)}).`,
-      );
+    if (liveValidationError) {
+      setSubmitError(liveValidationError);
       return;
     }
 
-    if (latestActivity && referenceMonth <= latestActivity) {
-      setError(
-        `A desativação precisa ser posterior à última atividade registrada (${formatMonthYear(`${latestActivity}-01`)}).`,
-      );
-      return;
-    }
-
-    setError("");
+    setSubmitError("");
     onConfirm(referenceMonth);
   };
 
@@ -77,10 +99,10 @@ export default function DeactivateDonorModal({
         label="Inativo a partir de"
         description={description}
         value={referenceMonth}
-        error={error}
+        error={displayedError}
         onChange={(e) => {
           setReferenceMonth(e.target.value);
-          if (e.target.value) setError("");
+          if (submitError) setSubmitError("");
         }}
       />
 
@@ -99,7 +121,7 @@ export default function DeactivateDonorModal({
         <Button
           variant="danger"
           onClick={handleConfirm}
-          disabled={!referenceMonth || isSubmitting}
+          disabled={!canSubmit}
           isLoading={isSubmitting}
           loadingLabel="Desativando..."
         >

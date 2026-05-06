@@ -13,7 +13,6 @@ import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
-import TextInput from "../components/ui/TextInput";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import {
   ACTIVE_STATUS_OPTIONS,
@@ -62,7 +61,7 @@ const EMPTY_DONOR_FORM = {
 };
 
 const INITIAL_DONOR_FILTERS = {
-  name: "",
+  donorId: "",
   cpf: "",
   demand: "",
   donorType: "all",
@@ -78,6 +77,7 @@ const DONOR_FORM_TYPE_OPTIONS = [
 export default function Donors() {
   const location = useLocation();
   const [donors, setDonors] = useState([]);
+  const [donorOptionSource, setDonorOptionSource] = useState([]);
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
@@ -154,6 +154,26 @@ export default function Donors() {
     [demands],
   );
 
+  const donorOptions = useMemo(
+    () =>
+      buildSelectOptions(donorOptionSource, {
+        getValue: (donor) => donor.id,
+        getLabel: (donor) => donor.name,
+        emptyLabel: "Todos os doadores",
+      }),
+    [donorOptionSource],
+  );
+
+  const cpfOptions = useMemo(
+    () =>
+      buildSelectOptions(donorOptionSource, {
+        getValue: (donor) => donor.cpfValue,
+        getLabel: (donor) => donor.cpf,
+        emptyLabel: "Todos os CPFs",
+      }),
+    [donorOptionSource],
+  );
+
   const linkablePeople = useMemo(
     () =>
       people.filter(
@@ -220,13 +240,23 @@ export default function Donors() {
       }
 
       setError("");
-      const donorRows = await listDonors(currentFilters);
+      const optionFilters = {
+        ...currentFilters,
+        donorId: "",
+        cpf: "",
+        demand: "",
+      };
+      const [donorRows, donorOptionRows] = await Promise.all([
+        listDonors(currentFilters),
+        listDonors(optionFilters),
+      ]);
 
       if (requestId !== donorsRequestIdRef.current) {
         return;
       }
 
       setDonors(donorRows);
+      setDonorOptionSource(donorOptionRows);
     } catch (err) {
       if (requestId !== donorsRequestIdRef.current) {
         return;
@@ -340,7 +370,7 @@ export default function Donors() {
     const { name, value } = event.target;
     setFilters((current) => ({
       ...current,
-      [name]: name === "cpf" ? formatCpf(value) : value,
+      [name]: value,
     }));
   };
 
@@ -620,19 +650,25 @@ export default function Donors() {
 
       <SectionCard title="Buscar doadores" className="mb-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <TextInput
-            label="Nome"
-            name="name"
-            placeholder="Filtrar por nome"
-            value={filters.name}
+          <SelectInput
+            label="Doador"
+            name="donorId"
+            value={filters.donorId}
             onChange={handleFilterChange}
+            options={donorOptions}
+            placeholder="Todos os doadores"
+            searchable
+            searchPlaceholder="Buscar doador..."
           />
-          <TextInput
+          <SelectInput
             label="CPF"
             name="cpf"
-            placeholder="Filtrar por CPF"
             value={filters.cpf}
             onChange={handleFilterChange}
+            options={cpfOptions}
+            placeholder="Todos os CPFs"
+            searchable
+            searchPlaceholder="Buscar CPF..."
           />
           <SelectInput
             label="Demanda"

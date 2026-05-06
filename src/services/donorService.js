@@ -33,7 +33,7 @@ import { normalizePersonName } from "../utils/normalize";
 
 export async function listDonors(filters = {}) {
   const {
-    name = "",
+    donorId = "",
     cpf = "",
     demand = "",
     donorType = "",
@@ -48,16 +48,9 @@ export async function listDonors(filters = {}) {
     conditions.push("donors.is_active = FALSE");
   }
 
-  if (name.trim()) {
+  if (donorId.trim()) {
     conditions.push(
-      `(lower(donors.name) LIKE lower('%${escapeSqlString(name.trim())}%')
-        OR EXISTS (
-          SELECT 1
-          FROM donors AS auxiliary_donors
-          WHERE auxiliary_donors.holder_person_id = donors.person_id
-            AND auxiliary_donors.is_active = TRUE
-            AND lower(auxiliary_donors.name) LIKE lower('%${escapeSqlString(name.trim())}%')
-        ))`,
+      `donors.id = '${escapeSqlString(donorId.trim())}'`,
     );
   }
 
@@ -67,14 +60,14 @@ export async function listDonors(filters = {}) {
         SELECT 1
         FROM donor_cpf_links
         WHERE donor_cpf_links.donor_id = donors.id
-          AND donor_cpf_links.cpf LIKE '%${escapeSqlString(normalizeCpf(cpf))}%'
+          AND donor_cpf_links.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
       )
     `);
   }
 
   if (demand.trim()) {
     conditions.push(
-      `lower(coalesce(donors.demand, '')) LIKE lower('%${escapeSqlString(demand.trim())}%')`,
+      `donors.demand = '${escapeSqlString(demand.trim())}'`,
     );
   }
 
