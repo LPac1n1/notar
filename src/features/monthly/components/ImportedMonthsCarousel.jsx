@@ -62,7 +62,7 @@ export default function ImportedMonthsCarousel({
       <div
         ref={railRef}
         aria-label="Meses importados"
-        className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex gap-3 overflow-x-auto pb-3"
       >
         {imports.map((item) => {
           const referenceMonth = item.referenceMonth.slice(0, 7);
