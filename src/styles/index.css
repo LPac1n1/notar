@@ -41,9 +41,6 @@ body,
 
 html {
   background: var(--app-bg);
-  scrollbar-gutter: stable;
-  scrollbar-color: var(--line-strong) transparent;
-  scrollbar-width: thin;
 }
 
 body {
@@ -64,13 +61,13 @@ body {
 }
 
 * {
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   scrollbar-width: thin;
 }
 
 *::-webkit-scrollbar {
-  height: 10px;
-  width: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 *::-webkit-scrollbar-track {
@@ -78,16 +75,16 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border: 3px solid transparent;
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 999px;
-  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
-  border: 3px solid transparent;
-  background-clip: padding-box;
+  background: rgba(255, 255, 255, 0.32);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 button {
