@@ -107,7 +107,7 @@ export default function Imports() {
     initialPageSize: 5,
   });
   const cpfSummaryPagination = usePagination(cpfSummary, {
-    initialPageSize: 25,
+    initialPageSize: 5,
   });
   const debouncedImportFilters = useDebouncedValue(importFilters, 180);
   const debouncedCpfFilters = useDebouncedValue(cpfFilters, 180);
