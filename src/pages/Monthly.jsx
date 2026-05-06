@@ -13,6 +13,7 @@ import {
   WarningIcon,
 } from "../components/ui/icons";
 import { INITIAL_MONTHLY_FILTERS } from "../features/monthly/constants";
+import BulkAbatementModal from "../features/monthly/components/BulkAbatementModal";
 import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
 import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
 import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
@@ -127,6 +128,8 @@ export default function Monthly() {
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingJpeg, setIsExportingJpeg] = useState(false);
+  const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
+  const [isBulkAbating, setIsBulkAbating] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
@@ -623,6 +626,61 @@ export default function Monthly() {
     }
   };
 
+  const handleBulkAbate = async (summaryIds) => {
+    if (summaryIds.length === 0) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsBulkAbating(true);
+
+      const affectedSummaries = summaries.filter((s) =>
+        summaryIds.includes(s.id),
+      );
+      const totalAmount = affectedSummaries.reduce(
+        (sum, s) => sum + Number(s.abatementAmount ?? 0),
+        0,
+      );
+
+      await updateAbatementStatusesWithHistory({
+        history: {
+          actionType: "monthly_abatement_status_update",
+          entityType: "monthly_abatement",
+          entityId: "bulk",
+          label: "Abatimento em massa",
+          description: `${formatInteger(summaryIds.length)} abatimento(s) marcado(s) como realizado.`,
+          payload: {
+            summaryIds,
+            donorCount: new Set(affectedSummaries.map((s) => s.donorId)).size,
+            totalAmount,
+            operation: "bulk",
+          },
+        },
+        status: "applied",
+        summaryIds,
+      });
+
+      await loadSummaries();
+      setShowBulkAbatementModal(false);
+      setSuccessMessage(
+        `${formatInteger(summaryIds.length)} abatimento(s) realizado(s) — ${formatCurrency(totalAmount)} total.`,
+      );
+    } catch (err) {
+      console.error(
+        "Erro ao realizar abatimento em massa:",
+        getErrorMessage(err, "Erro desconhecido."),
+      );
+      setError(
+        getErrorMessage(err, "Não foi possível realizar o abatimento em massa."),
+      );
+    } finally {
+      setIsBulkAbating(false);
+    }
+  };
+
   const handleClearRefinements = () => {
     setFilters((current) => ({
       ...current,
@@ -891,10 +949,12 @@ export default function Monthly() {
 
         <MonthlySummaryToolbar
           metrics={overviewMetrics}
+          onBulkAbate={() => setShowBulkAbatementModal(true)}
           onClearRefinements={handleClearRefinements}
           onExportCsv={handleExport}
           onExportPdf={handleExportPdf}
           onExportJpeg={handleExportJpeg}
+          isBulkAbateDisabled={summaries.length === 0}
           isExportingCsv={isExporting}
           isExportingPdf={isExportingPdf}
           isExportingJpeg={isExportingJpeg}
@@ -964,6 +1024,15 @@ export default function Monthly() {
           />
         )}
       </SectionCard>
+
+      {showBulkAbatementModal ? (
+        <BulkAbatementModal
+          summaries={summaries}
+          onApply={handleBulkAbate}
+          onClose={() => setShowBulkAbatementModal(false)}
+          isApplying={isBulkAbating}
+        />
+      ) : null}
     </div>
   );
 }

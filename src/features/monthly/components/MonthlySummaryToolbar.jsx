@@ -1,5 +1,6 @@
 import Button from "../../../components/ui/Button";
 import {
+  CheckIcon,
   DownloadIcon,
   FileIcon,
 } from "../../../components/ui/icons";
@@ -7,10 +8,12 @@ import OverviewMetric from "./OverviewMetric";
 
 export default function MonthlySummaryToolbar({
   metrics,
+  onBulkAbate,
   onClearRefinements,
   onExportCsv,
   onExportPdf,
   onExportJpeg,
+  isBulkAbateDisabled,
   isExportingCsv,
   isExportingPdf,
   isExportingJpeg,
@@ -32,6 +35,14 @@ export default function MonthlySummaryToolbar({
       </div>
 
       <div className="flex flex-wrap gap-3">
+        <Button
+          variant="primary"
+          onClick={onBulkAbate}
+          disabled={isBulkAbateDisabled}
+          leftIcon={<CheckIcon className="h-4 w-4" />}
+        >
+          Abater em massa
+        </Button>
         <Button
           variant="subtle"
           onClick={onClearRefinements}
