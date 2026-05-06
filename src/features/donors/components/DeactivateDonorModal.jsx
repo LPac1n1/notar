@@ -15,7 +15,7 @@ export default function DeactivateDonorModal({
 
   const handleConfirm = () => {
     if (!referenceMonth) {
-      setError("Informe o mês em que o doador parou de doar.");
+      setError("Informe o mês de início da inatividade.");
       return;
     }
 
@@ -26,27 +26,30 @@ export default function DeactivateDonorModal({
   return (
     <Modal
       title="Desativar doador"
-      description={`${donor.name} será marcado como inativo. Todos os dados e histórico serão mantidos.`}
+      description="Confirme o período de início da inatividade."
       icon={<UserIcon className="h-5 w-5" />}
       onClose={isSubmitting ? undefined : onClose}
       size="sm"
     >
-      <div className="space-y-4">
-        <MonthInput
-          label="Mês em que parou de doar"
-          description="A partir deste mês o doador não gerará pendências na gestão mensal."
-          value={referenceMonth}
-          error={error}
-          onChange={(e) => {
-            setReferenceMonth(e.target.value);
-            if (e.target.value) setError("");
-          }}
-        />
-
-        <div className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-4 py-3 text-sm text-[var(--warning)]">
-          O doador continuará visível no sistema com o histórico completo. Você poderá reativá-lo a qualquer momento.
-        </div>
+      <div className="mb-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3">
+        <p className="text-xs text-[var(--muted)]">Doador</p>
+        <p className="font-semibold text-[var(--text-main)]">{donor.name}</p>
       </div>
+
+      <MonthInput
+        label="Inativo a partir de"
+        description="A partir deste mês o doador não aparecerá como pendente na gestão mensal."
+        value={referenceMonth}
+        error={error}
+        onChange={(e) => {
+          setReferenceMonth(e.target.value);
+          if (e.target.value) setError("");
+        }}
+      />
+
+      <p className="mt-4 text-sm text-[var(--muted)]">
+        O doador continuará visível no sistema com todo o histórico de doações. Você poderá reativá-lo a qualquer momento.
+      </p>
 
       <div className="mt-5 flex justify-end gap-3">
         <Button

@@ -26,23 +26,26 @@ export default function ReactivateDonorModal({
   return (
     <Modal
       title="Reativar doador"
-      description={`${donor.name} voltará a ser considerado nas pendências de gestão mensal a partir do mês informado.`}
+      description="Confirme o mês de retorno das doações."
       icon={<UserIcon className="h-5 w-5" />}
       onClose={isSubmitting ? undefined : onClose}
       size="sm"
     >
-      <div className="space-y-4">
-        <MonthInput
-          label="Mês de retorno das doações"
-          description="A partir deste mês o doador voltará a aparecer na gestão mensal."
-          value={referenceMonth}
-          error={error}
-          onChange={(e) => {
-            setReferenceMonth(e.target.value);
-            if (e.target.value) setError("");
-          }}
-        />
+      <div className="mb-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3">
+        <p className="text-xs text-[var(--muted)]">Doador</p>
+        <p className="font-semibold text-[var(--text-main)]">{donor.name}</p>
       </div>
+
+      <MonthInput
+        label="Ativo a partir de"
+        description="A partir deste mês o doador voltará a aparecer como pendente na gestão mensal."
+        value={referenceMonth}
+        error={error}
+        onChange={(e) => {
+          setReferenceMonth(e.target.value);
+          if (e.target.value) setError("");
+        }}
+      />
 
       <div className="mt-5 flex justify-end gap-3">
         <Button
