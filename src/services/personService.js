@@ -153,22 +153,22 @@ export async function findPersonByCpf(cpf) {
 
 export async function listPeople(filters = {}) {
   const {
-    name = "",
+    personId = "",
     cpf = "",
     role = "",
   } = filters;
 
   const conditions = ["people.is_active = TRUE"];
 
-  if (name.trim()) {
+  if (personId.trim()) {
     conditions.push(
-      `lower(people.name) LIKE lower('%${escapeSqlString(name.trim())}%')`,
+      `people.id = '${escapeSqlString(personId.trim())}'`,
     );
   }
 
   if (cpf.trim()) {
     conditions.push(
-      `people.cpf LIKE '%${escapeSqlString(normalizeCpf(cpf))}%'`,
+      `people.cpf = '${escapeSqlString(normalizeCpf(cpf))}'`,
     );
   }
 

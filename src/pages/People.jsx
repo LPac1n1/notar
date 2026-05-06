@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
@@ -12,6 +12,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import PaginationControls from "../components/ui/PaginationControls";
 import SectionCard from "../components/ui/SectionCard";
+import SelectInput from "../components/ui/SelectInput";
 import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
 import {
@@ -28,6 +29,7 @@ import {
 import { restoreTrashItem } from "../services/trashService";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCpf } from "../utils/cpf";
+import { buildSelectOptions } from "../utils/select";
 import { getErrorMessage } from "../utils/error";
 import {
   getFirstValidationError,
@@ -46,12 +48,13 @@ const EMPTY_PERSON_FORM = {
 };
 
 const INITIAL_FILTERS = {
-  name: "",
+  personId: "",
   cpf: "",
 };
 
 export default function People() {
   const [people, setPeople] = useState([]);
+  const [peopleOptionSource, setPeopleOptionSource] = useState([]);
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
   const [createForm, setCreateForm] = useState({ ...EMPTY_PERSON_FORM });
   const [createFormErrors, setCreateFormErrors] = useState({});
@@ -89,16 +92,22 @@ export default function People() {
       }
 
       setError("");
-      const personRows = await listPeople({
+      const optionFilters = {
         ...currentFilters,
-        role: "reference",
-      });
+        personId: "",
+        cpf: "",
+      };
+      const [personRows, personOptionRows] = await Promise.all([
+        listPeople({ ...currentFilters, role: "reference" }),
+        listPeople({ ...optionFilters, role: "reference" }),
+      ]);
 
       if (requestId !== peopleRequestIdRef.current) {
         return;
       }
 
       setPeople(personRows);
+      setPeopleOptionSource(personOptionRows);
     } catch (err) {
       if (requestId !== peopleRequestIdRef.current) {
         return;
@@ -175,9 +184,29 @@ export default function People() {
     const { name, value } = event.target;
     setFilters((current) => ({
       ...current,
-      [name]: name === "cpf" ? formatCpf(value) : value,
+      [name]: value,
     }));
   };
+
+  const personOptions = useMemo(
+    () =>
+      buildSelectOptions(peopleOptionSource, {
+        getValue: (person) => person.id,
+        getLabel: (person) => person.name,
+        emptyLabel: "Todas as pessoas",
+      }),
+    [peopleOptionSource],
+  );
+
+  const cpfOptions = useMemo(
+    () =>
+      buildSelectOptions(peopleOptionSource, {
+        getValue: (person) => person.cpfValue,
+        getLabel: (person) => person.cpf,
+        emptyLabel: "Todos os CPFs",
+      }),
+    [peopleOptionSource],
+  );
 
   const handleClearFilters = () => {
     setFilters({ ...INITIAL_FILTERS });
@@ -330,19 +359,25 @@ export default function People() {
 
       <SectionCard title="Buscar pessoas" className="mb-4">
         <div className="grid gap-3 md:grid-cols-2">
-          <TextInput
-            label="Nome"
-            name="name"
-            placeholder="Filtrar por nome"
-            value={filters.name}
+          <SelectInput
+            label="Pessoa"
+            name="personId"
+            value={filters.personId}
             onChange={handleFilterChange}
+            options={personOptions}
+            placeholder="Todas as pessoas"
+            searchable
+            searchPlaceholder="Buscar pessoa..."
           />
-          <TextInput
+          <SelectInput
             label="CPF"
             name="cpf"
-            placeholder="Filtrar por CPF"
             value={filters.cpf}
             onChange={handleFilterChange}
+            options={cpfOptions}
+            placeholder="Todos os CPFs"
+            searchable
+            searchPlaceholder="Buscar CPF..."
           />
         </div>
 

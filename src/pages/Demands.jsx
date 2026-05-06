@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -10,6 +10,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
+import SelectInput from "../components/ui/SelectInput";
 import TextInput from "../components/ui/TextInput";
 import {
   EditIcon,
@@ -30,12 +31,13 @@ import {
 } from "../utils/demandColor";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
+import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 
 const INITIAL_DEMAND_FILTERS = {
-  name: "",
+  demandId: "",
 };
 
 const EMPTY_DEMAND_FORM = {
@@ -45,6 +47,7 @@ const EMPTY_DEMAND_FORM = {
 
 export default function Demands() {
   const [demands, setDemands] = useState([]);
+  const [demandOptionSource, setDemandOptionSource] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DEMAND_FORM });
   const [editForm, setEditForm] = useState({ ...EMPTY_DEMAND_FORM });
   const [editingDemand, setEditingDemand] = useState(null);
@@ -85,13 +88,18 @@ export default function Demands() {
       }
 
       setError("");
-      const demandRows = await listDemands(currentFilters);
+      const optionFilters = { ...currentFilters, demandId: "" };
+      const [demandRows, optionRows] = await Promise.all([
+        listDemands(currentFilters),
+        listDemands(optionFilters),
+      ]);
 
       if (requestId !== demandsRequestIdRef.current) {
         return;
       }
 
       setDemands(demandRows);
+      setDemandOptionSource(optionRows);
     } catch (err) {
       if (requestId !== demandsRequestIdRef.current) {
         return;
@@ -270,6 +278,16 @@ export default function Demands() {
     await loadDemands(clearedFilters);
   };
 
+  const demandFilterOptions = useMemo(
+    () =>
+      buildSelectOptions(demandOptionSource, {
+        getValue: (demand) => demand.id,
+        getLabel: (demand) => demand.name,
+        emptyLabel: "Todas as demandas",
+      }),
+    [demandOptionSource],
+  );
+
   if (isLoading && !demands.length && !error) {
     return (
       <div>
@@ -311,12 +329,15 @@ export default function Demands() {
 
       <SectionCard title="Buscar demandas" className="mb-4">
         <div className="grid gap-3">
-          <TextInput
-            label="Nome"
-            name="name"
-            placeholder="Filtrar por nome"
-            value={filters.name}
+          <SelectInput
+            label="Demanda"
+            name="demandId"
+            value={filters.demandId}
             onChange={handleFilterChange}
+            options={demandFilterOptions}
+            placeholder="Todas as demandas"
+            searchable
+            searchPlaceholder="Buscar demanda..."
           />
         </div>
 

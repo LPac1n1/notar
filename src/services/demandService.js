@@ -10,13 +10,11 @@ import {
 import { normalizeDemandName } from "../utils/normalize";
 
 export async function listDemands(filters = {}) {
-  const { name = "" } = filters;
+  const { demandId = "" } = filters;
   const conditions = [];
 
-  if (name.trim()) {
-    conditions.push(
-      `lower(name) LIKE lower('%${escapeSqlString(name.trim())}%')`,
-    );
+  if (demandId.trim()) {
+    conditions.push(`id = '${escapeSqlString(demandId.trim())}'`);
   }
 
   const whereClause =
