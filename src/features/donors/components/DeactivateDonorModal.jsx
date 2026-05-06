@@ -3,6 +3,22 @@ import Button from "../../../components/ui/Button";
 import Modal from "../../../components/ui/Modal";
 import MonthInput from "../../../components/ui/MonthInput";
 import { UserIcon } from "../../../components/ui/icons";
+import { formatMonthYear } from "../../../utils/date";
+
+function buildConstraintHelper(donor) {
+  const startDate = donor?.donationStartDateValue ?? "";
+  const latest = donor?.latestActivityMonth ?? "";
+
+  if (latest) {
+    return `Selecione um mês posterior a ${formatMonthYear(`${latest}-01`)} (última atividade registrada).`;
+  }
+
+  if (startDate) {
+    return `Selecione um mês a partir de ${formatMonthYear(`${startDate}-01`)} (início das doações).`;
+  }
+
+  return "";
+}
 
 export default function DeactivateDonorModal({
   donor,
@@ -13,9 +29,30 @@ export default function DeactivateDonorModal({
   const [referenceMonth, setReferenceMonth] = useState("");
   const [error, setError] = useState("");
 
+  const startDate = donor?.donationStartDateValue ?? "";
+  const latestActivity = donor?.latestActivityMonth ?? "";
+  const constraintHelper = buildConstraintHelper(donor);
+  const description = constraintHelper
+    ? `A partir deste mês o doador não aparecerá como pendente na gestão mensal. ${constraintHelper}`
+    : "A partir deste mês o doador não aparecerá como pendente na gestão mensal.";
+
   const handleConfirm = () => {
     if (!referenceMonth) {
       setError("Informe o mês de início da inatividade.");
+      return;
+    }
+
+    if (startDate && referenceMonth < startDate) {
+      setError(
+        `A desativação não pode ser anterior ao início das doações (${formatMonthYear(`${startDate}-01`)}).`,
+      );
+      return;
+    }
+
+    if (latestActivity && referenceMonth <= latestActivity) {
+      setError(
+        `A desativação precisa ser posterior à última atividade registrada (${formatMonthYear(`${latestActivity}-01`)}).`,
+      );
       return;
     }
 
@@ -38,7 +75,7 @@ export default function DeactivateDonorModal({
 
       <MonthInput
         label="Inativo a partir de"
-        description="A partir deste mês o doador não aparecerá como pendente na gestão mensal."
+        description={description}
         value={referenceMonth}
         error={error}
         onChange={(e) => {

@@ -50,6 +50,9 @@ export function mapDonorRow(row) {
     deactivatedSince: row.deactivated_since
       ? String(row.deactivated_since).slice(0, 7)
       : "",
+    latestActivityMonth: row.latest_activity_month
+      ? String(row.latest_activity_month).slice(0, 7)
+      : "",
     createdAt: row.created_at ?? "",
     linkedCpfCount: Number(row.linked_cpf_count ?? 0),
     auxiliaryCount: Number(row.auxiliary_count ?? 0),

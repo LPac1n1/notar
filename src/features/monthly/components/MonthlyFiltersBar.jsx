@@ -25,12 +25,14 @@ export default function MonthlyFiltersBar({
         }`}
       >
         <MonthInput
+          label="Mês"
           name="referenceMonth"
           value={filters.referenceMonth}
           onChange={onChange}
         />
 
         <SelectInput
+          label="Doador"
           name="donorId"
           value={filters.donorId}
           onChange={onChange}
@@ -42,6 +44,7 @@ export default function MonthlyFiltersBar({
 
         {hasSelectedReferenceMonth ? (
           <SelectInput
+            label="Atividade no mês"
             name="donationActivity"
             value={filters.donationActivity}
             onChange={onChange}
@@ -51,6 +54,7 @@ export default function MonthlyFiltersBar({
         ) : null}
 
         <SelectInput
+          label="Status do abatimento"
           name="abatementStatus"
           value={filters.abatementStatus}
           onChange={onChange}
@@ -60,6 +64,7 @@ export default function MonthlyFiltersBar({
         />
 
         <SelectInput
+          label="Ordenação"
           name="abatementSort"
           value={filters.abatementSort}
           onChange={onChange}
@@ -70,14 +75,16 @@ export default function MonthlyFiltersBar({
 
       <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <SelectInput
+          label="Tipo"
           name="donorType"
           value={filters.donorType}
           onChange={onChange}
           options={DONOR_TYPE_OPTIONS}
-          placeholder="Titulares e auxiliares"
+          placeholder="Todos os tipos"
         />
 
         <SelectInput
+          label="Início das doações"
           name="donationStartDate"
           value={filters.donationStartDate}
           onChange={onChange}
@@ -86,6 +93,7 @@ export default function MonthlyFiltersBar({
         />
 
         <SelectInput
+          label="CPF"
           name="cpf"
           value={filters.cpf}
           onChange={onChange}
@@ -96,6 +104,7 @@ export default function MonthlyFiltersBar({
         />
 
         <SelectInput
+          label="Demanda"
           name="demand"
           value={filters.demand}
           onChange={onChange}

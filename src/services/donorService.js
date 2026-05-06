@@ -78,7 +78,7 @@ export async function listDonors(filters = {}) {
     );
   }
 
-  if (donorType.trim()) {
+  if (donorType === "holder" || donorType === "auxiliary") {
     conditions.push(
       `donors.donor_type = '${escapeSqlString(normalizeDonorType(donorType))}'`,
     );
@@ -116,6 +116,13 @@ export async function listDonors(filters = {}) {
         ORDER BY donor_activity_history.reference_month DESC
         LIMIT 1
       ), '') AS deactivated_since,
+      coalesce((
+        SELECT strftime(donor_activity_history.reference_month, '%Y-%m-01')
+        FROM donor_activity_history
+        WHERE donor_activity_history.donor_id = donors.id
+        ORDER BY donor_activity_history.reference_month DESC, donor_activity_history.created_at DESC
+        LIMIT 1
+      ), '') AS latest_activity_month,
       coalesce((
         SELECT count(*)
         FROM donor_cpf_links
@@ -359,6 +366,24 @@ export async function updateDonor({
     { required: normalizedDonorType === "holder" },
   );
   const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
+
+  if (normalizedStartDate) {
+    const conflictingActivityRows = await query(`
+      SELECT strftime(reference_month, '%Y-%m-01') AS reference_month
+      FROM donor_activity_history
+      WHERE donor_id = '${escapeSqlString(id)}'
+      ORDER BY reference_month ASC
+      LIMIT 1
+    `);
+    const earliestEventMonth = conflictingActivityRows[0]?.reference_month ?? "";
+
+    if (earliestEventMonth && earliestEventMonth < normalizedStartDate) {
+      const [year, month] = earliestEventMonth.slice(0, 7).split("-");
+      throw new Error(
+        `O início das doações não pode ser posterior ao histórico de atividade já registrado (${month}/${year}).`,
+      );
+    }
+  }
 
   await runInTransaction(async () => {
     await execute(`
@@ -777,6 +802,7 @@ export async function getDonorProfile(donorId) {
   `);
 
   const lastDeactivation = activityRows.filter((r) => r.event_type === "deactivated").at(-1);
+  const latestActivity = activityRows.at(-1);
 
   return {
     donor: {
@@ -800,6 +826,9 @@ export async function getDonorProfile(donorId) {
       isActive: Boolean(donor.is_active),
       deactivatedSince: lastDeactivation
         ? String(lastDeactivation.reference_month).slice(0, 7)
+        : "",
+      latestActivityMonth: latestActivity
+        ? String(latestActivity.reference_month).slice(0, 7)
         : "",
       createdAt: donor.created_at ?? "",
     },
@@ -845,9 +874,31 @@ export async function getDonorProfile(donorId) {
   };
 }
 
-export async function deactivateDonor(donorId, referenceMonth) {
+function normalizeMonthValue(value) {
+  if (!value) {
+    return null;
+  }
+
+  const text = String(value).slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(text) ? `${text}-01` : null;
+}
+
+function formatMonthLabel(monthIso) {
+  if (!monthIso || !/^\d{4}-\d{2}/.test(monthIso)) {
+    return monthIso ?? "";
+  }
+
+  const [year, month] = monthIso.slice(0, 7).split("-");
+  return `${month}/${year}`;
+}
+
+async function getDonorActivityContext(donorId) {
   const donorRows = await query(`
-    SELECT id, name, is_active
+    SELECT
+      id,
+      name,
+      is_active,
+      strftime(donation_start_date, '%Y-%m-01') AS donation_start_date
     FROM donors
     WHERE id = '${escapeSqlString(donorId)}'
     LIMIT 1
@@ -857,16 +908,47 @@ export async function deactivateDonor(donorId, referenceMonth) {
     throw new Error("Doador não encontrado.");
   }
 
-  if (!donorRows[0].is_active) {
+  const activityRows = await query(`
+    SELECT
+      event_type,
+      strftime(reference_month, '%Y-%m-01') AS reference_month
+    FROM donor_activity_history
+    WHERE donor_id = '${escapeSqlString(donorId)}'
+    ORDER BY reference_month DESC, created_at DESC
+  `);
+
+  return {
+    donor: donorRows[0],
+    activityHistory: activityRows,
+    latestEvent: activityRows[0] ?? null,
+  };
+}
+
+export async function deactivateDonor(donorId, referenceMonth) {
+  const normalizedMonth = normalizeMonthValue(referenceMonth);
+
+  if (!normalizedMonth) {
+    throw new Error("Informe um mês válido para a desativação.");
+  }
+
+  const { donor, latestEvent } = await getDonorActivityContext(donorId);
+
+  if (!donor.is_active) {
     throw new Error("O doador já está inativo.");
   }
 
-  const normalizedMonth = referenceMonth
-    ? `${String(referenceMonth).slice(0, 7)}-01`
-    : null;
+  if (donor.donation_start_date && normalizedMonth < donor.donation_start_date) {
+    throw new Error(
+      `A desativação não pode ser anterior ao início das doações (${formatMonthLabel(donor.donation_start_date)}).`,
+    );
+  }
 
-  if (!normalizedMonth) {
-    throw new Error("Mês de desativação inválido.");
+  if (latestEvent && normalizedMonth <= latestEvent.reference_month) {
+    const eventLabel =
+      latestEvent.event_type === "activated" ? "reativação" : "desativação";
+    throw new Error(
+      `A desativação precisa ser posterior à última ${eventLabel} registrada (${formatMonthLabel(latestEvent.reference_month)}).`,
+    );
   }
 
   await runInTransaction(async () => {
@@ -892,34 +974,37 @@ export async function deactivateDonor(donorId, referenceMonth) {
     actionType: "update",
     entityType: "donor",
     entityId: donorId,
-    label: donorRows[0].name,
-    description: `Doador ${donorRows[0].name} desativado a partir de ${referenceMonth}.`,
-    payload: { referenceMonth },
+    label: donor.name,
+    description: `Doador ${donor.name} desativado a partir de ${formatMonthLabel(normalizedMonth)}.`,
+    payload: { referenceMonth: normalizedMonth.slice(0, 7) },
   });
 }
 
 export async function reactivateDonor(donorId, referenceMonth) {
-  const donorRows = await query(`
-    SELECT id, name, is_active
-    FROM donors
-    WHERE id = '${escapeSqlString(donorId)}'
-    LIMIT 1
-  `);
+  const normalizedMonth = normalizeMonthValue(referenceMonth);
 
-  if (donorRows.length === 0) {
-    throw new Error("Doador não encontrado.");
+  if (!normalizedMonth) {
+    throw new Error("Informe um mês válido para a reativação.");
   }
 
-  if (donorRows[0].is_active) {
+  const { donor, latestEvent } = await getDonorActivityContext(donorId);
+
+  if (donor.is_active) {
     throw new Error("O doador já está ativo.");
   }
 
-  const normalizedMonth = referenceMonth
-    ? `${String(referenceMonth).slice(0, 7)}-01`
-    : null;
+  if (donor.donation_start_date && normalizedMonth < donor.donation_start_date) {
+    throw new Error(
+      `A reativação não pode ser anterior ao início das doações (${formatMonthLabel(donor.donation_start_date)}).`,
+    );
+  }
 
-  if (!normalizedMonth) {
-    throw new Error("Mês de reativação inválido.");
+  if (latestEvent && normalizedMonth <= latestEvent.reference_month) {
+    const eventLabel =
+      latestEvent.event_type === "deactivated" ? "desativação" : "reativação";
+    throw new Error(
+      `A reativação precisa ser posterior à última ${eventLabel} registrada (${formatMonthLabel(latestEvent.reference_month)}).`,
+    );
   }
 
   await runInTransaction(async () => {
@@ -945,8 +1030,25 @@ export async function reactivateDonor(donorId, referenceMonth) {
     actionType: "update",
     entityType: "donor",
     entityId: donorId,
-    label: donorRows[0].name,
-    description: `Doador ${donorRows[0].name} reativado a partir de ${referenceMonth}.`,
-    payload: { referenceMonth },
+    label: donor.name,
+    description: `Doador ${donor.name} reativado a partir de ${formatMonthLabel(normalizedMonth)}.`,
+    payload: { referenceMonth: normalizedMonth.slice(0, 7) },
   });
+}
+
+export async function getDonorActivityConstraints(donorId) {
+  const { donor, latestEvent } = await getDonorActivityContext(donorId);
+  const startDate = donor.donation_start_date
+    ? String(donor.donation_start_date).slice(0, 7)
+    : "";
+  const latestEventMonth = latestEvent
+    ? String(latestEvent.reference_month).slice(0, 7)
+    : "";
+
+  return {
+    donationStartMonth: startDate,
+    latestEventMonth,
+    latestEventType: latestEvent?.event_type ?? "",
+    isActive: Boolean(donor.is_active),
+  };
 }

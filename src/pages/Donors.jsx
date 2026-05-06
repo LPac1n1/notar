@@ -15,6 +15,11 @@ import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
 import TextInput from "../components/ui/TextInput";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
+import {
+  ACTIVE_STATUS_OPTIONS,
+  DONATION_START_DATE_OPTIONS,
+  DONOR_TYPE_OPTIONS,
+} from "../features/donors/constants";
 import DonorForm from "../features/donors/components/DonorForm";
 import DonorListItem from "../features/donors/components/DonorListItem";
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
@@ -60,32 +65,14 @@ const INITIAL_DONOR_FILTERS = {
   name: "",
   cpf: "",
   demand: "",
-  donorType: "",
+  donorType: "all",
   donationStartDate: "all",
   activeStatus: "active",
 };
 
-const DONOR_TYPE_OPTIONS = [
-  { value: "", label: "Todos os tipos" },
-  { value: "holder", label: "Titulares", tone: "default" },
-  { value: "auxiliary", label: "Auxiliares", tone: "default" },
-];
-
-const DONATION_START_DATE_OPTIONS = [
-  { value: "all", label: "Com ou sem data de início" },
-  { value: "with-date", label: "Com data de início", tone: "success" },
-  { value: "without-date", label: "Sem data de início", tone: "warning" },
-];
-
 const DONOR_FORM_TYPE_OPTIONS = [
   { value: "holder", label: "Titular" },
   { value: "auxiliary", label: "Auxiliar" },
-];
-
-const ACTIVE_STATUS_OPTIONS = [
-  { value: "active", label: "Apenas ativos", tone: "success" },
-  { value: "inactive", label: "Apenas inativos", tone: "default" },
-  { value: "all", label: "Todos", tone: "default" },
 ];
 
 export default function Donors() {
