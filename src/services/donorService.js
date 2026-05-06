@@ -525,6 +525,23 @@ export async function deleteDonor(id) {
           AND donor_type = 'auxiliary'
           AND holder_donor_id = '${escapeSqlString(id)}'
       `);
+
+      const stillReferencedRows = await query(`
+        SELECT count(*) AS cnt
+        FROM donors
+        WHERE holder_person_id = '${escapeSqlString(donor.person_id)}'
+          AND donor_type = 'auxiliary'
+          AND is_active = TRUE
+      `);
+
+      const isStillReferenced = Number(stillReferencedRows[0]?.cnt ?? 0) > 0;
+
+      if (!isStillReferenced) {
+        await execute(`
+          DELETE FROM people
+          WHERE id = '${escapeSqlString(donor.person_id)}'
+        `);
+      }
     }
   });
 
