@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Button from "../../../components/ui/Button";
 import {
   ChevronLeftIcon,
@@ -13,6 +13,52 @@ export default function ImportedMonthsCarousel({
   onSelectMonth,
 }) {
   const railRef = useRef(null);
+  const [scrollState, setScrollState] = useState({
+    left: 0,
+    scrollWidth: 0,
+    clientWidth: 0,
+  });
+
+  useEffect(() => {
+    const rail = railRef.current;
+
+    if (!rail) {
+      return undefined;
+    }
+
+    const update = () => {
+      setScrollState({
+        left: rail.scrollLeft,
+        scrollWidth: rail.scrollWidth,
+        clientWidth: rail.clientWidth,
+      });
+    };
+
+    update();
+    rail.addEventListener("scroll", update, { passive: true });
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(rail);
+
+    return () => {
+      rail.removeEventListener("scroll", update);
+      resizeObserver.disconnect();
+    };
+  }, [imports.length]);
+
+  const isOverflowing = scrollState.scrollWidth > scrollState.clientWidth + 1;
+  const thumbWidthPercent = isOverflowing
+    ? Math.max(
+        (scrollState.clientWidth / scrollState.scrollWidth) * 100,
+        12,
+      )
+    : 100;
+  const maxScrollLeft = Math.max(
+    scrollState.scrollWidth - scrollState.clientWidth,
+    1,
+  );
+  const thumbLeftPercent = isOverflowing
+    ? (scrollState.left / maxScrollLeft) * (100 - thumbWidthPercent)
+    : 0;
 
   const scrollByPage = (direction) => {
     const rail = railRef.current;
@@ -62,7 +108,7 @@ export default function ImportedMonthsCarousel({
       <div
         ref={railRef}
         aria-label="Meses importados"
-        className="flex gap-3 overflow-x-auto pb-3"
+        className="flex gap-3 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {imports.map((item) => {
           const referenceMonth = item.referenceMonth.slice(0, 7);
@@ -119,6 +165,18 @@ export default function ImportedMonthsCarousel({
           );
         })}
       </div>
+
+      {isOverflowing ? (
+        <div className="mt-3 h-1.5 w-full rounded-full bg-[color:var(--line)]">
+          <div
+            className="h-full rounded-full bg-[color:var(--line-strong)]"
+            style={{
+              width: `${thumbWidthPercent}%`,
+              marginLeft: `${thumbLeftPercent}%`,
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
