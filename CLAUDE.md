@@ -20,14 +20,17 @@ Objetivo: corrigir os fundamentos do banco antes de qualquer feature nova mexer 
 
 **Estado atual:** `db.js` é barrel limpo. Schema é versionado. Logger central instalado. Testes de migração reais rodando contra DuckDB no Node.
 
-### Fase 2 — Limpar duplicação de UI
+### Fase 2 — Limpar duplicação de UI ✅ CONCLUÍDA (commits 70-73)
 
 Objetivo: parar de copiar boilerplate de loader/filtros entre páginas.
 
-- [ ] **M1** — Extrair hooks `useDonorsPage`, `usePeoplePage`, `useDemandsPage`, `useImportsPage`, `useMonthlyPage`. Página vira orquestrador fino.
-- [ ] **M2/M3** — Hook genérico `useDataResource(loader, filters, { debounceMs, neutralizedKeys })` que devolve `{ data, optionSource, isLoading, isRefreshing, error, reload }`. Substitui o padrão de "race-safe loader + option source neutralizado" duplicado em 5 páginas.
-- [ ] **M4** — Padronizar convenção: `list*` → array, `get*` → objeto único, `find*` → pode retornar null. Auditar exports de todos os services.
-- [ ] **P2** — Mover constantes compartilhadas (DONOR_TYPE_OPTIONS, ACTIVE_STATUS_OPTIONS, DONATION_START_DATE_OPTIONS) para `src/constants/filterOptions.js`. Hoje moram em `features/donors/constants.js` re-exportadas em `features/monthly/constants.js`.
+- [x] **P2** — Constantes compartilhadas movidas para `src/constants/filterOptions.js` (`DONOR_TYPE_OPTIONS`, `DONATION_START_DATE_OPTIONS`, `ACTIVE_STATUS_OPTIONS`). `features/donors/constants.js` removido. `features/monthly/constants.js` re-exporta do novo path. [commit 70]
+- [x] **M2/M3** — `src/hooks/useDataResource.js` criado: hook genérico com race-safe loader, debounce de filtros, optionSource neutralizado, isLoading/isRefreshing/error/setError/reload, captura de erro via `logError`. Substitui ~150 linhas de boilerplate duplicado nas páginas. [commits 71-72]
+- [x] **M1** — Decidi NÃO criar `useDonorsPage`/`usePeoplePage`/etc. porque o `useDataResource` já elimina a duplicação (a parte que era genérica). O resto do código de página (mutações, modais, navegação) é genuinamente page-specific — extrair daria só um wrapper sem reduzir complexidade. Resultado: páginas ficaram 56-150 linhas menores e o boilerplate sumiu. [commits 71-72]
+- [x] **M4** — Auditoria de naming: `getPersonById` e `getHolderPersonContext` retornavam null mas usavam prefixo `get*`. Renomeados para `findPersonById` e `findHolderPersonContext`. Os outros `list*`/`get*` estão consistentes. [commit 73]
+- [x] **Cleanup adicional**: removido `donorWhereClause` morto em `monthlyService.js` e import não-usado de `formatInteger` em `donationPdfReportService.js`. ESLint agora sai com 0 erros e 0 warnings em todo `src/`. [commit 73]
+
+**Estado atual:** Pages: Demands 524→468 (-56), People 607→544 (-63), Donors 869→786 (-83), Imports 816→666 (-150), Monthly 1.038→1.010 (-28). Total: -380 linhas. Padrão de loader unificado. Naming `find*`/`get*` consistente. Lint limpo. Todos 37 testes passando, build OK.
 
 ### Fase 3 — Reduzir SQL injetável
 
