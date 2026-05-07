@@ -8,22 +8,17 @@ SPA local-first em React 19 + Vite + Tailwind 4 + DuckDB-WASM (OPFS / File Syste
 
 O usuário aprovou e quer executar **Fases 1, 2 e 3** do roadmap definido no diagnóstico técnico (ver histórico em `commit 62` e mensagem subsequente). Após terminar Fase 3, vamos refazer a análise técnica para reavaliar prioridades. As fases 4 e 5 ficam para depois dessa reanálise.
 
-### Fase 1 — Estabilizar fundação
+### Fase 1 — Estabilizar fundação ✅ CONCLUÍDA (commits 64-68)
 
 Objetivo: corrigir os fundamentos do banco antes de qualquer feature nova mexer em schema.
 
-- [ ] **C4** — Adicionar `PRIMARY KEY` em `id` de todas as tabelas; adicionar `UNIQUE` onde fizer sentido (ex.: `(donor_id, cpf)` em `donor_cpf_links`, `(import_id, cpf)` em `import_cpf_summary`). Verificar quais constraints o DuckDB-WASM aceita.
-- [ ] **C3** — Migrar os 30 `ALTER TABLE … ADD COLUMN IF NOT EXISTS` espalhados em `services/db.js` para um sistema versionado: tabela `schema_version` + array de migrations com `{ id, name, up }`. Migração inicial agrega todo o estado atual.
-- [ ] **C2** — Quebrar `services/db.js` (1.667 linhas) em módulos:
-  - `services/db/connection.js` — boot, init, runInTransaction
-  - `services/db/schema.js` — CREATE TABLEs e índices
-  - `services/db/migrations.js` — versionamento (depende de C3)
-  - `services/db/storage.js` — File System Access API + OPFS
-  - `services/db/backup.js` — snapshot/restore
-  - `services/db/events.js` — event bus (`STORAGE_INFO_EVENT`, `DATA_CHANGED_EVENT`)
-  - `services/db/sql.js` — escape, serialize
-- [ ] **M6** — Logger central que persiste erros não-tratados em `action_history` (não somente `console.error`).
-- [ ] Testes de integração com DuckDB-Node para os services principais (`donorService`, `monthlyService`, `importService`).
+- [x] **C2** — `services/db.js` (1.667 linhas) quebrado em 6 módulos: `events.js`, `sql.js`, `schema.js`, `migrations.js`, `connection.js`, `backup.js`, `storage.js`. O antigo `db.js` virou barrel re-exportador (36 linhas). [commit 64]
+- [x] **C3** — Sistema versionado de migrations em `services/db/migrations.js`. Tabela `schema_version` cria stamp por migration aplicada. Migration v1 agrega todo o estado anterior (CREATE/ALTER/DROP/INDEX). `applyDataNormalizations` separado, sempre roda. [commit 65]
+- [x] **C4** — Migration v2 ("unique-id-and-natural-key-indexes") cria `CREATE UNIQUE INDEX` em `id` de todas as tabelas + `people(cpf)`, `donors(cpf)`, `demands(name)`. DuckDB-WASM não aceita `ALTER TABLE ADD PRIMARY KEY` em tabelas com dados, mas UNIQUE INDEX dá a mesma garantia. [commit 66]
+- [x] **M6** — `services/logger.js` com `logError(scope, error, context)` e `installGlobalErrorHandlers()` (window.error + unhandledrejection). Categoria "Erros do sistema" adicionada em `features/history/constants.js`. Instalado em `main.jsx`. Os 39 `console.error` espalhados nas pages NÃO foram migrados — eles ainda funcionam, e qualquer erro não-tratado é capturado pelo handler global. [commit 67]
+- [x] Testes de integração com DuckDB-Node em `tests/migrations.test.js` (helper em `tests/helpers/duckdbHelper.js`). Usa o build node-blocking de `@duckdb/duckdb-wasm` (já instalado). Cobre: stamping de migrations, idempotência, criação de tabelas, criação de UNIQUE indexes (id + naturais). 5/5 passing. Total geral: 37/37 testes. [commit 68]
+
+**Estado atual:** `db.js` é barrel limpo. Schema é versionado. Logger central instalado. Testes de migração reais rodando contra DuckDB no Node.
 
 ### Fase 2 — Limpar duplicação de UI
 
