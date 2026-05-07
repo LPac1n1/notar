@@ -1,6 +1,6 @@
-import { normalizeCpfSqlExpression } from "./sql";
-import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor";
-import { runMigrations } from "./migrations";
+import { normalizeCpfSqlExpression } from "./sql.js";
+import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
+import { runMigrations } from "./migrations.js";
 
 /**
  * Data normalizations that run on every bootstrap (and after every restore from

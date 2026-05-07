@@ -3,7 +3,7 @@ import {
   createSnapshotPayload,
   normalizeSnapshotPayload,
   snapshotHasData,
-} from "../../utils/backup";
+} from "../../utils/backup.js";
 import {
   execute,
   flushAfterTransaction,
@@ -11,10 +11,10 @@ import {
   initDB,
   runInTransaction,
   runStructuralReload,
-} from "./connection";
-import { notifyDatabaseChanged } from "./events";
-import { query } from "./connection";
-import { serializeSqlValue } from "./sql";
+} from "./connection.js";
+import { notifyDatabaseChanged } from "./events.js";
+import { query } from "./connection.js";
+import { serializeSqlValue } from "./sql.js";
 
 export const RESTORE_TABLE_COLUMNS = {
   demands: ["id", "name", "color", "is_active", "created_at", "updated_at"],

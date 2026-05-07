@@ -5,8 +5,8 @@ import {
   DEFAULT_STORAGE_INFO,
   notifyDatabaseChanged,
   updateStorageInfo,
-} from "./events";
-import { runSchemaBootstrap } from "./schema";
+} from "./events.js";
+import { runSchemaBootstrap } from "./schema.js";
 
 const MVP_BUNDLE = {
   mainModule: duckdbMvpWasm,

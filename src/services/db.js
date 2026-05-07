@@ -5,16 +5,16 @@
 // is open. Importing only `./db/connection` would leave the hook unregistered.
 import "./db/storage";
 
-import { normalizeCpf } from "../utils/cpf";
-import { startOfMonth } from "../utils/date";
+import { normalizeCpf } from "../utils/cpf.js";
+import { startOfMonth } from "../utils/date.js";
 
 export {
   STORAGE_INFO_EVENT,
   DATA_CHANGED_EVENT,
   notifyDatabaseChanged,
-} from "./db/events";
+} from "./db/events.js";
 
-export { escapeSqlString } from "./db/sql";
+export { escapeSqlString } from "./db/sql.js";
 
 export {
   initDB,
@@ -24,18 +24,18 @@ export {
   flushDatabase,
   registerFileText,
   releaseRegisteredFile,
-} from "./db/connection";
+} from "./db/connection.js";
 
 export {
   exportDatabaseBackup,
   importDatabaseBackup,
-} from "./db/backup";
+} from "./db/backup.js";
 
 export {
   getDatabaseStorageInfo,
   createDatabaseFile,
   openDatabaseFile,
   disconnectDatabaseFile,
-} from "./db/storage";
+} from "./db/storage.js";
 
 export { normalizeCpf, startOfMonth };

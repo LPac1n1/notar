@@ -2,20 +2,20 @@ import {
   createSnapshotPayload,
   normalizeSnapshotPayload,
   snapshotHasData,
-} from "../../utils/backup";
+} from "../../utils/backup.js";
 import {
   exportDatabaseSnapshot,
   restoreDatabaseSnapshot,
-} from "./backup";
+} from "./backup.js";
 import {
   initDB,
   setOnAfterTransaction,
   supportsFileDatabaseSelection,
-} from "./connection";
+} from "./connection.js";
 import {
   getStorageInfoSnapshot,
   updateStorageInfo,
-} from "./events";
+} from "./events.js";
 
 let connectedDatabaseFileHandle = null;
 

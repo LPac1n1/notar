@@ -5,8 +5,8 @@
  * IF NOT EXISTS / IF EXISTS so it works on fresh and pre-existing databases.
  * ========================================================================== */
 
-import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor";
-import { escapeSqlString } from "./sql";
+import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
+import { escapeSqlString } from "./sql.js";
 
 export const MIGRATIONS = [
   {
