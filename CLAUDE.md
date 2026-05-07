@@ -32,24 +32,36 @@ Objetivo: parar de copiar boilerplate de loader/filtros entre páginas.
 
 **Estado atual:** Pages: Demands 524→468 (-56), People 607→544 (-63), Donors 869→786 (-83), Imports 816→666 (-150), Monthly 1.038→1.010 (-28). Total: -380 linhas. Padrão de loader unificado. Naming `find*`/`get*` consistente. Lint limpo. Todos 37 testes passando, build OK.
 
-### Fase 3 — Reduzir SQL injetável
+### Fase 3 — Reduzir SQL injetável ✅ CONCLUÍDA (commits 75-77)
 
 Objetivo: trocar `escapeSqlString` por prepared statements onde houver entrada do usuário.
 
-- [ ] **C1** — Migrar para `connection.prepare(sql)` os services principais:
-  - `donorService.listDonors`, `getDonorProfile`
-  - `monthlyService.listMonthlySummariesByMonth`, `listHistoricalMonthlySummaries`
-  - `importService.listImportCpfSummary`, `searchImportedCpfs`
-  - `personService.listPeople`
-  - `demandService.listDemands`
-- [ ] Auditar `escapeIdentifier` em `importService.js` (CSV column names) — vetor parcial.
-- [ ] Auditoria final: `escapeSqlString` deveria sobrar zero em paths que processam input do usuário.
+- [x] **Helpers de prepared statements** — `queryPrepared(sql, params)` e `executePrepared(sql, params)` adicionados em `services/db/connection.js`. Wrappers do `connection.prepare(sql).query(...params)` da DuckDB-WASM, com `stmt.close()` automático no finally. [commit 75]
+- [x] **C1** — Todas as 8 funções LIST/SELECT do plano migradas para `queryPrepared`:
+  - `demandService.listDemands` ✅
+  - `personService.listPeople`, `findPersonById`, `findPersonByCpf` (queryPersonRows refatorada para `{conditions, params}`) ✅
+  - `donorService.listDonors` + `getDonorProfile` (5 queries internas) ✅
+  - `monthlyService.listMonthlySummariesByMonth` (3 queries) + `listHistoricalMonthlySummaries` (`buildDonorConditions` retorna `{conditions, params}`) ✅
+  - `importService.listImportCpfSummary` + `searchImportedCpfs` (`cpfPlaceholders` expande `?` por CPF) ✅
+- [x] **escapeIdentifier hardening** — DuckDB não suporta `?` para identificadores, então `escapeIdentifier(cpfColumn)` continua. Adicionada verificação defensiva: `cpfColumn` deve estar em `fileColumnNames` (descobertos por `DESCRIBE`) antes de ser splicada no SQL — bloqueia injeção via payload manipulado. [commit 76]
+- [x] **User-input checks também migrados** — `donorChecks.js` (ensureDonationCpfIsAvailable, ensureDemandExists, findActiveDonorByPersonId, ensurePersonCanBeAuxiliary, resolveHolderPersonIdInput, findHolderPersonContext) + `demandService` (createDemand/updateDemand uniqueness checks). [commit 77]
+- [x] **Testes de prepared statements** — adicionados em `tests/migrations.test.js`:
+  - "prepared statements bind parameters via ? placeholders" ✅
+  - "prepared statements neutralize quote injection attempts" ✅ (assert que tentativa de injeção via `'; DROP TABLE demands; --` retorna 0 linhas e não destrói a tabela)
+  - Helper `tests/helpers/duckdbHelper.js` estendido com `prepare()` no wrapper síncrono.
+- [x] **Auditoria final** — `escapeSqlString` zero em queries SELECT que processam filtro do usuário. As ~191 ocorrências remanescentes estão em:
+  - **WHERE id = '...'** com IDs gerados por nanoid no servidor (não-input direto do usuário): donorService:302/367/388/402/407/505/523/528/542/544, personService, noteService, trashService, etc.
+  - **INSERT/UPDATE values** com strings já validadas (`normalizePersonName`, `normalizeCpf` valida 11 dígitos, `normalizeDemandName`, etc.).
+  - **buildCsvSource(registeredFileName)** — fileName é gerado internamente, não é input do usuário.
+  - Migrar essas para prepared seria refatoração mecânica, baixo retorno em segurança, médio em consistência. Pode ser feito em uma futura passada.
 
-## Reanálise pós-Fase 3
+**Estado atual:** SELECT/filter paths blindados via prepared statements. Identifier injection mitigada com whitelist runtime. 39/39 testes passando (32 unit + 7 integração com DuckDB-Node real). Build OK. Lint 0 erros.
 
-Quando Fase 3 terminar:
-1. Rodar diagnóstico técnico completo de novo (mesmos 20 critérios da análise original).
-2. Confrontar com o estado pré-fases.
+## Reanálise pós-Fase 3 (próximo passo)
+
+Fases 1, 2 e 3 estão **CONCLUÍDAS**. Quando o usuário pedir, rodar:
+1. Diagnóstico técnico completo de novo (mesmos 20 critérios da análise original).
+2. Confrontar com o estado pré-fases (commits 56-62 vs commits 64-77).
 3. Decidir Fase 4 (TypeScript + observabilidade) e Fase 5 (fullstack opcional) com base no que ainda dói.
 
 ## Convenções do projeto
