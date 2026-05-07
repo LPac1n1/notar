@@ -52,12 +52,15 @@ export async function createDemand({
     throw new Error("O nome da demanda é obrigatório.");
   }
 
-  const existingDemand = await query(`
-    SELECT id
-    FROM demands
-    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(trimmedName)}'))
-    LIMIT 1
-  `);
+  const existingDemand = await queryPrepared(
+    `
+      SELECT id
+      FROM demands
+      WHERE lower(trim(name)) = lower(trim(?))
+      LIMIT 1
+    `,
+    [trimmedName],
+  );
 
   if (existingDemand.length > 0) {
     throw new Error("Já existe uma demanda cadastrada com esse nome.");
@@ -102,12 +105,15 @@ export async function updateDemand({
     throw new Error("O nome da demanda é obrigatório.");
   }
 
-  const currentDemandRows = await query(`
-    SELECT name
-    FROM demands
-    WHERE id = '${escapeSqlString(id)}'
-    LIMIT 1
-  `);
+  const currentDemandRows = await queryPrepared(
+    `
+      SELECT name
+      FROM demands
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [id],
+  );
 
   if (currentDemandRows.length === 0) {
     throw new Error("A demanda selecionada não existe mais.");
@@ -115,13 +121,16 @@ export async function updateDemand({
 
   const currentName = String(currentDemandRows[0].name ?? "").trim();
 
-  const existingDemand = await query(`
-    SELECT id
-    FROM demands
-    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(trimmedName)}'))
-      AND id <> '${escapeSqlString(id)}'
-    LIMIT 1
-  `);
+  const existingDemand = await queryPrepared(
+    `
+      SELECT id
+      FROM demands
+      WHERE lower(trim(name)) = lower(trim(?))
+        AND id <> ?
+      LIMIT 1
+    `,
+    [trimmedName, id],
+  );
 
   if (existingDemand.length > 0) {
     throw new Error("Já existe outra demanda cadastrada com esse nome.");

@@ -565,15 +565,26 @@ export async function processImportedFile({
       valuePerNote,
       status: "processing",
     }, { emitChange: false });
-    const normalizedCpfExpression = normalizeCpfSqlExpression(
-      escapeIdentifier(cpfColumn),
-    );
-
     const fileColumns = await query(`
       DESCRIBE SELECT *
       FROM ${buildCsvSource(registeredFileName)}
     `);
     const fileColumnNames = fileColumns.map((column) => column.column_name);
+
+    // Defense in depth: even though `cpfColumn` comes from the user picking
+    // out of the preview's detected columns, double-check it actually exists
+    // in the spreadsheet before splicing the identifier into SQL. This
+    // prevents column-name injection if the upload payload is tampered with
+    // or the preview cache is stale.
+    if (!fileColumnNames.includes(cpfColumn)) {
+      throw new Error(
+        `A coluna de CPF "${cpfColumn}" não foi encontrada na planilha.`,
+      );
+    }
+
+    const normalizedCpfExpression = normalizeCpfSqlExpression(
+      escapeIdentifier(cpfColumn),
+    );
     const orderStatusColumn = detectOrderStatusColumn(fileColumnNames);
     const invalidStatusExpression = orderStatusColumn
       ? `(${INVALID_ORDER_STATUS_PATTERNS.map(

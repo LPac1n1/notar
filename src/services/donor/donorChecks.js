@@ -2,7 +2,7 @@ import {
   escapeSqlString,
   execute,
   normalizeCpf,
-  query,
+  queryPrepared,
 } from "../db";
 import { reconcileImportsForCpfs } from "../importService";
 import {
@@ -16,19 +16,29 @@ export async function ensureDonationCpfIsAvailable(
   normalizedCpf,
   { ignoreDonorId = "" } = {},
 ) {
-  const existingLink = await query(`
-    SELECT
-      donor_cpf_links.id,
-      donor_cpf_links.donor_id,
-      donor_cpf_links.name,
-      donors.name AS donor_name
-    FROM donor_cpf_links
-    LEFT JOIN donors
-      ON donors.id = donor_cpf_links.donor_id
-    WHERE donor_cpf_links.cpf = '${escapeSqlString(normalizedCpf)}'
-      ${ignoreDonorId ? `AND donor_cpf_links.donor_id <> '${escapeSqlString(ignoreDonorId)}'` : ""}
-    LIMIT 1
-  `);
+  const conditions = ["donor_cpf_links.cpf = ?"];
+  const params = [normalizedCpf];
+
+  if (ignoreDonorId) {
+    conditions.push("donor_cpf_links.donor_id <> ?");
+    params.push(ignoreDonorId);
+  }
+
+  const existingLink = await queryPrepared(
+    `
+      SELECT
+        donor_cpf_links.id,
+        donor_cpf_links.donor_id,
+        donor_cpf_links.name,
+        donors.name AS donor_name
+      FROM donor_cpf_links
+      LEFT JOIN donors
+        ON donors.id = donor_cpf_links.donor_id
+      WHERE ${conditions.join(" AND ")}
+      LIMIT 1
+    `,
+    params,
+  );
 
   if (existingLink.length > 0) {
     const holderName =
@@ -48,12 +58,15 @@ export async function ensureDemandExists(demand, { required = true } = {}) {
     return "";
   }
 
-  const existingDemand = await query(`
-    SELECT name
-    FROM demands
-    WHERE lower(trim(name)) = lower(trim('${escapeSqlString(trimmedDemand)}'))
-    LIMIT 1
-  `);
+  const existingDemand = await queryPrepared(
+    `
+      SELECT name
+      FROM demands
+      WHERE lower(trim(name)) = lower(trim(?))
+      LIMIT 1
+    `,
+    [trimmedDemand],
+  );
 
   if (existingDemand.length === 0) {
     throw new Error("A demanda selecionada não existe mais.");
@@ -67,17 +80,20 @@ export async function findActiveDonorByPersonId(personId) {
     return null;
   }
 
-  const rows = await query(`
-    SELECT
-      id,
-      donor_type,
-      demand
-    FROM donors
-    WHERE person_id = '${escapeSqlString(personId)}'
-      AND is_active = TRUE
-    ORDER BY created_at ASC, id ASC
-    LIMIT 1
-  `);
+  const rows = await queryPrepared(
+    `
+      SELECT
+        id,
+        donor_type,
+        demand
+      FROM donors
+      WHERE person_id = ?
+        AND is_active = TRUE
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+    `,
+    [personId],
+  );
 
   return rows[0]
     ? {
@@ -93,15 +109,27 @@ export async function ensurePersonCanBeAuxiliary(personId, { ignoreDonorId = "" 
     return;
   }
 
-  const linkedAuxiliaryRows = await query(`
-    SELECT id
-    FROM donors
-    WHERE holder_person_id = '${escapeSqlString(personId)}'
-      AND donor_type = 'auxiliary'
-      AND is_active = TRUE
-      ${ignoreDonorId ? `AND id <> '${escapeSqlString(ignoreDonorId)}'` : ""}
-    LIMIT 1
-  `);
+  const conditions = [
+    "holder_person_id = ?",
+    "donor_type = 'auxiliary'",
+    "is_active = TRUE",
+  ];
+  const params = [personId];
+
+  if (ignoreDonorId) {
+    conditions.push("id <> ?");
+    params.push(ignoreDonorId);
+  }
+
+  const linkedAuxiliaryRows = await queryPrepared(
+    `
+      SELECT id
+      FROM donors
+      WHERE ${conditions.join(" AND ")}
+      LIMIT 1
+    `,
+    params,
+  );
 
   if (linkedAuxiliaryRows.length > 0) {
     throw new Error(
@@ -122,13 +150,16 @@ export async function resolveHolderPersonIdInput({
     return "";
   }
 
-  const holderDonorRows = await query(`
-    SELECT person_id
-    FROM donors
-    WHERE id = '${escapeSqlString(holderDonorId)}'
-      AND is_active = TRUE
-    LIMIT 1
-  `);
+  const holderDonorRows = await queryPrepared(
+    `
+      SELECT person_id
+      FROM donors
+      WHERE id = ?
+        AND is_active = TRUE
+      LIMIT 1
+    `,
+    [holderDonorId],
+  );
 
   return holderDonorRows[0]?.person_id ?? "";
 }
@@ -152,17 +183,20 @@ export async function findHolderPersonContext({
     throw new Error("A pessoa vinculada não existe mais.");
   }
 
-  const activeDonorRows = await query(`
-    SELECT
-      id,
-      donor_type,
-      demand
-    FROM donors
-    WHERE person_id = '${escapeSqlString(resolvedHolderPersonId)}'
-      AND is_active = TRUE
-    ORDER BY created_at ASC, id ASC
-    LIMIT 1
-  `);
+  const activeDonorRows = await queryPrepared(
+    `
+      SELECT
+        id,
+        donor_type,
+        demand
+      FROM donors
+      WHERE person_id = ?
+        AND is_active = TRUE
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+    `,
+    [resolvedHolderPersonId],
+  );
   const activeDonor = activeDonorRows[0];
 
   if (activeDonor && activeDonor.donor_type !== "holder") {
@@ -171,17 +205,20 @@ export async function findHolderPersonContext({
     );
   }
 
-  const activeHolderDonorRows = await query(`
-    SELECT
-      id,
-      demand
-    FROM donors
-    WHERE person_id = '${escapeSqlString(resolvedHolderPersonId)}'
-      AND donor_type = 'holder'
-      AND is_active = TRUE
-    ORDER BY created_at ASC, id ASC
-    LIMIT 1
-  `);
+  const activeHolderDonorRows = await queryPrepared(
+    `
+      SELECT
+        id,
+        demand
+      FROM donors
+      WHERE person_id = ?
+        AND donor_type = 'holder'
+        AND is_active = TRUE
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+    `,
+    [resolvedHolderPersonId],
+  );
 
   const activeHolderDonor = activeHolderDonorRows[0];
 
