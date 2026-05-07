@@ -36,8 +36,9 @@ import {
   processImportedFile,
 } from "../services/importService";
 import { restoreTrashItem } from "../services/trashService";
-import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useDataResource } from "../hooks/useDataResource";
 import { useAsync } from "../hooks/useAsync";
+import { logError } from "../services/logger";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -67,10 +68,7 @@ const INITIAL_CPF_FILTERS = {
 
 export default function Imports() {
   const location = useLocation();
-  const [imports, setImports] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
-  const [cpfSummary, setCpfSummary] = useState([]);
-  const [cpfSummaryOptionSource, setCpfSummaryOptionSource] = useState([]);
   const [uploadForm, setUploadForm] = useState({
     referenceMonth: "",
     valuePerNote: "",
@@ -88,12 +86,9 @@ export default function Imports() {
     ...INITIAL_CPF_FILTERS,
     ...(location.state?.cpfFilters ?? {}),
   });
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isImportHistoryRefreshing, setIsImportHistoryRefreshing] = useState(false);
-  const [isCpfSummaryRefreshing, setIsCpfSummaryRefreshing] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -103,23 +98,57 @@ export default function Imports() {
   const [importPendingRemoval, setImportPendingRemoval] = useState(null);
   const [selectedCpfSummaryDetails, setSelectedCpfSummaryDetails] = useState(null);
   const navigate = useNavigate();
+
+  const {
+    data: imports,
+    isLoading: isLoadingImports,
+    isRefreshing: isImportHistoryRefreshing,
+    error: importHistoryError,
+    setError: setImportHistoryError,
+    reload: reloadImportHistory,
+  } = useDataResource({
+    loader: listImports,
+    filters: importFilters,
+    errorMessage: "Não foi possível carregar os dados de importação.",
+    scope: "ImportsPage.history",
+  });
+
+  const {
+    data: cpfSummary,
+    optionSource: cpfSummaryOptionSource,
+    isLoading: isLoadingCpfSummary,
+    isRefreshing: isCpfSummaryRefreshing,
+    error: cpfSummaryError,
+    setError: setCpfSummaryError,
+    reload: reloadCpfSummary,
+  } = useDataResource({
+    loader: listImportCpfSummary,
+    filters: cpfFilters,
+    errorMessage: "Não foi possível carregar os dados de importação.",
+    scope: "ImportsPage.cpfSummary",
+    neutralizedKeys: ["cpf", "donorId", "demand", "registrationFilter"],
+  });
+
+  const error = pageError || importHistoryError || cpfSummaryError;
+  const setError = useCallback(
+    (message) => {
+      setPageError(message);
+      setImportHistoryError(message);
+      setCpfSummaryError(message);
+    },
+    [setImportHistoryError, setCpfSummaryError],
+  );
+
   const importsPagination = usePagination(imports, {
     initialPageSize: 5,
   });
   const cpfSummaryPagination = usePagination(cpfSummary, {
     initialPageSize: 5,
   });
-  const debouncedImportFilters = useDebouncedValue(importFilters, 180);
-  const debouncedCpfFilters = useDebouncedValue(cpfFilters, 180);
-  const importHistoryRequestIdRef = useRef(0);
-  const cpfSummaryRequestIdRef = useRef(0);
-  const cpfSummaryOptionsRequestIdRef = useRef(0);
   const restoredScrollTopRef = useRef(location.state?.importsScrollTop ?? null);
-  const initialImportFiltersRef = useRef(importFilters);
-  const initialCpfFiltersRef = useRef(cpfFilters);
-  const hasInitializedRef = useRef(false);
   const importOperation = useAsync({ reportGlobal: true });
   const dataSyncFeedback = useDataSyncFeedback();
+  const isLoading = isLoadingImports || isLoadingCpfSummary;
   const showDataRefreshLoading =
     dataSyncFeedback.isActive ||
     dataSyncFeedback.isVisible ||
@@ -179,152 +208,9 @@ export default function Imports() {
     setAvailableImports(availableImportRows);
   }, []);
 
-  const loadImportHistory = useCallback(async (currentFilters, { showRefreshing = false } = {}) => {
-    const requestId = importHistoryRequestIdRef.current + 1;
-    importHistoryRequestIdRef.current = requestId;
-
-    try {
-      if (showRefreshing) {
-        setIsImportHistoryRefreshing(true);
-      }
-
-      setError("");
-      const importRows = await listImports(currentFilters);
-
-      if (requestId !== importHistoryRequestIdRef.current) {
-        return;
-      }
-
-      setImports(importRows);
-    } catch (err) {
-      if (requestId !== importHistoryRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar importações:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar os dados de importação.");
-    } finally {
-      if (requestId === importHistoryRequestIdRef.current) {
-        setIsImportHistoryRefreshing(false);
-      }
-    }
-  }, []);
-
-  const loadCpfSummary = useCallback(async (currentFilters, { showRefreshing = false } = {}) => {
-    const requestId = cpfSummaryRequestIdRef.current + 1;
-    cpfSummaryRequestIdRef.current = requestId;
-
-    try {
-      if (showRefreshing) {
-        setIsCpfSummaryRefreshing(true);
-      }
-
-      setError("");
-      const cpfRows = await listImportCpfSummary(currentFilters);
-
-      if (requestId !== cpfSummaryRequestIdRef.current) {
-        return;
-      }
-
-      setCpfSummary(cpfRows);
-    } catch (err) {
-      if (requestId !== cpfSummaryRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar importações:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar os dados de importação.");
-    } finally {
-      if (requestId === cpfSummaryRequestIdRef.current) {
-        setIsCpfSummaryRefreshing(false);
-      }
-    }
-  }, []);
-
-  const loadCpfSummaryOptions = useCallback(async (
-    currentFilters = INITIAL_CPF_FILTERS,
-  ) => {
-    const requestId = cpfSummaryOptionsRequestIdRef.current + 1;
-    cpfSummaryOptionsRequestIdRef.current = requestId;
-
-    try {
-      const cpfRows = await listImportCpfSummary({
-        importId: currentFilters.importId,
-        referenceMonth: currentFilters.referenceMonth,
-        cpf: "",
-        donorId: "",
-        demand: "",
-        registrationFilter: "all",
-      });
-
-      if (requestId !== cpfSummaryOptionsRequestIdRef.current) {
-        return;
-      }
-
-      setCpfSummaryOptionSource(cpfRows);
-    } catch (err) {
-      if (requestId !== cpfSummaryOptionsRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar opções de filtros de CPFs:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-    }
-  }, []);
-
   useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        setError("");
-        await Promise.all([
-          loadAvailableImports(),
-          loadImportHistory(initialImportFiltersRef.current),
-          loadCpfSummary(initialCpfFiltersRef.current),
-          loadCpfSummaryOptions(initialCpfFiltersRef.current),
-        ]);
-      } catch (err) {
-        console.error(
-          "Erro ao carregar importações:",
-          getErrorMessage(err, "Erro desconhecido."),
-        );
-        setError("Não foi possível carregar os dados de importação.");
-      } finally {
-        setIsLoading(false);
-        hasInitializedRef.current = true;
-      }
-    })();
-  }, [
-    loadAvailableImports,
-    loadCpfSummary,
-    loadCpfSummaryOptions,
-    loadImportHistory,
-  ]);
-
-  useEffect(() => {
-    if (!hasInitializedRef.current) {
-      return;
-    }
-
-    loadImportHistory(debouncedImportFilters, { showRefreshing: true });
-  }, [debouncedImportFilters, loadImportHistory]);
-
-  useEffect(() => {
-    if (!hasInitializedRef.current) {
-      return;
-    }
-
-    loadCpfSummary(debouncedCpfFilters, { showRefreshing: true });
-    loadCpfSummaryOptions(debouncedCpfFilters);
-  }, [debouncedCpfFilters, loadCpfSummary, loadCpfSummaryOptions]);
+    loadAvailableImports();
+  }, [loadAvailableImports]);
 
   useEffect(() => () => {
     if (previewData?.registeredFileName) {
@@ -335,18 +221,10 @@ export default function Imports() {
   const refreshImports = useCallback(async () => {
     await Promise.all([
       loadAvailableImports(),
-      loadImportHistory(importFilters, { showRefreshing: true }),
-      loadCpfSummary(cpfFilters, { showRefreshing: true }),
-      loadCpfSummaryOptions(cpfFilters),
+      reloadImportHistory(),
+      reloadCpfSummary(),
     ]);
-  }, [
-    cpfFilters,
-    importFilters,
-    loadAvailableImports,
-    loadCpfSummary,
-    loadCpfSummaryOptions,
-    loadImportHistory,
-  ]);
+  }, [loadAvailableImports, reloadImportHistory, reloadCpfSummary]);
 
   useDatabaseChangeEffect(refreshImports);
 
@@ -360,14 +238,11 @@ export default function Imports() {
         await refreshImports();
         setSuccessMessage("Importação restaurada com sucesso.");
       } catch (err) {
-        console.error(
-          "Erro ao restaurar importação:",
-          getErrorMessage(err, "Erro desconhecido."),
-        );
+        logError("ImportsPage.restore", err);
         setError(getErrorMessage(err, "Não foi possível restaurar a importação."));
       }
     },
-    [refreshImports],
+    [refreshImports, setError],
   );
 
   useEffect(() => {
@@ -452,10 +327,7 @@ export default function Imports() {
         cpfColumn: preview.detectedCpfColumn || current.cpfColumn,
       }));
     } catch (err) {
-      console.error(
-        "Erro ao gerar pré-visualização:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("ImportsPage.preview", err);
       setError(
         getErrorMessage(
           err,
@@ -534,12 +406,7 @@ export default function Imports() {
           loadingMessage: "Processando importação e conciliando CPFs...",
         },
       );
-      await Promise.all([
-        loadAvailableImports(),
-        loadImportHistory(importFilters),
-        loadCpfSummary(cpfFilters),
-        loadCpfSummaryOptions(cpfFilters),
-      ]);
+      await refreshImports();
       await resetImportSelection();
       setUploadForm({
         referenceMonth: "",
@@ -550,10 +417,7 @@ export default function Imports() {
       setIsImportModalOpen(false);
       setSuccessMessage("Importação processada com sucesso.");
     } catch (err) {
-      console.error(
-        "Erro ao processar importação:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("ImportsPage.process", err);
       setError(getErrorMessage(err, "Não foi possível processar a importação."));
     } finally {
       setIsImporting(false);
@@ -576,12 +440,7 @@ export default function Imports() {
           loadingMessage: "Enviando importação para a lixeira...",
         },
       );
-      await Promise.all([
-        loadAvailableImports(),
-        loadImportHistory(importFilters),
-        loadCpfSummary(cpfFilters),
-        loadCpfSummaryOptions(cpfFilters),
-      ]);
+      await refreshImports();
       setImportPendingRemoval(null);
       setSuccessMessage("Importação enviada para a lixeira com sucesso.");
       if (trashItemId) {
@@ -591,10 +450,7 @@ export default function Imports() {
         });
       }
     } catch (err) {
-      console.error(
-        "Erro ao excluir importação:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("ImportsPage.delete", err);
       setError("Não foi possível excluir a importação.");
     } finally {
       setDeletingImportId("");
@@ -628,10 +484,7 @@ export default function Imports() {
         `${formatInteger(result.rowCount)} importação(ões) exportada(s) em CSV.`,
       );
     } catch (err) {
-      console.error(
-        "Erro ao exportar histórico de importações:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("ImportsPage.exportHistory", err);
       setError("Não foi possível exportar o histórico de importações.");
     } finally {
       setIsExportingImports(false);
@@ -665,10 +518,7 @@ export default function Imports() {
         `${formatInteger(result.rowCount)} CPF(s) exportado(s) em CSV.`,
       );
     } catch (err) {
-      console.error(
-        "Erro ao exportar CPFs encontrados:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("ImportsPage.exportCpfSummary", err);
       setError("Não foi possível exportar os CPFs encontrados.");
     } finally {
       setIsExportingCpfSummary(false);

@@ -37,10 +37,12 @@ import { formatMonthYear } from "../utils/date";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
+import { useDataResource } from "../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useAsync } from "../hooks/useAsync";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { useDelayedLoading } from "../hooks/useDelayedLoading";
+import { logError } from "../services/logger";
 
 function getAbatementStatusLabel(status) {
   return status === "applied" ? "realizado" : "pendente";
@@ -66,6 +68,29 @@ function getAbatementOperationLabel(operation, monthLimit = "") {
   }
 
   return "Alteração manual";
+}
+
+function normalizeMonthlyFilters(filters) {
+  return filters.referenceMonth
+    ? filters
+    : {
+        ...filters,
+        donationActivity: "all",
+        abatementStatus: "all",
+      };
+}
+
+function loadMonthlySummariesForFilters(filters) {
+  return listMonthlySummaries(normalizeMonthlyFilters(filters));
+}
+
+function loadMonthlySummariesForOptions(filters) {
+  return listMonthlySummaries({
+    ...normalizeMonthlyFilters(filters),
+    donationActivity: "all",
+    abatementStatus: "all",
+    abatementSort: "",
+  });
 }
 
 function buildAbatementHistoryEntry({
@@ -115,14 +140,11 @@ function buildAbatementHistoryEntry({
 
 export default function Monthly() {
   const location = useLocation();
-  const [summaries, setSummaries] = useState([]);
-  const [summaryOptionSource, setSummaryOptionSource] = useState([]);
   const [availableImports, setAvailableImports] = useState([]);
   const [filters, setFilters] = useState({
     ...INITIAL_MONTHLY_FILTERS,
     ...(location.state?.monthlyFilters ?? {}),
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [updatingSummaryId, setUpdatingSummaryId] = useState("");
   const [updatingDonorId, setUpdatingDonorId] = useState("");
   const [isExporting, setIsExporting] = useState(false);
@@ -130,11 +152,41 @@ export default function Monthly() {
   const [isExportingJpeg, setIsExportingJpeg] = useState(false);
   const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
   const [isBulkAbating, setIsBulkAbating] = useState(false);
-  const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
-  const summariesRequestIdRef = useRef(0);
+
+  const {
+    data: summaries,
+    optionSource: summaryOptionSource,
+    isLoading,
+    error,
+    setError,
+    reload: reloadSummaries,
+  } = useDataResource({
+    loader: loadMonthlySummariesForFilters,
+    filters,
+    errorMessage: "Não foi possível carregar o resumo mensal.",
+    scope: "MonthlyPage",
+    neutralizedKeys: ["donorId", "cpf", "demand"],
+    optionLoader: loadMonthlySummariesForOptions,
+  });
+
+  const loadAvailableImports = useCallback(async () => {
+    const rows = await listImports({ status: "processed" });
+    setAvailableImports(rows);
+  }, []);
+
+  useEffect(() => {
+    loadAvailableImports();
+  }, [loadAvailableImports]);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadAvailableImports(), reloadSummaries()]);
+  }, [loadAvailableImports, reloadSummaries]);
+
+  useDatabaseChangeEffect(refreshAll);
+
   const restoredScrollTopRef = useRef(location.state?.monthlyScrollTop ?? null);
   const monthlyOperation = useAsync({ reportGlobal: true });
   const dataSyncFeedback = useDataSyncFeedback();
@@ -178,65 +230,6 @@ export default function Monthly() {
       }),
     [summaryOptionSource],
   );
-
-  const loadSummaries = useCallback(async () => {
-    const requestId = summariesRequestIdRef.current + 1;
-    summariesRequestIdRef.current = requestId;
-    const effectiveFilters = filters.referenceMonth
-      ? filters
-      : {
-          ...filters,
-          donationActivity: "all",
-          abatementStatus: "all",
-        };
-    const optionFilters = {
-      ...effectiveFilters,
-      donorId: "",
-      cpf: "",
-      demand: "",
-      donationActivity: "all",
-      abatementStatus: "all",
-      abatementSort: "",
-    };
-
-    try {
-      setIsLoading(true);
-      setError("");
-      const [importRows, monthlyRows, optionRows] = await Promise.all([
-        listImports({ status: "processed" }),
-        listMonthlySummaries(effectiveFilters),
-        listMonthlySummaries(optionFilters),
-      ]);
-
-      if (requestId !== summariesRequestIdRef.current) {
-        return;
-      }
-
-      setAvailableImports(importRows);
-      setSummaries(monthlyRows);
-      setSummaryOptionSource(optionRows);
-    } catch (err) {
-      if (requestId !== summariesRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar resumo mensal:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar o resumo mensal.");
-    } finally {
-      if (requestId === summariesRequestIdRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    loadSummaries();
-  }, [loadSummaries]);
-
-  useDatabaseChangeEffect(loadSummaries);
 
   useEffect(() => {
     if (isLoading || restoredScrollTopRef.current === null) {
@@ -344,20 +337,17 @@ export default function Monthly() {
         setUpdatingDonorId(donorId);
         setUpdatingSummaryId(summaryId);
         await applyStatusChanges(changes, history);
-        await loadSummaries();
+        await reloadSummaries();
         setSuccessMessage(message);
       } catch (err) {
-        console.error(
-          "Erro ao desfazer status do abatimento:",
-          getErrorMessage(err, "Erro desconhecido."),
-        );
+        logError("MonthlyPage.undoStatus", err);
         setError(getErrorMessage(err, "Não foi possível desfazer a alteração."));
       } finally {
         setUpdatingDonorId("");
         setUpdatingSummaryId("");
       }
     },
-    [applyStatusChanges, loadSummaries],
+    [applyStatusChanges, reloadSummaries, setError],
   );
 
   const handleStatusChange = async (summaryId, status) => {
@@ -378,7 +368,7 @@ export default function Monthly() {
         status,
       });
       await updateAbatementStatusWithHistory({ history, summaryId, status });
-      await loadSummaries();
+      await reloadSummaries();
       const message = "Status do abatimento atualizado.";
       setSuccessMessage(message);
       setSuccessAction({
@@ -403,10 +393,7 @@ export default function Monthly() {
           }),
       });
     } catch (err) {
-      console.error(
-        "Erro ao atualizar status do abatimento:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("MonthlyPage.updateStatus", err);
       setError(
         getErrorMessage(err, "Não foi possível atualizar o status do abatimento."),
       );
@@ -452,7 +439,7 @@ export default function Monthly() {
         summaryIds: changedMonths.map((month) => month.id),
         status,
       });
-      await loadSummaries();
+      await reloadSummaries();
       const statusLabel = status === "applied" ? "realizado" : "pendente";
       const previousStatusLabel =
         status === "applied" ? "pendente(s)" : "realizado(s)";
@@ -478,10 +465,7 @@ export default function Monthly() {
           }),
       });
     } catch (err) {
-      console.error(
-        "Erro ao atualizar abatimentos do doador:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("MonthlyPage.updateDonorAbatement", err);
       setError(
         getErrorMessage(err, "Não foi possível atualizar os abatimentos do doador."),
       );
@@ -525,10 +509,7 @@ export default function Monthly() {
         `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
       );
     } catch (err) {
-      console.error(
-        "Erro ao exportar resumo mensal:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("MonthlyPage.exportCsv", err);
       setError("Não foi possível exportar o resumo mensal.");
     } finally {
       setIsExporting(false);
@@ -582,10 +563,7 @@ export default function Monthly() {
         );
       }
     } catch (err) {
-      console.error(
-        "Erro ao exportar PDFs por demanda:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("MonthlyPage.exportPdf", err);
       setError(getErrorMessage(err, "Não foi possível gerar os PDFs por demanda."));
     } finally {
       setIsExportingPdf(false);
@@ -614,10 +592,7 @@ export default function Monthly() {
         );
       }
     } catch (err) {
-      console.error(
-        "Erro ao exportar JPEGs por demanda:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("MonthlyPage.exportJpeg", err);
       setError(
         getErrorMessage(err, "Não foi possível gerar os JPEGs por demanda."),
       );
@@ -663,16 +638,13 @@ export default function Monthly() {
         summaryIds,
       });
 
-      await loadSummaries();
+      await reloadSummaries();
       setShowBulkAbatementModal(false);
       setSuccessMessage(
         `${formatInteger(summaryIds.length)} abatimento(s) realizado(s) — ${formatCurrency(totalAmount)} total.`,
       );
     } catch (err) {
-      console.error(
-        "Erro ao realizar abatimento em massa:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("MonthlyPage.bulkAbate", err);
       setError(
         getErrorMessage(err, "Não foi possível realizar o abatimento em massa."),
       );
