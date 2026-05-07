@@ -9,6 +9,7 @@ export const ACTION_HISTORY_ENTITY_OPTIONS = [
   { value: "trash", label: "Lixeira" },
   { value: "settings", label: "Configurações" },
   { value: "export", label: "Exportações" },
+  { value: "log", label: "Erros do sistema" },
 ];
 
 export const ACTION_HISTORY_TYPE_OPTIONS = [
@@ -24,6 +25,7 @@ export const ACTION_HISTORY_TYPE_OPTIONS = [
   { value: "monthly_abatement_status_undo", label: "Abatimento desfeito" },
   { value: "storage", label: "Arquivo de dados" },
   { value: "backup", label: "Backup" },
+  { value: "error", label: "Erro registrado" },
 ];
 
 export const ACTION_HISTORY_ENTITY_LABELS = {
@@ -36,12 +38,14 @@ export const ACTION_HISTORY_ENTITY_LABELS = {
   trash: "Lixeira",
   settings: "Configurações",
   export: "Exportações",
+  log: "Erros do sistema",
 };
 
 export const ACTION_HISTORY_TYPE_LABELS = {
   backup: "Backup",
   create: "Criação",
   delete: "Remoção",
+  error: "Erro registrado",
   export: "Exportação",
   import: "Importação",
   monthly_abatement_status_undo: "Abatimento desfeito",
