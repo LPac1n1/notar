@@ -2,7 +2,7 @@ import {
   escapeSqlString,
   execute,
   normalizeCpf,
-  query,
+  queryPrepared,
   runInTransaction,
   startOfMonth,
 } from "./db";
@@ -158,6 +158,7 @@ function buildDonorConditions({
   donorActiveStatus = "active",
 } = {}) {
   const conditions = [];
+  const params = [];
 
   if (donorActiveStatus === "active") {
     conditions.push("donors.is_active = TRUE");
@@ -166,11 +167,13 @@ function buildDonorConditions({
   }
 
   if (donorId.trim()) {
-    conditions.push(`donors.id = '${escapeSqlString(donorId.trim())}'`);
+    conditions.push("donors.id = ?");
+    params.push(donorId.trim());
   }
 
   if (donorType === "holder" || donorType === "auxiliary") {
-    conditions.push(`donors.donor_type = '${escapeSqlString(donorType)}'`);
+    conditions.push("donors.donor_type = ?");
+    params.push(donorType);
   }
 
   if (cpf.trim()) {
@@ -180,15 +183,15 @@ function buildDonorConditions({
         FROM donor_cpf_links
         WHERE donor_cpf_links.donor_id = donors.id
           AND donor_cpf_links.is_active = TRUE
-          AND donor_cpf_links.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
+          AND donor_cpf_links.cpf = ?
       )
     `);
+    params.push(normalizeCpf(cpf));
   }
 
   if (demand.trim()) {
-    conditions.push(
-      `lower(coalesce(donors.demand, '')) = lower('${escapeSqlString(demand.trim())}')`,
-    );
+    conditions.push("lower(coalesce(donors.demand, '')) = lower(?)");
+    params.push(demand.trim());
   }
 
   if (donationStartDate === "with-date") {
@@ -199,7 +202,7 @@ function buildDonorConditions({
     conditions.push("donors.donation_start_date IS NULL");
   }
 
-  return conditions;
+  return { conditions, params };
 }
 
 async function listMonthlySummariesByMonth({
@@ -215,19 +218,54 @@ async function listMonthlySummariesByMonth({
   donorActiveStatus = "active",
 } = {}) {
   const normalizedReferenceMonth = startOfMonth(referenceMonth);
-  const activeDonorConditions = buildDonorConditions({
-    donorId,
-    donorType,
-    cpf,
-    demand,
-    donationStartDate,
-    donorActiveStatus: "active",
-  });
+  const { conditions: activeDonorConditions, params: activeDonorParams } =
+    buildDonorConditions({
+      donorId,
+      donorType,
+      cpf,
+      demand,
+      donationStartDate,
+      donorActiveStatus: "active",
+    });
   const activeDonorWhereClause =
     activeDonorConditions.length > 0 ? `WHERE ${activeDonorConditions.join(" AND ")}` : "";
 
+  // Query #2 (monthly summaries by reference month) needs its own dynamic
+  // WHERE — it filters monthly_donor_summary directly rather than donors.
+  const monthlyRowsConditions = ["monthly_donor_summary.reference_month = ?"];
+  const monthlyRowsParams = [normalizedReferenceMonth];
+
+  if (donorActiveStatus === "active") {
+    monthlyRowsConditions.push("donors.is_active = TRUE");
+  } else if (donorActiveStatus === "inactive") {
+    monthlyRowsConditions.push("donors.is_active = FALSE");
+  }
+
+  if (donorId.trim()) {
+    monthlyRowsConditions.push("donors.id = ?");
+    monthlyRowsParams.push(donorId.trim());
+  }
+
+  if (cpf.trim()) {
+    monthlyRowsConditions.push(`
+      EXISTS (
+        SELECT 1
+        FROM donor_cpf_links
+        WHERE donor_cpf_links.donor_id = donors.id
+          AND donor_cpf_links.is_active = TRUE
+          AND donor_cpf_links.cpf = ?
+      )
+    `);
+    monthlyRowsParams.push(normalizeCpf(cpf));
+  }
+
+  if (demand.trim()) {
+    monthlyRowsConditions.push("lower(coalesce(donors.demand, '')) = lower(?)");
+    monthlyRowsParams.push(demand.trim());
+  }
+
   const [donorRows, monthlyRows, importContextRows] = await Promise.all([
-    query(`
+    queryPrepared(`
       SELECT
         donors.id,
         donors.name,
@@ -279,7 +317,7 @@ async function listMonthlySummariesByMonth({
             ON donor_cpf_links.id = import_cpf_summary.matched_source_id
           WHERE donor_cpf_links.donor_id = donors.id
             AND donor_cpf_links.is_active = TRUE
-            AND import_cpf_summary.reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
+            AND import_cpf_summary.reference_month = ?
         ), 0) AS invalid_notes_count
       FROM donors
       LEFT JOIN people AS holder_people
@@ -290,8 +328,8 @@ async function listMonthlySummariesByMonth({
         AND holder_active_donors.is_active = TRUE
       ${activeDonorWhereClause}
       ORDER BY donors.name ASC
-    `),
-    query(`
+    `, [normalizedReferenceMonth, ...activeDonorParams]),
+    queryPrepared(`
       SELECT
         monthly_donor_summary.id,
         monthly_donor_summary.import_id,
@@ -372,32 +410,19 @@ async function listMonthlySummariesByMonth({
         ON holder_active_donors.person_id = donors.holder_person_id
         AND holder_active_donors.donor_type = 'holder'
         AND holder_active_donors.is_active = TRUE
-      WHERE monthly_donor_summary.reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
-        ${donorActiveStatus === "active" ? "AND donors.is_active = TRUE" : ""}
-        ${donorActiveStatus === "inactive" ? "AND donors.is_active = FALSE" : ""}
-        ${donorId.trim() ? `AND donors.id = '${escapeSqlString(donorId.trim())}'` : ""}
-        ${cpf.trim() ? `
-          AND EXISTS (
-            SELECT 1
-            FROM donor_cpf_links
-            WHERE donor_cpf_links.donor_id = donors.id
-              AND donor_cpf_links.is_active = TRUE
-              AND donor_cpf_links.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
-          )
-        ` : ""}
-        ${demand.trim() ? `AND lower(coalesce(donors.demand, '')) = lower('${escapeSqlString(demand.trim())}')` : ""}
+      WHERE ${monthlyRowsConditions.join(" AND ")}
       ORDER BY monthly_donor_summary.donor_name ASC
-    `),
-    query(`
+    `, monthlyRowsParams),
+    queryPrepared(`
       SELECT
         id,
         value_per_note
       FROM imports
       WHERE status = 'processed'
-        AND reference_month = '${escapeSqlString(normalizedReferenceMonth)}'
+        AND reference_month = ?
       ORDER BY imported_at DESC
       LIMIT 1
-    `),
+    `, [normalizedReferenceMonth]),
   ]);
 
   const summaryByDonorId = new Map(
@@ -446,6 +471,7 @@ async function listHistoricalMonthlySummaries({
   donorActiveStatus = "active",
 } = {}) {
   const conditions = [];
+  const params = [];
 
   if (donorActiveStatus === "active") {
     conditions.push("coalesce(donors.is_active, TRUE) = TRUE");
@@ -454,19 +480,18 @@ async function listHistoricalMonthlySummaries({
   }
 
   if (referenceMonth) {
-    conditions.push(
-      `monthly_donor_summary.reference_month = '${escapeSqlString(startOfMonth(referenceMonth))}'`,
-    );
+    conditions.push("monthly_donor_summary.reference_month = ?");
+    params.push(startOfMonth(referenceMonth));
   }
 
   if (donorId.trim()) {
-    conditions.push(
-      `monthly_donor_summary.donor_id = '${escapeSqlString(donorId.trim())}'`,
-    );
+    conditions.push("monthly_donor_summary.donor_id = ?");
+    params.push(donorId.trim());
   }
 
   if (donorType === "holder" || donorType === "auxiliary") {
-    conditions.push(`donors.donor_type = '${escapeSqlString(donorType)}'`);
+    conditions.push("donors.donor_type = ?");
+    params.push(donorType);
   }
 
   if (donationStartDate === "with-date") {
@@ -478,27 +503,27 @@ async function listHistoricalMonthlySummaries({
   }
 
   if (cpf.trim()) {
-    conditions.push(
-      `EXISTS (
+    conditions.push(`
+      EXISTS (
         SELECT 1
         FROM import_cpf_summary
         WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
           AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-          AND import_cpf_summary.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
-      )`,
-    );
+          AND import_cpf_summary.cpf = ?
+      )
+    `);
+    params.push(normalizeCpf(cpf));
   }
 
   if (demand.trim()) {
-    conditions.push(
-      `lower(coalesce(monthly_donor_summary.demand, '')) = lower('${escapeSqlString(demand.trim())}')`,
-    );
+    conditions.push("lower(coalesce(monthly_donor_summary.demand, '')) = lower(?)");
+    params.push(demand.trim());
   }
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const rows = await query(`
+  const rows = await queryPrepared(`
     SELECT
       monthly_donor_summary.id,
       monthly_donor_summary.import_id,
@@ -581,7 +606,7 @@ async function listHistoricalMonthlySummaries({
       AND holder_active_donors.is_active = TRUE
     ${whereClause}
     ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
-  `);
+  `, params);
 
   return sortSummariesByAbatement(
     applySummaryFilters(rows.map(mapSummaryRow), {

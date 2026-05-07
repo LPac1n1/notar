@@ -4,6 +4,7 @@ import {
   execute,
   normalizeCpf,
   query,
+  queryPrepared,
   runInTransaction,
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
@@ -41,6 +42,7 @@ export async function listDonors(filters = {}) {
     activeStatus = "active",
   } = filters;
   const conditions = [];
+  const params = [];
 
   if (activeStatus === "active") {
     conditions.push("donors.is_active = TRUE");
@@ -49,9 +51,8 @@ export async function listDonors(filters = {}) {
   }
 
   if (donorId.trim()) {
-    conditions.push(
-      `donors.id = '${escapeSqlString(donorId.trim())}'`,
-    );
+    conditions.push("donors.id = ?");
+    params.push(donorId.trim());
   }
 
   if (cpf.trim()) {
@@ -60,21 +61,20 @@ export async function listDonors(filters = {}) {
         SELECT 1
         FROM donor_cpf_links
         WHERE donor_cpf_links.donor_id = donors.id
-          AND donor_cpf_links.cpf = '${escapeSqlString(normalizeCpf(cpf))}'
+          AND donor_cpf_links.cpf = ?
       )
     `);
+    params.push(normalizeCpf(cpf));
   }
 
   if (demand.trim()) {
-    conditions.push(
-      `donors.demand = '${escapeSqlString(demand.trim())}'`,
-    );
+    conditions.push("donors.demand = ?");
+    params.push(demand.trim());
   }
 
   if (donorType === "holder" || donorType === "auxiliary") {
-    conditions.push(
-      `donors.donor_type = '${escapeSqlString(normalizeDonorType(donorType))}'`,
-    );
+    conditions.push("donors.donor_type = ?");
+    params.push(normalizeDonorType(donorType));
   }
 
   if (donationStartDate === "with-date") {
@@ -85,7 +85,7 @@ export async function listDonors(filters = {}) {
     conditions.push("donors.donation_start_date IS NULL");
   }
 
-  const rows = await query(`
+  const rows = await queryPrepared(`
     SELECT
       donors.id,
       donors.person_id,
@@ -148,7 +148,7 @@ export async function listDonors(filters = {}) {
       AND holder_active_donors.is_active = TRUE
     ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
     ORDER BY donors.created_at DESC, donors.name ASC
-  `);
+  `, params);
 
   return rows.map(mapDonorRow);
 }
@@ -696,7 +696,7 @@ export async function deleteAuxiliaryDonor(sourceId) {
 }
 
 export async function getDonorProfile(donorId) {
-  const donorRows = await query(`
+  const donorRows = await queryPrepared(`
     SELECT
       donors.id,
       donors.person_id,
@@ -719,15 +719,15 @@ export async function getDonorProfile(donorId) {
       ON holder_active_donors.person_id = donors.holder_person_id
       AND holder_active_donors.donor_type = 'holder'
       AND holder_active_donors.is_active = TRUE
-    WHERE donors.id = '${escapeSqlString(donorId)}'
+    WHERE donors.id = ?
     LIMIT 1
-  `);
+  `, [donorId]);
 
   if (donorRows.length === 0) {
     throw new Error("Doador não encontrado.");
   }
 
-  const monthlyRows = await query(`
+  const monthlyRows = await queryPrepared(`
     SELECT
       strftime(reference_month, '%Y-%m-01') AS reference_month,
       notes_count,
@@ -735,11 +735,11 @@ export async function getDonorProfile(donorId) {
       abatement_amount,
       abatement_status
     FROM monthly_donor_summary
-    WHERE donor_id = '${escapeSqlString(donorId)}'
+    WHERE donor_id = ?
     ORDER BY reference_month DESC
-  `);
+  `, [donorId]);
 
-  const sourceRows = await query(`
+  const sourceRows = await queryPrepared(`
     SELECT
       donor_cpf_links.id,
       donor_cpf_links.name,
@@ -750,7 +750,7 @@ export async function getDonorProfile(donorId) {
     FROM donor_cpf_links
     LEFT JOIN import_cpf_summary
       ON import_cpf_summary.matched_source_id = donor_cpf_links.id
-    WHERE donor_cpf_links.donor_id = '${escapeSqlString(donorId)}'
+    WHERE donor_cpf_links.donor_id = ?
     GROUP BY
       donor_cpf_links.id,
       donor_cpf_links.name,
@@ -758,9 +758,9 @@ export async function getDonorProfile(donorId) {
       donor_cpf_links.link_type,
       donor_cpf_links.donation_start_date
     ORDER BY donor_cpf_links.name ASC
-  `);
+  `, [donorId]);
 
-  const auxiliaryRows = await query(`
+  const auxiliaryRows = await queryPrepared(`
     SELECT
       id,
       name,
@@ -768,11 +768,11 @@ export async function getDonorProfile(donorId) {
       demand,
       strftime(donation_start_date, '%Y-%m-01') AS donation_start_date
     FROM donors
-    WHERE holder_person_id = '${escapeSqlString(donorRows[0].person_id)}'
+    WHERE holder_person_id = ?
       AND donor_type = 'auxiliary'
       AND is_active = TRUE
     ORDER BY name ASC
-  `);
+  `, [donorRows[0].person_id]);
 
   const donor = donorRows[0];
   const totalNotes = monthlyRows.reduce(
@@ -784,15 +784,15 @@ export async function getDonorProfile(donorId) {
     0,
   );
 
-  const activityRows = await query(`
+  const activityRows = await queryPrepared(`
     SELECT
       event_type,
       strftime(reference_month, '%Y-%m-01') AS reference_month,
       strftime(created_at, '%Y-%m-%d %H:%M:%S') AS created_at
     FROM donor_activity_history
-    WHERE donor_id = '${escapeSqlString(donorId)}'
+    WHERE donor_id = ?
     ORDER BY reference_month ASC, created_at ASC
-  `);
+  `, [donorId]);
 
   const lastDeactivation = activityRows.filter((r) => r.event_type === "deactivated").at(-1);
   const latestActivity = activityRows.at(-1);

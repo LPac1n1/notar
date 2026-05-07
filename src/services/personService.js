@@ -4,6 +4,7 @@ import {
   execute,
   normalizeCpf,
   query,
+  queryPrepared,
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { createTrashItem } from "./trashService";
@@ -65,60 +66,63 @@ function mapPersonRow(row) {
   };
 }
 
-async function queryPersonRows(conditions = []) {
+async function queryPersonRows({ conditions = [], params = [] } = {}) {
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const rows = await query(`
-    SELECT
-      people.id,
-      people.name,
-      people.cpf,
-      people.is_active,
-      strftime(people.created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
-      (
-        SELECT donors.id
-        FROM donors
-        WHERE donors.person_id = people.id
-          AND donors.is_active = TRUE
-        ORDER BY donors.created_at ASC, donors.id ASC
-        LIMIT 1
-      ) AS donor_id,
-      (
-        SELECT donors.donor_type
-        FROM donors
-        WHERE donors.person_id = people.id
-          AND donors.is_active = TRUE
-        ORDER BY donors.created_at ASC, donors.id ASC
-        LIMIT 1
-      ) AS donor_type,
-      (
-        SELECT donors.demand
-        FROM donors
-        WHERE donors.person_id = people.id
-          AND donors.is_active = TRUE
-        ORDER BY donors.created_at ASC, donors.id ASC
-        LIMIT 1
-      ) AS demand,
-      (
-        SELECT strftime(donors.donation_start_date, '%Y-%m-01')
-        FROM donors
-        WHERE donors.person_id = people.id
-          AND donors.is_active = TRUE
-        ORDER BY donors.created_at ASC, donors.id ASC
-        LIMIT 1
-      ) AS donation_start_date,
-      coalesce((
-        SELECT count(*)
-        FROM donors
-        WHERE donors.holder_person_id = people.id
-          AND donors.donor_type = 'auxiliary'
-          AND donors.is_active = TRUE
-      ), 0) AS referenced_by_auxiliaries
-    FROM people
-    ${whereClause}
-    ORDER BY people.name ASC, people.id ASC
-  `);
+  const rows = await queryPrepared(
+    `
+      SELECT
+        people.id,
+        people.name,
+        people.cpf,
+        people.is_active,
+        strftime(people.created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
+        (
+          SELECT donors.id
+          FROM donors
+          WHERE donors.person_id = people.id
+            AND donors.is_active = TRUE
+          ORDER BY donors.created_at ASC, donors.id ASC
+          LIMIT 1
+        ) AS donor_id,
+        (
+          SELECT donors.donor_type
+          FROM donors
+          WHERE donors.person_id = people.id
+            AND donors.is_active = TRUE
+          ORDER BY donors.created_at ASC, donors.id ASC
+          LIMIT 1
+        ) AS donor_type,
+        (
+          SELECT donors.demand
+          FROM donors
+          WHERE donors.person_id = people.id
+            AND donors.is_active = TRUE
+          ORDER BY donors.created_at ASC, donors.id ASC
+          LIMIT 1
+        ) AS demand,
+        (
+          SELECT strftime(donors.donation_start_date, '%Y-%m-01')
+          FROM donors
+          WHERE donors.person_id = people.id
+            AND donors.is_active = TRUE
+          ORDER BY donors.created_at ASC, donors.id ASC
+          LIMIT 1
+        ) AS donation_start_date,
+        coalesce((
+          SELECT count(*)
+          FROM donors
+          WHERE donors.holder_person_id = people.id
+            AND donors.donor_type = 'auxiliary'
+            AND donors.is_active = TRUE
+        ), 0) AS referenced_by_auxiliaries
+      FROM people
+      ${whereClause}
+      ORDER BY people.name ASC, people.id ASC
+    `,
+    params,
+  );
 
   return rows.map(mapPersonRow);
 }
@@ -128,10 +132,10 @@ export async function findPersonById(id) {
     return null;
   }
 
-  const rows = await queryPersonRows([
-    `people.id = '${escapeSqlString(id)}'`,
-    "people.is_active = TRUE",
-  ]);
+  const rows = await queryPersonRows({
+    conditions: ["people.id = ?", "people.is_active = TRUE"],
+    params: [id],
+  });
 
   return rows[0] ?? null;
 }
@@ -143,10 +147,10 @@ export async function findPersonByCpf(cpf) {
     return null;
   }
 
-  const rows = await queryPersonRows([
-    `people.cpf = '${escapeSqlString(normalizedCpf)}'`,
-    "people.is_active = TRUE",
-  ]);
+  const rows = await queryPersonRows({
+    conditions: ["people.cpf = ?", "people.is_active = TRUE"],
+    params: [normalizedCpf],
+  });
 
   return rows[0] ?? null;
 }
@@ -159,17 +163,16 @@ export async function listPeople(filters = {}) {
   } = filters;
 
   const conditions = ["people.is_active = TRUE"];
+  const params = [];
 
   if (personId.trim()) {
-    conditions.push(
-      `people.id = '${escapeSqlString(personId.trim())}'`,
-    );
+    conditions.push("people.id = ?");
+    params.push(personId.trim());
   }
 
   if (cpf.trim()) {
-    conditions.push(
-      `people.cpf = '${escapeSqlString(normalizeCpf(cpf))}'`,
-    );
+    conditions.push("people.cpf = ?");
+    params.push(normalizeCpf(cpf));
   }
 
   if (role === "holder") {
@@ -207,7 +210,7 @@ export async function listPeople(filters = {}) {
     `);
   }
 
-  return queryPersonRows(conditions);
+  return queryPersonRows({ conditions, params });
 }
 
 export async function createPerson({

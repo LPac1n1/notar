@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { escapeSqlString, execute, query } from "./db";
+import { escapeSqlString, execute, query, queryPrepared } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileAllImports } from "./importService";
 import { createTrashItem } from "./trashService";
@@ -12,20 +12,25 @@ import { normalizeDemandName } from "../utils/normalize";
 export async function listDemands(filters = {}) {
   const { demandId = "" } = filters;
   const conditions = [];
+  const params = [];
 
   if (demandId.trim()) {
-    conditions.push(`id = '${escapeSqlString(demandId.trim())}'`);
+    conditions.push("id = ?");
+    params.push(demandId.trim());
   }
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const rows = await query(`
-    SELECT id, name, color, is_active
-    FROM demands
-    ${whereClause}
-    ORDER BY name ASC
-  `);
+  const rows = await queryPrepared(
+    `
+      SELECT id, name, color, is_active
+      FROM demands
+      ${whereClause}
+      ORDER BY name ASC
+    `,
+    params,
+  );
 
   return rows.map((row) => ({
     id: row.id,

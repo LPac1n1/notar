@@ -5,6 +5,7 @@ import {
   normalizeCpf,
   notifyDatabaseChanged,
   query,
+  queryPrepared,
   releaseRegisteredFile,
   registerFileText,
   runInTransaction,
@@ -220,37 +221,31 @@ export async function listImportCpfSummary({
   registrationFilter = "all",
 } = {}) {
   const conditions = [];
+  const params = [];
 
   if (importId) {
-    conditions.push(`import_cpf_summary.import_id = '${escapeSqlString(importId)}'`);
+    conditions.push("import_cpf_summary.import_id = ?");
+    params.push(importId);
   }
 
   if (referenceMonth) {
-    conditions.push(
-      `import_cpf_summary.reference_month = '${escapeSqlString(
-        startOfMonth(referenceMonth),
-      )}'`,
-    );
+    conditions.push("import_cpf_summary.reference_month = ?");
+    params.push(startOfMonth(referenceMonth));
   }
 
   if (cpf.trim()) {
-    conditions.push(
-      `import_cpf_summary.cpf = '${escapeSqlString(normalizeCpf(cpf))}'`,
-    );
+    conditions.push("import_cpf_summary.cpf = ?");
+    params.push(normalizeCpf(cpf));
   }
 
   if (donorId.trim()) {
-    conditions.push(
-      `donors.id = '${escapeSqlString(donorId.trim())}'`,
-    );
+    conditions.push("donors.id = ?");
+    params.push(donorId.trim());
   }
 
   if (demand.trim()) {
-    conditions.push(
-      `lower(coalesce(donors.demand, '')) = lower('${escapeSqlString(
-        demand.trim(),
-      )}')`,
-    );
+    conditions.push("lower(coalesce(donors.demand, '')) = lower(?)");
+    params.push(demand.trim());
   }
 
   if (registrationFilter === "registered") {
@@ -263,7 +258,7 @@ export async function listImportCpfSummary({
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const rows = await query(`
+  const rows = await queryPrepared(`
     SELECT
       import_cpf_summary.id,
       import_cpf_summary.import_id,
@@ -301,7 +296,7 @@ export async function listImportCpfSummary({
       ON donor_cpf_links.id = import_cpf_summary.matched_source_id
     ${whereClause}
     ORDER BY import_cpf_summary.cpf ASC, import_cpf_summary.reference_month DESC
-  `);
+  `, params);
 
   const cpfSummaryMap = new Map();
 
@@ -986,22 +981,22 @@ export async function searchImportedCpfs(rawCpfs = []) {
     };
   }
 
-  const cpfList = normalizedCpfs
-    .map((cpf) => `'${escapeSqlString(cpf)}'`)
-    .join(", ");
+  // `cpf IN (?, ?, ...)` with one placeholder per CPF — DuckDB-WASM does not
+  // support array parameters in a single placeholder, so we expand manually.
+  const cpfPlaceholders = normalizedCpfs.map(() => "?").join(", ");
 
-  const summaryRows = await query(`
+  const summaryRows = await queryPrepared(`
     SELECT
       cpf,
       strftime(reference_month, '%Y-%m-01') AS reference_month,
       sum(notes_count) AS notes_count
     FROM import_cpf_summary
-    WHERE cpf IN (${cpfList})
+    WHERE cpf IN (${cpfPlaceholders})
     GROUP BY cpf, reference_month
     ORDER BY cpf ASC, reference_month ASC
-  `);
+  `, normalizedCpfs);
 
-  const linkRows = await query(`
+  const linkRows = await queryPrepared(`
     SELECT
       donor_cpf_links.cpf,
       donor_cpf_links.donor_id,
@@ -1010,9 +1005,9 @@ export async function searchImportedCpfs(rawCpfs = []) {
       donors.is_active AS donor_is_active
     FROM donor_cpf_links
     LEFT JOIN donors ON donors.id = donor_cpf_links.donor_id
-    WHERE donor_cpf_links.cpf IN (${cpfList})
+    WHERE donor_cpf_links.cpf IN (${cpfPlaceholders})
       AND donor_cpf_links.is_active = TRUE
-  `);
+  `, normalizedCpfs);
 
   const cpfMap = new Map();
   for (const cpf of normalizedCpfs) {
