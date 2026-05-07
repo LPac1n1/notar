@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebouncedValue } from "./useDebouncedValue";
 import { logError } from "../services/logger";
+
+// Sentinel used so callers don't have to memoize an empty array themselves
+// when they don't need neutralized keys. Using a stable reference here keeps
+// `buildOptionFilters` from invalidating every render.
+const EMPTY_NEUTRALIZED_KEYS = Object.freeze([]);
 
 /**
  * Generic loader hook for the "filter-driven page" pattern that recurs across
@@ -31,13 +36,11 @@ import { logError } from "../services/logger";
  *   reloads. Defaults to 180ms.
  * @param {string[]} [options.neutralizedKeys]
  *   Keys cleared (set to "") in the secondary load that produces `optionSource`.
- *   When provided, two parallel queries are dispatched per reload.
+ *   When provided, two parallel queries are dispatched per reload. Inline
+ *   arrays are fine — the hook compares by content, not by reference.
  * @param {(filters: object) => Promise<TItem[]>} [options.optionLoader]
  *   Override for the secondary load. Defaults to the primary `loader` invoked
  *   with the neutralized filters.
- * @param {object[]} [options.extraDeps]
- *   Additional values whose change should trigger a reload. Useful when the
- *   loader depends on something outside the filters object.
  *
  * @returns {{
  *   data: TItem[],
@@ -55,9 +58,8 @@ export function useDataResource({
   errorMessage = "Não foi possível carregar os dados.",
   scope = "useDataResource",
   debounceMs = 180,
-  neutralizedKeys = null,
+  neutralizedKeys = EMPTY_NEUTRALIZED_KEYS,
   optionLoader,
-  extraDeps = [],
 } = {}) {
   const [data, setData] = useState([]);
   const [optionSource, setOptionSource] = useState([]);
@@ -69,19 +71,28 @@ export function useDataResource({
   const hasInitializedRef = useRef(false);
   const debouncedFilters = useDebouncedValue(filters, debounceMs);
 
+  // Stabilize neutralizedKeys by *content* — callers can pass an inline
+  // `["cpf", "donorId"]` and the hook will only recompute downstream effects
+  // when the actual list of keys changes. Without this, the inline array is
+  // a fresh reference every render and cascades invalidations through
+  // `buildOptionFilters` → `runLoad` → `reload` → consumers' `useCallback`s.
+  const neutralizedKeysSignature = Array.isArray(neutralizedKeys)
+    ? neutralizedKeys.join("|")
+    : "";
+
   const buildOptionFilters = useCallback(
     (currentFilters) => {
-      if (!Array.isArray(neutralizedKeys) || neutralizedKeys.length === 0) {
+      if (!neutralizedKeysSignature) {
         return null;
       }
 
       const next = { ...currentFilters };
-      for (const key of neutralizedKeys) {
+      for (const key of neutralizedKeysSignature.split("|")) {
         next[key] = "";
       }
       return next;
     },
-    [neutralizedKeys],
+    [neutralizedKeysSignature],
   );
 
   const runLoad = useCallback(
@@ -152,20 +163,17 @@ export function useDataResource({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload when filters change (after debounce) or when extraDeps shift.
-  const extraDepsKey = useMemo(() => extraDeps, [extraDeps]);
-
+  // Reload when filters change (after debounce). `runLoad` is intentionally
+  // omitted: any hook-internal identity churn would otherwise re-trigger this
+  // effect even when no user-driven input changed.
   useEffect(() => {
     if (!hasInitializedRef.current) {
       return;
     }
 
     runLoad(debouncedFilters);
-    // We deliberately omit `runLoad` from deps so a stable hook identity does
-    // not retrigger this effect; we want the effect to only depend on the
-    // user-driven inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedFilters, extraDepsKey]);
+  }, [debouncedFilters]);
 
   return {
     data,
