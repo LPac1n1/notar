@@ -123,7 +123,7 @@ async function queryPersonRows(conditions = []) {
   return rows.map(mapPersonRow);
 }
 
-export async function getPersonById(id) {
+export async function findPersonById(id) {
   if (!id) {
     return null;
   }
@@ -285,7 +285,7 @@ export async function updatePerson({
     throw new Error("Informe um CPF válido com 11 dígitos.");
   }
 
-  const currentPerson = await getPersonById(id);
+  const currentPerson = await findPersonById(id);
 
   if (!currentPerson) {
     throw new Error("Pessoa não encontrada.");

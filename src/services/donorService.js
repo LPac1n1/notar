@@ -12,7 +12,7 @@ import {
   ensureDonationCpfIsAvailable,
   ensurePersonCanBeAuxiliary,
   findActiveDonorByPersonId,
-  getHolderPersonContext,
+  findHolderPersonContext,
   reconcileCpfChanges,
   resolveCreatePersonContext,
   syncAuxiliaryHolderDonorIds,
@@ -24,7 +24,7 @@ import {
 } from "./donor/donorMappers";
 import {
   findPersonByCpf,
-  getPersonById,
+  findPersonById,
 } from "./personService";
 import { createTrashItem } from "./trashService";
 import { formatCpf } from "../utils/cpf";
@@ -189,7 +189,7 @@ export async function createDonor({
 
   const holderContext =
     normalizedDonorType === "auxiliary"
-      ? await getHolderPersonContext({
+      ? await findHolderPersonContext({
           holderPersonId,
           holderDonorId,
         })
@@ -310,7 +310,7 @@ export async function updateDonor({
   const currentDonor = donorRows[0];
   const currentPersonId = currentDonor.person_id ?? "";
   const currentPerson = currentPersonId
-    ? await getPersonById(currentPersonId)
+    ? await findPersonById(currentPersonId)
     : null;
   const normalizedName = normalizePersonName(name);
   const normalizedCpf = normalizeCpf(cpf);
@@ -344,7 +344,7 @@ export async function updateDonor({
 
   const holderContext =
     normalizedDonorType === "auxiliary"
-      ? await getHolderPersonContext({
+      ? await findHolderPersonContext({
           holderPersonId,
           holderDonorId,
         })

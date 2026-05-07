@@ -1,5 +1,4 @@
 import { downloadFile } from "../../../utils/download";
-import { formatInteger } from "../../../utils/format";
 import { SimplePdfDocument } from "../pdf/simplePdf";
 import { createZipArchive } from "../utils/simpleZip";
 import {

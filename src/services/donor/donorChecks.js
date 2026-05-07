@@ -8,7 +8,7 @@ import { reconcileImportsForCpfs } from "../importService";
 import {
   createPerson,
   findPersonByCpf,
-  getPersonById,
+  findPersonById,
 } from "../personService";
 import { normalizePersonName } from "../../utils/normalize";
 
@@ -133,7 +133,7 @@ export async function resolveHolderPersonIdInput({
   return holderDonorRows[0]?.person_id ?? "";
 }
 
-export async function getHolderPersonContext({
+export async function findHolderPersonContext({
   holderPersonId = "",
   holderDonorId = "",
 } = {}) {
@@ -146,7 +146,7 @@ export async function getHolderPersonContext({
     return null;
   }
 
-  const person = await getPersonById(resolvedHolderPersonId);
+  const person = await findPersonById(resolvedHolderPersonId);
 
   if (!person) {
     throw new Error("A pessoa vinculada não existe mais.");
@@ -201,7 +201,7 @@ export async function resolveCreatePersonContext({
   cpf,
 }) {
   if (personId) {
-    const existingPerson = await getPersonById(personId);
+    const existingPerson = await findPersonById(personId);
 
     if (!existingPerson) {
       throw new Error("A pessoa selecionada não existe mais.");
@@ -238,7 +238,7 @@ export async function resolveCreatePersonContext({
     cpf: normalizedCpf,
   }, { recordHistory: false });
 
-  return getPersonById(createdPersonId);
+  return findPersonById(createdPersonId);
 }
 
 export async function syncAuxiliaryHolderDonorIds(personIds = []) {

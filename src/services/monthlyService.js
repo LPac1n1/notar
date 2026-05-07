@@ -223,18 +223,8 @@ async function listMonthlySummariesByMonth({
     donationStartDate,
     donorActiveStatus: "active",
   });
-  const donorConditions = buildDonorConditions({
-    donorId,
-    donorType,
-    cpf,
-    demand,
-    donationStartDate,
-    donorActiveStatus,
-  });
   const activeDonorWhereClause =
     activeDonorConditions.length > 0 ? `WHERE ${activeDonorConditions.join(" AND ")}` : "";
-  const donorWhereClause =
-    donorConditions.length > 0 ? `WHERE ${donorConditions.join(" AND ")}` : "";
 
   const [donorRows, monthlyRows, importContextRows] = await Promise.all([
     query(`
