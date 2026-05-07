@@ -370,6 +370,71 @@ export const MIGRATIONS = [
     `).catch(() => null);
     },
   },
+  {
+    id: 2,
+    name: "unique-id-and-natural-key-indexes",
+    up: async (conn) => {
+      // DuckDB does not support `ALTER TABLE ADD PRIMARY KEY` on tables with
+      // existing data, so we enforce row identity via UNIQUE indexes. Same
+      // semantics: future inserts cannot duplicate id; conflicts surface as
+      // SQL errors instead of being silently accepted.
+      //
+      // Each statement is wrapped in `.catch(...)`: if a database happens to
+      // have legacy duplicates, we log and continue rather than wedge the
+      // migration runner. The constraint is still applied to fresh installs
+      // and to any database whose data is already clean.
+      const uniqueIdTables = [
+        "demands",
+        "people",
+        "donors",
+        "donor_cpf_links",
+        "imports",
+        "import_cpf_summary",
+        "monthly_donor_summary",
+        "notes",
+        "action_history",
+        "donor_activity_history",
+        "trash_items",
+        "schema_version",
+      ];
+
+      for (const table of uniqueIdTables) {
+        await conn
+          .query(
+            `CREATE UNIQUE INDEX IF NOT EXISTS uq_${table}_id ON ${table}(id)`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v2: skipping UNIQUE index on ${table}(id) — duplicate ids detected.`,
+              error,
+            );
+          });
+      }
+
+      // Natural-key uniques. These are invariants the application already
+      // assumes (createDonor checks ensureDonationCpfIsAvailable, createPerson
+      // checks findPersonByCpf, createDemand checks duplicate names) but the
+      // DB never enforced them.
+      const naturalKeyIndexes = [
+        ["uq_people_cpf", "people(cpf)"],
+        ["uq_donors_cpf", "donors(cpf)"],
+        ["uq_demands_name", "demands(name)"],
+      ];
+
+      for (const [indexName, columns] of naturalKeyIndexes) {
+        await conn
+          .query(
+            `CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON ${columns}`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v2: skipping UNIQUE index ${indexName} on ${columns} — duplicates detected.`,
+              error,
+            );
+          });
+      }
+    },
+  },
 ];
 
 export async function runMigrations(conn) {
