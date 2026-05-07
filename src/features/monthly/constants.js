@@ -1,7 +1,7 @@
 export {
   DONATION_START_DATE_OPTIONS,
   DONOR_TYPE_OPTIONS,
-} from "../donors/constants";
+} from "../../constants/filterOptions";
 
 export const INITIAL_MONTHLY_FILTERS = {
   referenceMonth: "",

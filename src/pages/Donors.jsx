@@ -18,7 +18,7 @@ import {
   ACTIVE_STATUS_OPTIONS,
   DONATION_START_DATE_OPTIONS,
   DONOR_TYPE_OPTIONS,
-} from "../features/donors/constants";
+} from "../constants/filterOptions";
 import DonorForm from "../features/donors/components/DonorForm";
 import DonorListItem from "../features/donors/components/DonorListItem";
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
