@@ -120,6 +120,44 @@ export async function execute(sql, { flush = true } = {}) {
   }
 }
 
+/**
+ * Run a prepared SELECT statement.
+ *
+ * Pass `?` placeholders in the SQL and the matching values in `params`. The
+ * statement is closed automatically once results are read, so callers don't
+ * have to track the lifetime themselves.
+ */
+export async function queryPrepared(sql, params = []) {
+  const connection = await initDB();
+  const stmt = await connection.prepare(sql);
+  try {
+    const result = await stmt.query(...params);
+    return result.toArray();
+  } finally {
+    await stmt.close().catch(() => null);
+  }
+}
+
+/**
+ * Run a prepared write statement (INSERT/UPDATE/DELETE/etc.). Same lifetime
+ * rules as `queryPrepared`. Honors the connection-level flush hook so the
+ * connected file (if any) is persisted after the write.
+ */
+export async function executePrepared(sql, params = [], { flush = true } = {}) {
+  const connection = await initDB();
+  const stmt = await connection.prepare(sql);
+  try {
+    await stmt.query(...params);
+  } finally {
+    await stmt.close().catch(() => null);
+  }
+
+  if (flush && transactionDepth === 0) {
+    await flushAfterTransaction();
+    notifyDatabaseChanged();
+  }
+}
+
 export async function registerFileText(fileName, text) {
   await initDB();
   await db.registerFileText(fileName, text);

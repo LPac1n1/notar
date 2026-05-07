@@ -37,6 +37,16 @@ export async function createTestConnection() {
       // thenable that resolves to an Apache Arrow Table with `.toArray()`.
       return Promise.resolve(rawConn.query(sql));
     },
+    prepare(sql) {
+      const rawStmt = rawConn.prepare(sql);
+      return Promise.resolve({
+        query: (...params) => Promise.resolve(rawStmt.query(...params)),
+        close: () => {
+          rawStmt.close();
+          return Promise.resolve();
+        },
+      });
+    },
     close() {
       rawConn.close();
       bindings.terminate?.();

@@ -19,7 +19,9 @@ export { escapeSqlString } from "./db/sql.js";
 export {
   initDB,
   query,
+  queryPrepared,
   execute,
+  executePrepared,
   runInTransaction,
   flushDatabase,
   registerFileText,

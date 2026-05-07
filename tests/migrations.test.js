@@ -6,6 +6,55 @@ import {
   runMigrations,
 } from "../src/services/db/migrations.js";
 
+test("prepared statements bind parameters via ? placeholders", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(
+      "INSERT INTO demands (id, name, color, is_active) VALUES ('a', 'Alpha', '#000', TRUE), ('b', 'Beta', '#111', TRUE)",
+    );
+
+    const stmt = await conn.prepare("SELECT name FROM demands WHERE id = ?");
+    try {
+      const result = await stmt.query("a");
+      const rows = result.toArray();
+      assert.equal(rows.length, 1);
+      assert.equal(String(rows[0].name), "Alpha");
+    } finally {
+      await stmt.close();
+    }
+  } finally {
+    conn.close();
+  }
+});
+
+test("prepared statements neutralize quote injection attempts", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(
+      "INSERT INTO demands (id, name, color, is_active) VALUES ('safe', 'Real demand', '#000', TRUE)",
+    );
+
+    // Attempting classic injection through a prepared parameter must produce
+    // zero rows, never execute the suffix as SQL.
+    const stmt = await conn.prepare("SELECT count(*) AS total FROM demands WHERE name = ?");
+    try {
+      const result = await stmt.query("Real demand'; DROP TABLE demands; --");
+      const rows = result.toArray();
+      assert.equal(Number(rows[0].total), 0);
+    } finally {
+      await stmt.close();
+    }
+
+    // Verify the table is still intact.
+    const surviving = await conn.query("SELECT count(*) AS total FROM demands");
+    assert.equal(Number(surviving.toArray()[0].total), 1);
+  } finally {
+    conn.close();
+  }
+});
+
 test("runMigrations creates schema_version and stamps each migration", async () => {
   const conn = await createTestConnection();
   try {
