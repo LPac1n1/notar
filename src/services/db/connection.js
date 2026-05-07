@@ -6,7 +6,7 @@ import {
   notifyDatabaseChanged,
   updateStorageInfo,
 } from "./events";
-import { runStructuralSetup } from "./schema";
+import { runSchemaBootstrap } from "./schema";
 
 const MVP_BUNDLE = {
   mainModule: duckdbMvpWasm,
@@ -87,7 +87,7 @@ export async function initDB() {
 
     conn = await db.connect();
 
-    await runStructuralSetup(conn);
+    await runSchemaBootstrap(conn);
 
     return conn;
   })();
@@ -170,7 +170,7 @@ export async function runInTransaction(
 
 export async function runStructuralReload() {
   await initDB();
-  await runStructuralSetup(conn, { structural: false });
+  await runSchemaBootstrap(conn, { structural: false });
 }
 
 export { supportsFileDatabaseSelection };
