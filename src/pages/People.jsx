@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
@@ -26,8 +26,9 @@ import {
   listPeople,
   updatePerson,
 } from "../services/personService";
+import { logError } from "../services/logger";
 import { restoreTrashItem } from "../services/trashService";
-import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useDataResource } from "../hooks/useDataResource";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
 import { getErrorMessage } from "../utils/error";
@@ -52,9 +53,10 @@ const INITIAL_FILTERS = {
   cpf: "",
 };
 
+const loadReferencePeople = (currentFilters) =>
+  listPeople({ ...currentFilters, role: "reference" });
+
 export default function People() {
-  const [people, setPeople] = useState([]);
-  const [peopleOptionSource, setPeopleOptionSource] = useState([]);
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
   const [createForm, setCreateForm] = useState({ ...EMPTY_PERSON_FORM });
   const [createFormErrors, setCreateFormErrors] = useState({});
@@ -63,88 +65,35 @@ export default function People() {
   const [editingPerson, setEditingPerson] = useState(null);
   const [personPendingRemoval, setPersonPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
+
+  const {
+    data: people,
+    optionSource: peopleOptionSource,
+    isLoading,
+    isRefreshing,
+    error,
+    setError,
+    reload: reloadPeople,
+  } = useDataResource({
+    loader: loadReferencePeople,
+    filters,
+    errorMessage: "Não foi possível carregar as pessoas.",
+    scope: "PeoplePage",
+    neutralizedKeys: ["personId", "cpf"],
+  });
+
   const peoplePagination = usePagination(people, { initialPageSize: 25 });
   const dataSyncFeedback = useDataSyncFeedback();
-  const debouncedFilters = useDebouncedValue(filters, 180);
-  const peopleRequestIdRef = useRef(0);
-  const hasInitializedRef = useRef(false);
   const showDataRefreshLoading =
     dataSyncFeedback.isActive ||
     dataSyncFeedback.isVisible ||
     (dataSyncFeedback.isSettling && isRefreshing);
 
-  const loadPeople = useCallback(async (currentFilters, { showLoading = false } = {}) => {
-    const requestId = peopleRequestIdRef.current + 1;
-    peopleRequestIdRef.current = requestId;
-
-    try {
-      if (showLoading) {
-        setIsLoading(true);
-      } else {
-        setIsRefreshing(true);
-      }
-
-      setError("");
-      const optionFilters = {
-        ...currentFilters,
-        personId: "",
-        cpf: "",
-      };
-      const [personRows, personOptionRows] = await Promise.all([
-        listPeople({ ...currentFilters, role: "reference" }),
-        listPeople({ ...optionFilters, role: "reference" }),
-      ]);
-
-      if (requestId !== peopleRequestIdRef.current) {
-        return;
-      }
-
-      setPeople(personRows);
-      setPeopleOptionSource(personOptionRows);
-    } catch (err) {
-      if (requestId !== peopleRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar pessoas:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar as pessoas.");
-    } finally {
-      if (requestId === peopleRequestIdRef.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPeople({ ...INITIAL_FILTERS }, { showLoading: true }).then(() => {
-      hasInitializedRef.current = true;
-    });
-  }, [loadPeople]);
-
-  useEffect(() => {
-    if (!hasInitializedRef.current) {
-      return;
-    }
-
-    loadPeople(debouncedFilters);
-  }, [debouncedFilters, loadPeople]);
-
-  const refreshPeople = useCallback(() => {
-    loadPeople(filters);
-  }, [filters, loadPeople]);
-
-  useDatabaseChangeEffect(refreshPeople);
+  useDatabaseChangeEffect(reloadPeople);
 
   const handleRestoreDeletedPerson = useCallback(
     async (trashItemId) => {
@@ -153,17 +102,14 @@ export default function People() {
         setSuccessMessage("");
         setSuccessAction(null);
         await restoreTrashItem(trashItemId);
-        await loadPeople(filters);
+        await reloadPeople();
         setSuccessMessage("Pessoa restaurada com sucesso.");
       } catch (err) {
-        console.error(
-          "Erro ao restaurar pessoa:",
-          getErrorMessage(err, "Erro desconhecido."),
-        );
+        logError("PeoplePage.restore", err);
         setError(getErrorMessage(err, "Não foi possível restaurar a pessoa."));
       }
     },
-    [filters, loadPeople],
+    [reloadPeople, setError],
   );
 
   const handleFormChange = (setter, setFormErrors) => (event) => {
@@ -235,12 +181,9 @@ export default function People() {
       setCreateForm({ ...EMPTY_PERSON_FORM });
       setCreateFormErrors({});
       setSuccessMessage("Pessoa cadastrada com sucesso.");
-      await loadPeople(filters);
+      await reloadPeople();
     } catch (err) {
-      console.error(
-        "Erro ao adicionar pessoa:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("PeoplePage.create", err);
       setError(getErrorMessage(err, "Não foi possível cadastrar a pessoa."));
     } finally {
       setIsSubmitting(false);
@@ -274,12 +217,9 @@ export default function People() {
       setEditForm({ ...EMPTY_PERSON_FORM });
       setEditFormErrors({});
       setSuccessMessage("Pessoa atualizada com sucesso.");
-      await loadPeople(filters);
+      await reloadPeople();
     } catch (err) {
-      console.error(
-        "Erro ao atualizar pessoa:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("PeoplePage.update", err);
       setError(getErrorMessage(err, "Não foi possível atualizar a pessoa."));
     } finally {
       setIsSubmitting(false);
@@ -297,7 +237,7 @@ export default function People() {
       setSuccessAction(null);
       setIsDeleting(true);
       const trashItemId = await deletePerson(personPendingRemoval.id);
-      await loadPeople(filters);
+      await reloadPeople();
       setPersonPendingRemoval(null);
       setSuccessMessage("Pessoa enviada para a lixeira com sucesso.");
       if (trashItemId) {
@@ -307,10 +247,7 @@ export default function People() {
         });
       }
     } catch (err) {
-      console.error(
-        "Erro ao remover pessoa:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("PeoplePage.delete", err);
       setError(getErrorMessage(err, "Não foi possível remover a pessoa."));
     } finally {
       setIsDeleting(false);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -24,6 +24,7 @@ import {
   listDemands,
   updateDemand,
 } from "../services/demandService";
+import { logError } from "../services/logger";
 import { restoreTrashItem } from "../services/trashService";
 import {
   DEFAULT_DEMAND_COLOR,
@@ -32,6 +33,7 @@ import {
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import { buildSelectOptions } from "../utils/select";
+import { useDataResource } from "../hooks/useDataResource";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
@@ -46,8 +48,6 @@ const EMPTY_DEMAND_FORM = {
 };
 
 export default function Demands() {
-  const [demands, setDemands] = useState([]);
-  const [demandOptionSource, setDemandOptionSource] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DEMAND_FORM });
   const [editForm, setEditForm] = useState({ ...EMPTY_DEMAND_FORM });
   const [editingDemand, setEditingDemand] = useState(null);
@@ -56,14 +56,27 @@ export default function Demands() {
   const [filters, setFilters] = useState({
     ...INITIAL_DEMAND_FILTERS,
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
-  const demandsRequestIdRef = useRef(0);
+
+  const {
+    data: demands,
+    optionSource: demandOptionSource,
+    isLoading,
+    isRefreshing,
+    error,
+    setError,
+    reload: reloadDemands,
+  } = useDataResource({
+    loader: listDemands,
+    filters,
+    errorMessage: "Não foi possível carregar as demandas.",
+    scope: "DemandsPage",
+    neutralizedKeys: ["demandId"],
+  });
+
   const demandsPagination = usePagination(demands, {
     initialPageSize: 25,
   });
@@ -73,60 +86,7 @@ export default function Demands() {
     dataSyncFeedback.isVisible ||
     (dataSyncFeedback.isSettling && isRefreshing);
 
-  const loadDemands = useCallback(async (
-    currentFilters = INITIAL_DEMAND_FILTERS,
-    { showLoading = false } = {},
-  ) => {
-    const requestId = demandsRequestIdRef.current + 1;
-    demandsRequestIdRef.current = requestId;
-
-    try {
-      if (showLoading) {
-        setIsLoading(true);
-      } else {
-        setIsRefreshing(true);
-      }
-
-      setError("");
-      const optionFilters = { ...currentFilters, demandId: "" };
-      const [demandRows, optionRows] = await Promise.all([
-        listDemands(currentFilters),
-        listDemands(optionFilters),
-      ]);
-
-      if (requestId !== demandsRequestIdRef.current) {
-        return;
-      }
-
-      setDemands(demandRows);
-      setDemandOptionSource(optionRows);
-    } catch (err) {
-      if (requestId !== demandsRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar demandas:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar as demandas.");
-    } finally {
-      if (requestId === demandsRequestIdRef.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDemands({ ...INITIAL_DEMAND_FILTERS }, { showLoading: true });
-  }, [loadDemands]);
-
-  const refreshDemands = useCallback(() => {
-    loadDemands(filters);
-  }, [filters, loadDemands]);
-
-  useDatabaseChangeEffect(refreshDemands);
+  useDatabaseChangeEffect(reloadDemands);
 
   const handleRestoreDeletedDemand = useCallback(
     async (trashItemId) => {
@@ -135,17 +95,14 @@ export default function Demands() {
         setSuccessMessage("");
         setSuccessAction(null);
         await restoreTrashItem(trashItemId);
-        await loadDemands(filters);
+        await reloadDemands();
         setSuccessMessage("Demanda restaurada com sucesso.");
       } catch (err) {
-        console.error(
-          "Erro ao restaurar demanda:",
-          getErrorMessage(err, "Erro desconhecido."),
-        );
+        logError("DemandsPage.restore", err);
         setError(getErrorMessage(err, "Não foi possível restaurar a demanda."));
       }
     },
-    [filters, loadDemands],
+    [reloadDemands, setError],
   );
 
   const handleFormChange = (setter) => (event) => {
@@ -169,12 +126,9 @@ export default function Demands() {
       setCreateForm({ ...EMPTY_DEMAND_FORM });
       setIsCreateModalOpen(false);
       setSuccessMessage("Demanda cadastrada com sucesso.");
-      await loadDemands(filters);
+      await reloadDemands();
     } catch (err) {
-      console.error(
-        "Erro ao adicionar demanda:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DemandsPage.create", err);
       setError(
         getErrorMessage(err, "Não foi possível adicionar a demanda."),
       );
@@ -215,12 +169,9 @@ export default function Demands() {
       });
       handleCloseEditModal();
       setSuccessMessage("Demanda atualizada com sucesso.");
-      await loadDemands(filters);
+      await reloadDemands();
     } catch (err) {
-      console.error(
-        "Erro ao atualizar demanda:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DemandsPage.update", err);
       setError(
         getErrorMessage(err, "Não foi possível atualizar a demanda."),
       );
@@ -240,7 +191,7 @@ export default function Demands() {
       setSuccessAction(null);
       setIsDeleting(true);
       const trashItemId = await deleteDemand(demandPendingRemoval.id);
-      await loadDemands(filters);
+      await reloadDemands();
       if (editingDemand?.id === demandPendingRemoval.id) {
         handleCloseEditModal();
       }
@@ -253,29 +204,22 @@ export default function Demands() {
         });
       }
     } catch (err) {
-      console.error(
-        "Erro ao remover demanda:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DemandsPage.delete", err);
       setError(getErrorMessage(err, "Não foi possível remover a demanda."));
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const handleFilterChange = async (event) => {
-    const nextFilters = {
-      ...filters,
+  const handleFilterChange = (event) => {
+    setFilters((current) => ({
+      ...current,
       [event.target.name]: event.target.value,
-    };
-    setFilters(nextFilters);
-    await loadDemands(nextFilters);
+    }));
   };
 
-  const handleClearFilters = async () => {
-    const clearedFilters = { ...INITIAL_DEMAND_FILTERS };
-    setFilters(clearedFilters);
-    await loadDemands(clearedFilters);
+  const handleClearFilters = () => {
+    setFilters({ ...INITIAL_DEMAND_FILTERS });
   };
 
   const demandFilterOptions = useMemo(

@@ -36,7 +36,8 @@ import {
 import { exportDonorsCsv } from "../services/exportService";
 import { listPeople } from "../services/personService";
 import { restoreTrashItem } from "../services/trashService";
-import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useDataResource } from "../hooks/useDataResource";
+import { logError } from "../services/logger";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage } from "../utils/error";
@@ -76,8 +77,6 @@ const DONOR_FORM_TYPE_OPTIONS = [
 
 export default function Donors() {
   const location = useLocation();
-  const [donors, setDonors] = useState([]);
-  const [donorOptionSource, setDonorOptionSource] = useState([]);
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
@@ -95,22 +94,32 @@ export default function Donors() {
     ...INITIAL_DONOR_FILTERS,
     ...(location.state?.donorFilters ?? {}),
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
+
+  const {
+    data: donors,
+    optionSource: donorOptionSource,
+    isLoading,
+    isRefreshing,
+    error,
+    setError,
+    reload: reloadDonors,
+  } = useDataResource({
+    loader: listDonors,
+    filters,
+    errorMessage: "Não foi possível carregar os doadores.",
+    scope: "DonorsPage",
+    neutralizedKeys: ["donorId", "cpf", "demand"],
+  });
+
   const donorsPagination = usePagination(donors, { initialPageSize: 25 });
   const dataSyncFeedback = useDataSyncFeedback();
-  const debouncedFilters = useDebouncedValue(filters, 180);
-  const donorsRequestIdRef = useRef(0);
   const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
-  const initialFiltersRef = useRef(filters);
-  const hasInitializedRef = useRef(false);
   const showDataRefreshLoading =
     dataSyncFeedback.isActive ||
     dataSyncFeedback.isVisible ||
@@ -228,81 +237,13 @@ export default function Donors() {
     setDemands(demandRows);
   }, []);
 
-  const loadDonors = useCallback(async (currentFilters, { showLoading = false } = {}) => {
-    const requestId = donorsRequestIdRef.current + 1;
-    donorsRequestIdRef.current = requestId;
-
-    try {
-      if (showLoading) {
-        setIsLoading(true);
-      } else {
-        setIsRefreshing(true);
-      }
-
-      setError("");
-      const optionFilters = {
-        ...currentFilters,
-        donorId: "",
-        cpf: "",
-        demand: "",
-      };
-      const [donorRows, donorOptionRows] = await Promise.all([
-        listDonors(currentFilters),
-        listDonors(optionFilters),
-      ]);
-
-      if (requestId !== donorsRequestIdRef.current) {
-        return;
-      }
-
-      setDonors(donorRows);
-      setDonorOptionSource(donorOptionRows);
-    } catch (err) {
-      if (requestId !== donorsRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar dados de doadores:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar os doadores.");
-    } finally {
-      if (requestId === donorsRequestIdRef.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    }
-  }, []);
-
   useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        await Promise.all([
-          loadSupportingData(),
-          loadDonors(initialFiltersRef.current, { showLoading: true }),
-        ]);
-      } finally {
-        hasInitializedRef.current = true;
-      }
-    })();
-  }, [loadDonors, loadSupportingData]);
-
-  useEffect(() => {
-    if (!hasInitializedRef.current) {
-      return;
-    }
-
-    loadDonors(debouncedFilters);
-  }, [debouncedFilters, loadDonors]);
+    loadSupportingData();
+  }, [loadSupportingData]);
 
   const refreshDonors = useCallback(async () => {
-    await Promise.all([
-      loadSupportingData(),
-      loadDonors(filters),
-    ]);
-  }, [filters, loadDonors, loadSupportingData]);
+    await Promise.all([loadSupportingData(), reloadDonors()]);
+  }, [loadSupportingData, reloadDonors]);
 
   useDatabaseChangeEffect(refreshDonors);
 
@@ -316,14 +257,11 @@ export default function Donors() {
         await refreshDonors();
         setSuccessMessage("Doador restaurado com sucesso.");
       } catch (err) {
-        console.error(
-          "Erro ao restaurar doador:",
-          getErrorMessage(err, "Erro desconhecido."),
-        );
+        logError("DonorsPage.restore", err);
         setError(getErrorMessage(err, "Não foi possível restaurar o doador."));
       }
     },
-    [refreshDonors],
+    [refreshDonors, setError],
   );
 
   useEffect(() => {
@@ -416,15 +354,9 @@ export default function Donors() {
       setSuccessMessage(
         "Doador cadastrado e reconciliado com as importações existentes.",
       );
-      await Promise.all([
-        loadSupportingData(),
-        loadDonors(filters),
-      ]);
+      await refreshDonors();
     } catch (err) {
-      console.error(
-        "Erro ao adicionar doador:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DonorsPage.create", err);
       setError(getErrorMessage(err, "Não foi possível adicionar o doador."));
     } finally {
       setIsSubmitting(false);
@@ -484,15 +416,9 @@ export default function Donors() {
       setSuccessMessage(
         "Doador atualizado e reconciliado com as importações existentes.",
       );
-      await Promise.all([
-        loadSupportingData(),
-        loadDonors(filters),
-      ]);
+      await refreshDonors();
     } catch (err) {
-      console.error(
-        "Erro ao atualizar doador:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DonorsPage.update", err);
       setError(getErrorMessage(err, "Não foi possível atualizar o doador."));
     } finally {
       setIsSubmitting(false);
@@ -510,10 +436,7 @@ export default function Donors() {
       setSuccessAction(null);
       setIsDeleting(true);
       const trashItemId = await deleteDonor(donorPendingRemoval.id);
-      await Promise.all([
-        loadSupportingData(),
-        loadDonors(filters),
-      ]);
+      await refreshDonors();
       setDonorPendingRemoval(null);
       setSuccessMessage("Doador enviado para a lixeira com sucesso.");
       if (trashItemId) {
@@ -523,10 +446,7 @@ export default function Donors() {
         });
       }
     } catch (err) {
-      console.error(
-        "Erro ao remover doador:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DonorsPage.delete", err);
       setError("Não foi possível remover o doador.");
     } finally {
       setIsDeleting(false);
@@ -553,10 +473,7 @@ export default function Donors() {
       });
       setSuccessMessage(`${result.rowCount} doador(es) exportado(s) em CSV.`);
     } catch (err) {
-      console.error(
-        "Erro ao exportar doadores:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("DonorsPage.export", err);
       setError("Não foi possível exportar os doadores.");
     } finally {
       setIsExporting(false);
@@ -574,9 +491,9 @@ export default function Donors() {
       await deactivateDonor(donorPendingDeactivation.id, referenceMonth);
       setDonorPendingDeactivation(null);
       setSuccessMessage(`${donorPendingDeactivation.name} foi desativado com sucesso.`);
-      await loadDonors(filters);
+      await reloadDonors();
     } catch (err) {
-      console.error("Erro ao desativar doador:", getErrorMessage(err, "Erro desconhecido."));
+      logError("DonorsPage.deactivate", err);
       setError(getErrorMessage(err, "Não foi possível desativar o doador."));
     } finally {
       setIsDeactivating(false);
@@ -594,9 +511,9 @@ export default function Donors() {
       await reactivateDonor(donorPendingReactivation.id, referenceMonth);
       setDonorPendingReactivation(null);
       setSuccessMessage(`${donorPendingReactivation.name} foi reativado com sucesso.`);
-      await loadDonors(filters);
+      await reloadDonors();
     } catch (err) {
-      console.error("Erro ao reativar doador:", getErrorMessage(err, "Erro desconhecido."));
+      logError("DonorsPage.reactivate", err);
       setError(getErrorMessage(err, "Não foi possível reativar o doador."));
     } finally {
       setIsReactivating(false);
