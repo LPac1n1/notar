@@ -298,26 +298,35 @@ export default function Monthly() {
     let didRecordHistory = false;
 
     for (const change of changes) {
-      if (!change.summaryId) {
+      if (!change.summaryId && !change.adjustmentId) {
         continue;
       }
 
       const normalizedStatus = change.status === "applied" ? "applied" : "pending";
-      const summaryIds = changesByStatus.get(normalizedStatus) ?? [];
-      summaryIds.push(change.summaryId);
-      changesByStatus.set(normalizedStatus, summaryIds);
+      const bucket = changesByStatus.get(normalizedStatus) ?? {
+        summaryIds: [],
+        adjustmentIds: [],
+      };
+      if (change.summaryId) {
+        bucket.summaryIds.push(change.summaryId);
+      }
+      if (change.adjustmentId) {
+        bucket.adjustmentIds.push(change.adjustmentId);
+      }
+      changesByStatus.set(normalizedStatus, bucket);
     }
 
-    for (const [status, summaryIds] of changesByStatus.entries()) {
+    for (const [status, { summaryIds, adjustmentIds }] of changesByStatus.entries()) {
       if (history && !didRecordHistory) {
         await updateAbatementStatusesWithHistory({
           history,
           status,
           summaryIds,
+          adjustmentIds,
         });
         didRecordHistory = true;
       } else {
-        await updateAbatementStatuses({ summaryIds, status });
+        await updateAbatementStatuses({ summaryIds, adjustmentIds, status });
       }
     }
   }, []);
@@ -357,6 +366,8 @@ export default function Monthly() {
       return;
     }
 
+    const adjustmentId = currentSummary.adjustment?.id ?? "";
+
     try {
       setError("");
       setSuccessMessage("");
@@ -367,7 +378,12 @@ export default function Monthly() {
         months: [currentSummary],
         status,
       });
-      await updateAbatementStatusWithHistory({ history, summaryId, status });
+      await updateAbatementStatusWithHistory({
+        history,
+        summaryId,
+        adjustmentId,
+        status,
+      });
       await reloadSummaries();
       const message = "Status do abatimento atualizado.";
       setSuccessMessage(message);
@@ -378,6 +394,7 @@ export default function Monthly() {
             changes: [
               {
                 summaryId,
+                adjustmentId,
                 status: currentSummary.abatementStatus,
               },
             ],
@@ -437,6 +454,9 @@ export default function Monthly() {
       await updateAbatementStatusesWithHistory({
         history,
         summaryIds: changedMonths.map((month) => month.id),
+        adjustmentIds: changedMonths
+          .map((month) => month.adjustmentId)
+          .filter(Boolean),
         status,
       });
       await reloadSummaries();
@@ -451,6 +471,7 @@ export default function Monthly() {
           handleUndoStatusChanges({
             changes: changedMonths.map((month) => ({
               summaryId: month.id,
+              adjustmentId: month.adjustmentId,
               status: month.abatementStatus,
             })),
             donorId: donor.donorId,
@@ -620,6 +641,10 @@ export default function Monthly() {
         0,
       );
 
+      const affectedAdjustmentIds = affectedSummaries
+        .map((s) => s.adjustment?.id ?? "")
+        .filter(Boolean);
+
       await updateAbatementStatusesWithHistory({
         history: {
           actionType: "monthly_abatement_status_update",
@@ -629,6 +654,7 @@ export default function Monthly() {
           description: `${formatInteger(summaryIds.length)} abatimento(s) marcado(s) como realizado.`,
           payload: {
             summaryIds,
+            adjustmentIds: affectedAdjustmentIds,
             donorCount: new Set(affectedSummaries.map((s) => s.donorId)).size,
             totalAmount,
             operation: "bulk",
@@ -636,6 +662,7 @@ export default function Monthly() {
         },
         status: "applied",
         summaryIds,
+        adjustmentIds: affectedAdjustmentIds,
       });
 
       await reloadSummaries();
@@ -731,6 +758,7 @@ export default function Monthly() {
         referenceMonth: summary.referenceMonth,
         abatementAmount: summary.abatementAmount,
         abatementStatus: summary.abatementStatus,
+        adjustmentId: summary.adjustment?.id ?? "",
       });
       current.invalidNotesCount += Number(summary.invalidNotesCount ?? 0);
       if (summary.abatementStatus === "applied") {

@@ -271,9 +271,9 @@ export async function createAbatementAdjustment({
     throw new Error("O mês final precisa ser igual ou posterior ao inicial.");
   }
 
-  if (normalizedEnd >= normalizedReferenceMonth) {
+  if (normalizedEnd > normalizedReferenceMonth) {
     throw new Error(
-      "O período acumulado precisa terminar antes do mês de referência.",
+      "O período acumulado não pode ultrapassar o mês de lançamento.",
     );
   }
 

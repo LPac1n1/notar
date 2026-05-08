@@ -164,7 +164,9 @@ export default function MonthlySummaryRow({
             value={formatInteger(summary.notesCount)}
             helper={
               summary.hasAdjustment && summary.adjustment
-                ? `${formatInteger(summary.monthNotesCount ?? 0)} no mês + ${formatInteger(summary.adjustment.notesCount)} acumuladas`
+                ? summary.adjustmentSubsumesMonth
+                  ? `Acumulado de ${summary.adjustment.rangeStartMonth?.slice(0, 7) ?? ""} a ${summary.adjustment.rangeEndMonth?.slice(0, 7) ?? ""}`
+                  : `${formatInteger(summary.monthNotesCount ?? 0)} no mês + ${formatInteger(summary.adjustment.notesCount)} acumuladas`
                 : summary.hasDonationsInMonth
                   ? `${formatInteger(summary.sourceCpfCount)} CPF(s) com notas`
                   : `${formatInteger(summary.sourceCpfCount)} CPF(s) cadastrados`
@@ -188,7 +190,9 @@ export default function MonthlySummaryRow({
             }
             helper={
               summary.hasAdjustment && summary.adjustment
-                ? `${formatCurrency(summary.monthAbatementAmount ?? 0)} mês + ${formatCurrency(summary.adjustment.abatementAmount)} acumulado`
+                ? summary.adjustmentSubsumesMonth
+                  ? "Total acumulado"
+                  : `${formatCurrency(summary.monthAbatementAmount ?? 0)} mês + ${formatCurrency(summary.adjustment.abatementAmount)} acumulado`
                 : undefined
             }
           />

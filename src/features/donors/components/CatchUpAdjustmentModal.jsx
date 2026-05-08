@@ -73,9 +73,9 @@ export default function CatchUpAdjustmentModal({
   );
   const rangeOrderValid =
     fieldsValid && rangeStartMonth <= rangeEndMonth;
-  const rangeBeforeReference =
-    fieldsValid && rangeEndMonth < referenceMonth;
-  const allValid = rangeOrderValid && rangeBeforeReference;
+  const rangeWithinReference =
+    fieldsValid && rangeEndMonth <= referenceMonth;
+  const allValid = rangeOrderValid && rangeWithinReference;
 
   // Recompute the preview whenever the user adjusts the range.
   useEffect(() => {
@@ -135,8 +135,8 @@ export default function CatchUpAdjustmentModal({
     if (!rangeOrderValid) {
       return "O mês final precisa ser igual ou posterior ao inicial.";
     }
-    if (!rangeBeforeReference) {
-      return "O período acumulado precisa terminar antes do mês de lançamento.";
+    if (!rangeWithinReference) {
+      return "O período acumulado não pode ultrapassar o mês de lançamento.";
     }
     if (donationStart && rangeStartMonth < donationStart) {
       return `O início das doações deste doador é ${formatMonthYear(`${donationStart}-01`)}. O período acumulado pode iniciar a partir desse mês.`;
@@ -147,7 +147,7 @@ export default function CatchUpAdjustmentModal({
     rangeStartMonth,
     rangeEndMonth,
     rangeOrderValid,
-    rangeBeforeReference,
+    rangeWithinReference,
     donationStart,
   ]);
 

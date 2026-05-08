@@ -61,15 +61,26 @@ function addPersonToDemandGroup(group, summary) {
     monthNotesCount: 0,
     adjustmentNotesCount: 0,
     adjustmentDescription: "",
+    adjustmentSubsumesMonth: false,
   };
 
   currentPerson.notesCount += Number(summary.notesCount ?? 0);
 
   if (summary.hasAdjustment && summary.adjustment) {
-    currentPerson.monthNotesCount += Number(summary.monthNotesCount ?? 0);
-    currentPerson.adjustmentNotesCount += Number(
-      summary.adjustment.notesCount ?? 0,
-    );
+    if (summary.adjustmentSubsumesMonth) {
+      // The adjustment range already covers this reference month, so the row
+      // total IS the adjustment total. No additive breakdown to expose.
+      currentPerson.adjustmentSubsumesMonth = true;
+      currentPerson.adjustmentNotesCount += Number(
+        summary.adjustment.notesCount ?? 0,
+      );
+    } else {
+      currentPerson.monthNotesCount += Number(summary.monthNotesCount ?? 0);
+      currentPerson.adjustmentNotesCount += Number(
+        summary.adjustment.notesCount ?? 0,
+      );
+    }
+
     if (!currentPerson.adjustmentDescription) {
       currentPerson.adjustmentDescription = summary.adjustment.description ?? "";
     }
@@ -179,8 +190,12 @@ function getDonationCountLabel(row, reportData) {
 
   // When a catch-up adjustment was applied to this month, expose the
   // breakdown ("28 (12 + 16)") so the recipient can see why the number is
-  // higher than usual.
-  if ((row.adjustmentNotesCount ?? 0) > 0) {
+  // higher than usual. We skip the breakdown when the adjustment subsumes the
+  // reference month — there is no separate "month" portion to show.
+  if (
+    (row.adjustmentNotesCount ?? 0) > 0 &&
+    !row.adjustmentSubsumesMonth
+  ) {
     const monthly = formatInteger(row.monthNotesCount ?? 0);
     const adjustment = formatInteger(row.adjustmentNotesCount);
     return `${formatInteger(row.notesCount)} (${monthly} + ${adjustment})`;
