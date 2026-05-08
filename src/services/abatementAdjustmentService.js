@@ -77,6 +77,15 @@ export async function previewCatchUpRange({
     throw new Error("O mês final precisa ser igual ou posterior ao inicial.");
   }
 
+  // Join the donor to the import history through CPF directly, NOT through
+  // `matched_source_id`. The matched_source_id field only carries data for
+  // imports already reconciled against the current donor records. If a donor
+  // was just added and the historical imports haven't been reconciled yet
+  // (race) or reconciliation ran but did not propagate retroactively, the
+  // matched_source_id-based join would silently miss the old months — and the
+  // catch-up would be saved with only the current month's notes.
+  //
+  // Joining by CPF works regardless of the matched_source_id state.
   const monthlyRows = await queryPrepared(
     `
       SELECT
@@ -87,12 +96,12 @@ export async function previewCatchUpRange({
       INNER JOIN imports
         ON imports.id = import_cpf_summary.import_id
       INNER JOIN donor_cpf_links
-        ON donor_cpf_links.id = import_cpf_summary.matched_source_id
-      WHERE donor_cpf_links.donor_id = ?
-        AND donor_cpf_links.is_active = TRUE
-        AND imports.status = 'processed'
-        AND import_cpf_summary.reference_month >= ?
-        AND import_cpf_summary.reference_month <= ?
+        ON donor_cpf_links.cpf = import_cpf_summary.cpf
+       AND donor_cpf_links.donor_id = ?
+       AND donor_cpf_links.is_active = TRUE
+      WHERE imports.status = 'processed'
+        AND import_cpf_summary.reference_month >= CAST(? AS DATE)
+        AND import_cpf_summary.reference_month <= CAST(? AS DATE)
       GROUP BY import_cpf_summary.reference_month
       ORDER BY import_cpf_summary.reference_month ASC
     `,
@@ -151,7 +160,7 @@ export async function listAdjustmentsForMonth(referenceMonth) {
         strftime(created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
         strftime(updated_at, '%Y-%m-%d %H:%M:%S') AS updated_at
       FROM abatement_adjustments
-      WHERE reference_month = ?
+      WHERE reference_month = CAST(? AS DATE)
     `,
     [normalized],
   );
