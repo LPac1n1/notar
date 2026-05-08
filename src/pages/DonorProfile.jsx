@@ -11,13 +11,16 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import StatusBadge from "../components/ui/StatusBadge";
 import { BackIcon } from "../components/ui/icons";
+import CatchUpAdjustmentModal from "../features/donors/components/CatchUpAdjustmentModal";
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
 import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
+import { deleteAbatementAdjustment } from "../services/abatementAdjustmentService";
 import {
   deactivateDonor,
   getDonorProfile,
   reactivateDonor,
 } from "../services/donorService";
+import { logError } from "../services/logger";
 import {
   formatDateTimePtBR,
   formatDonationDuration,
@@ -38,6 +41,7 @@ export default function DonorProfile() {
   const [successMessage, setSuccessMessage] = useState("");
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showReactivateModal, setShowReactivateModal] = useState(false);
+  const [showCatchUpModal, setShowCatchUpModal] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [isReactivating, setIsReactivating] = useState(false);
   const profileRequestIdRef = useRef(0);
@@ -126,6 +130,27 @@ export default function DonorProfile() {
     }
   };
 
+  const handleCatchUpConfirmed = async () => {
+    setShowCatchUpModal(false);
+    setSuccessMessage("Lançamento de acumulado registrado com sucesso.");
+    await loadProfile();
+  };
+
+  const handleDeleteAdjustment = async (adjustment) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      await deleteAbatementAdjustment(adjustment.id, {
+        donorName: profile?.donor?.name ?? "",
+      });
+      setSuccessMessage("Lançamento de acumulado removido.");
+      await loadProfile();
+    } catch (err) {
+      logError("DonorProfile.deleteAdjustment", err);
+      setError(err.message ?? "Não foi possível remover o lançamento.");
+    }
+  };
+
   const navigateToRelatedDonor = (nextDonorId) => {
     navigate(`/doadores/${encodeURIComponent(nextDonorId)}`, {
       state: location.state,
@@ -208,6 +233,13 @@ export default function DonorProfile() {
             Reativar doador
           </Button>
         )}
+
+        <Button
+          variant="subtle"
+          onClick={() => setShowCatchUpModal(true)}
+        >
+          Lançar acumulado
+        </Button>
 
         {!donor.isActive ? (
           <StatusBadge status="inactive" />
@@ -485,6 +517,69 @@ export default function DonorProfile() {
         </SectionCard>
       ) : null}
 
+      {profile.abatementAdjustments?.length > 0 ? (
+        <SectionCard
+          title="Acumulados lançados"
+          description="Lançamentos pontuais que somam meses anteriores ao mês de referência. Aparecem combinados com o valor do mês na gestão mensal e nos relatórios."
+          className="mb-6"
+        >
+          <div className="space-y-3">
+            {profile.abatementAdjustments.map((adjustment) => (
+              <div
+                key={adjustment.id}
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-[var(--text-main)]">
+                        {adjustment.referenceMonthFormatted}
+                      </p>
+                      <StatusBadge status={adjustment.abatementStatus} />
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--muted)]">
+                      Período: {adjustment.rangeStartMonthFormatted}
+                      {adjustment.rangeStartMonth !== adjustment.rangeEndMonth
+                        ? ` – ${adjustment.rangeEndMonthFormatted}`
+                        : ""}
+                    </p>
+                    {adjustment.description ? (
+                      <p className="mt-1 text-sm text-[var(--text-soft)]">
+                        {adjustment.description}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-row items-start gap-6 md:flex-col md:items-end md:gap-1">
+                    <div className="text-left md:text-right">
+                      <p className="text-xs text-[var(--muted)]">Notas</p>
+                      <p className="font-semibold text-[var(--text-main)]">
+                        {formatInteger(adjustment.notesCount)}
+                      </p>
+                    </div>
+                    <div className="text-left md:text-right">
+                      <p className="text-xs text-[var(--muted)]">Valor</p>
+                      <p className="font-semibold text-[var(--text-main)]">
+                        {formatCurrency(adjustment.abatementAmount)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="subtle"
+                    onClick={() => handleDeleteAdjustment(adjustment)}
+                  >
+                    Remover lançamento
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+
       <SectionCard
         title="Histórico mensal"
         description="Meses em que este doador teve abatimento calculado."
@@ -547,6 +642,16 @@ export default function DonorProfile() {
             isSubmitting={isReactivating}
             onClose={() => setShowReactivateModal(false)}
             onConfirm={handleReactivate}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCatchUpModal ? (
+          <CatchUpAdjustmentModal
+            donor={donor}
+            onClose={() => setShowCatchUpModal(false)}
+            onConfirmed={handleCatchUpConfirmed}
           />
         ) : null}
       </AnimatePresence>

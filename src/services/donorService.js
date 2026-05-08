@@ -27,6 +27,7 @@ import {
   findPersonByCpf,
   findPersonById,
 } from "./personService";
+import { listAdjustmentsForDonor } from "./abatementAdjustmentService";
 import { createTrashItem } from "./trashService";
 import { formatCpf } from "../utils/cpf";
 import { formatMonthYear } from "../utils/date";
@@ -804,6 +805,7 @@ export async function getDonorProfile(donorId) {
 
   const lastDeactivation = activityRows.filter((r) => r.event_type === "deactivated").at(-1);
   const latestActivity = activityRows.at(-1);
+  const adjustmentRows = await listAdjustmentsForDonor(donorId);
 
   return {
     donor: {
@@ -864,6 +866,12 @@ export async function getDonorProfile(donorId) {
       referenceMonth: String(row.reference_month).slice(0, 7),
       referenceMonthFormatted: formatMonthYear(row.reference_month ?? ""),
       createdAt: row.created_at ?? "",
+    })),
+    abatementAdjustments: adjustmentRows.map((adjustment) => ({
+      ...adjustment,
+      referenceMonthFormatted: formatMonthYear(adjustment.referenceMonth),
+      rangeStartMonthFormatted: formatMonthYear(adjustment.rangeStartMonth),
+      rangeEndMonthFormatted: formatMonthYear(adjustment.rangeEndMonth),
     })),
     totals: {
       totalNotes,

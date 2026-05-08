@@ -59,6 +59,17 @@ export default function MonthlySummaryRow({
               }
               tone={summary.hasDonationsInMonth ? "success" : "neutral"}
             />
+            {summary.hasAdjustment && summary.adjustment ? (
+              <span
+                className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--warning)]"
+                title={
+                  summary.adjustment.description ||
+                  `Acumulado de ${summary.adjustment.rangeStartMonth} a ${summary.adjustment.rangeEndMonth}`
+                }
+              >
+                Acumulado
+              </span>
+            ) : null}
           </div>
 
           {summary.donorType === "auxiliary" && summary.holderName ? (
@@ -152,9 +163,11 @@ export default function MonthlySummaryRow({
             label="Notas"
             value={formatInteger(summary.notesCount)}
             helper={
-              summary.hasDonationsInMonth
-                ? `${formatInteger(summary.sourceCpfCount)} CPF(s) com notas`
-                : `${formatInteger(summary.sourceCpfCount)} CPF(s) cadastrados`
+              summary.hasAdjustment && summary.adjustment
+                ? `${formatInteger(summary.monthNotesCount ?? 0)} no mês + ${formatInteger(summary.adjustment.notesCount)} acumuladas`
+                : summary.hasDonationsInMonth
+                  ? `${formatInteger(summary.sourceCpfCount)} CPF(s) com notas`
+                  : `${formatInteger(summary.sourceCpfCount)} CPF(s) cadastrados`
             }
           />
 
@@ -172,6 +185,11 @@ export default function MonthlySummaryRow({
                   ? "text-[var(--success)]"
                   : "text-[var(--warning)]"
                 : "text-[var(--text-soft)]"
+            }
+            helper={
+              summary.hasAdjustment && summary.adjustment
+                ? `${formatCurrency(summary.monthAbatementAmount ?? 0)} mês + ${formatCurrency(summary.adjustment.abatementAmount)} acumulado`
+                : undefined
             }
           />
         </div>

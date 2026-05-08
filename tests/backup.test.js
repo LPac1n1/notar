@@ -58,6 +58,8 @@ test("snapshot helpers detect data and count rows correctly", () => {
     monthlyDonorSummary: 0,
     notes: 0,
     actionHistory: 0,
+    donorActivityHistory: 0,
+    abatementAdjustments: 0,
     trashItems: 0,
   });
 });

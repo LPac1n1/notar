@@ -209,3 +209,61 @@ test("migration v2 creates UNIQUE indexes on natural keys", async () => {
     conn.close();
   }
 });
+
+test("migration v3 creates abatement_adjustments table with proper indexes", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    const tables = (
+      await conn.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'",
+      )
+    ).toArray();
+    const tableSet = new Set(tables.map((row) => String(row.table_name)));
+    assert.ok(
+      tableSet.has("abatement_adjustments"),
+      "expected migration v3 to create abatement_adjustments table",
+    );
+
+    const indexes = (
+      await conn.query(
+        "SELECT index_name, is_unique FROM duckdb_indexes() WHERE schema_name = 'main'",
+      )
+    ).toArray();
+    const indexMap = new Map(
+      indexes.map((row) => [String(row.index_name), Boolean(row.is_unique)]),
+    );
+
+    assert.ok(
+      indexMap.has("uq_abatement_adjustments_id"),
+      "expected UNIQUE index on abatement_adjustments(id)",
+    );
+    assert.ok(
+      indexMap.has("uq_abatement_adjustments_donor_month"),
+      "expected UNIQUE index on (donor_id, reference_month)",
+    );
+    assert.equal(
+      indexMap.get("uq_abatement_adjustments_donor_month"),
+      true,
+      "donor_month index must be UNIQUE",
+    );
+
+    // Sanity check: a single adjustment row inserts cleanly with the schema
+    // shape declared by the migration.
+    await conn.query(
+      `INSERT INTO abatement_adjustments
+        (id, donor_id, reference_month, range_start_month, range_end_month, notes_count, abatement_amount, abatement_status)
+       VALUES ('a1', 'donor-x', '2025-11-01', '2025-06-01', '2025-10-01', 28, 840, 'pending')`,
+    );
+
+    const stored = (
+      await conn.query(
+        "SELECT count(*) AS total FROM abatement_adjustments WHERE donor_id = 'donor-x'",
+      )
+    ).toArray();
+    assert.equal(Number(stored[0].total), 1);
+  } finally {
+    conn.close();
+  }
+});

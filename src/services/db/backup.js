@@ -119,6 +119,20 @@ export const RESTORE_TABLE_COLUMNS = {
     "reference_month",
     "created_at",
   ],
+  abatement_adjustments: [
+    "id",
+    "donor_id",
+    "reference_month",
+    "range_start_month",
+    "range_end_month",
+    "notes_count",
+    "abatement_amount",
+    "description",
+    "abatement_status",
+    "abatement_marked_at",
+    "created_at",
+    "updated_at",
+  ],
   trash_items: [
     "id",
     "entity_type",
@@ -282,6 +296,35 @@ export async function exportDatabaseSnapshot() {
     ORDER BY created_at DESC, id ASC
   `);
 
+  const donorActivityHistory = await query(`
+    SELECT
+      id,
+      donor_id,
+      event_type,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM donor_activity_history
+    ORDER BY reference_month ASC, created_at ASC, id ASC
+  `);
+
+  const abatementAdjustments = await query(`
+    SELECT
+      id,
+      donor_id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      CAST(range_start_month AS VARCHAR) AS range_start_month,
+      CAST(range_end_month AS VARCHAR) AS range_end_month,
+      notes_count,
+      abatement_amount,
+      description,
+      abatement_status,
+      CAST(abatement_marked_at AS VARCHAR) AS abatement_marked_at,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM abatement_adjustments
+    ORDER BY reference_month ASC, donor_id ASC, id ASC
+  `);
+
   return {
     demands,
     people,
@@ -292,6 +335,8 @@ export async function exportDatabaseSnapshot() {
     monthlyDonorSummary,
     notes,
     actionHistory,
+    donorActivityHistory,
+    abatementAdjustments,
     trashItems,
   };
 }
@@ -311,6 +356,8 @@ export async function restoreDatabaseSnapshot(
   }
 
   const tableOrderToClear = [
+    "abatement_adjustments",
+    "donor_activity_history",
     "action_history",
     "notes",
     "monthly_donor_summary",
@@ -332,6 +379,8 @@ export async function restoreDatabaseSnapshot(
     ["monthly_donor_summary", normalizedSnapshot.monthlyDonorSummary],
     ["notes", normalizedSnapshot.notes],
     ["action_history", normalizedSnapshot.actionHistory],
+    ["donor_activity_history", normalizedSnapshot.donorActivityHistory],
+    ["abatement_adjustments", normalizedSnapshot.abatementAdjustments],
     ["trash_items", normalizedSnapshot.trashItems],
   ];
 

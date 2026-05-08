@@ -58,9 +58,25 @@ function addPersonToDemandGroup(group, summary) {
     holderName: summary.holderName ?? "",
     donationStartDate: summary.donationStartDate ?? "",
     notesCount: 0,
+    monthNotesCount: 0,
+    adjustmentNotesCount: 0,
+    adjustmentDescription: "",
   };
 
   currentPerson.notesCount += Number(summary.notesCount ?? 0);
+
+  if (summary.hasAdjustment && summary.adjustment) {
+    currentPerson.monthNotesCount += Number(summary.monthNotesCount ?? 0);
+    currentPerson.adjustmentNotesCount += Number(
+      summary.adjustment.notesCount ?? 0,
+    );
+    if (!currentPerson.adjustmentDescription) {
+      currentPerson.adjustmentDescription = summary.adjustment.description ?? "";
+    }
+  } else {
+    currentPerson.monthNotesCount += Number(summary.notesCount ?? 0);
+  }
+
   target.set(summary.donorId, currentPerson);
 }
 
@@ -159,6 +175,15 @@ function getDonationCountLabel(row, reportData) {
     hasDonationStartConflict(row.donationStartDate, reportData.referenceMonth)
   ) {
     return formatMonthYear(row.donationStartDate);
+  }
+
+  // When a catch-up adjustment was applied to this month, expose the
+  // breakdown ("28 (12 + 16)") so the recipient can see why the number is
+  // higher than usual.
+  if ((row.adjustmentNotesCount ?? 0) > 0) {
+    const monthly = formatInteger(row.monthNotesCount ?? 0);
+    const adjustment = formatInteger(row.adjustmentNotesCount);
+    return `${formatInteger(row.notesCount)} (${monthly} + ${adjustment})`;
   }
 
   return formatInteger(row.notesCount);

@@ -8,6 +8,8 @@ export const SNAPSHOT_TABLE_KEYS = [
   "monthlyDonorSummary",
   "notes",
   "actionHistory",
+  "donorActivityHistory",
+  "abatementAdjustments",
   "trashItems",
 ];
 
@@ -22,6 +24,8 @@ export function createEmptySnapshot() {
     monthlyDonorSummary: [],
     notes: [],
     actionHistory: [],
+    donorActivityHistory: [],
+    abatementAdjustments: [],
     trashItems: [],
   };
 }

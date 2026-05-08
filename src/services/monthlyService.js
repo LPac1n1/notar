@@ -7,6 +7,10 @@ import {
   startOfMonth,
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
+import {
+  listAdjustmentsForMonth,
+  listAllAdjustments,
+} from "./abatementAdjustmentService";
 
 function parseSourceCpfs(value) {
   return String(value ?? "")
@@ -97,6 +101,55 @@ function mapDonorWithoutDonation(row, { referenceMonth, valuePerNote = 0 }) {
     hasDonationsInMonth: false,
     canUpdateAbatement: false,
   };
+}
+
+/**
+ * Folds a single abatement adjustment into its parent monthly summary row.
+ * Preserves the month-only counts in `monthOnly*` so the UI/PDF can show the
+ * breakdown ("X notas no mês + Y acumuladas").
+ */
+function mergeAdjustmentIntoRow(row, adjustment) {
+  if (!adjustment) {
+    return row;
+  }
+
+  const monthNotesCount = row.notesCount;
+  const monthAbatementAmount = row.abatementAmount;
+  const combinedNotes = monthNotesCount + Number(adjustment.notesCount ?? 0);
+  const combinedAmount =
+    monthAbatementAmount + Number(adjustment.abatementAmount ?? 0);
+
+  return {
+    ...row,
+    notesCount: combinedNotes,
+    abatementAmount: combinedAmount,
+    monthNotesCount,
+    monthAbatementAmount,
+    hasDonationsInMonth: combinedNotes > 0,
+    canUpdateAbatement: combinedNotes > 0,
+    adjustment,
+    hasAdjustment: true,
+  };
+}
+
+function mergeAdjustmentsByMonth(rows, adjustments) {
+  if (!adjustments || adjustments.length === 0) {
+    return rows;
+  }
+
+  // Key by (donorId, referenceMonth) so the same donor can have separate
+  // adjustments across multiple months in a historical view.
+  const adjustmentMap = new Map(
+    adjustments.map((adjustment) => [
+      `${adjustment.donorId}|${adjustment.referenceMonth}`,
+      adjustment,
+    ]),
+  );
+
+  return rows.map((row) => {
+    const key = `${row.donorId}|${row.referenceMonth}`;
+    return mergeAdjustmentIntoRow(row, adjustmentMap.get(key));
+  });
 }
 
 function applySummaryFilters(
@@ -445,9 +498,12 @@ async function listMonthlySummariesByMonth({
         .map(mapSummaryRow)
     : [];
 
-  const mergedRows = donorActiveStatus === "inactive"
+  const baseRows = donorActiveStatus === "inactive"
     ? inactiveSummaries
     : [...activeMerged, ...inactiveSummaries];
+
+  const adjustments = await listAdjustmentsForMonth(normalizedReferenceMonth);
+  const mergedRows = mergeAdjustmentsByMonth(baseRows, adjustments);
 
   return sortSummariesByAbatement(
     applySummaryFilters(mergedRows, {
@@ -608,8 +664,12 @@ async function listHistoricalMonthlySummaries({
     ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
   `, params);
 
+  const adjustments = await listAllAdjustments();
+  const baseRows = rows.map(mapSummaryRow);
+  const mergedRows = mergeAdjustmentsByMonth(baseRows, adjustments);
+
   return sortSummariesByAbatement(
-    applySummaryFilters(rows.map(mapSummaryRow), {
+    applySummaryFilters(mergedRows, {
       abatementStatus,
       donationActivity,
     }),
@@ -674,6 +734,25 @@ export async function updateAbatementStatus({
       updated_at = CURRENT_TIMESTAMP
     WHERE id = '${escapeSqlString(summaryId)}'
   `);
+
+  // Cascade the same status onto the catch-up adjustment for the same
+  // (donor, month) so the user can manage them as a single payment.
+  await execute(`
+    UPDATE abatement_adjustments
+    SET
+      abatement_status = '${escapeSqlString(normalizedStatus)}',
+      abatement_marked_at = ${
+        normalizedStatus === "applied" ? "CURRENT_TIMESTAMP" : "NULL"
+      },
+      updated_at = CURRENT_TIMESTAMP
+    WHERE EXISTS (
+      SELECT 1
+      FROM monthly_donor_summary
+      WHERE monthly_donor_summary.id = '${escapeSqlString(summaryId)}'
+        AND monthly_donor_summary.donor_id = abatement_adjustments.donor_id
+        AND monthly_donor_summary.reference_month = abatement_adjustments.reference_month
+    )
+  `);
 }
 
 export async function updateAbatementStatusWithHistory({
@@ -723,6 +802,24 @@ export async function updateAbatementStatuses({
       },
       updated_at = CURRENT_TIMESTAMP
     WHERE id IN (${idList})
+  `);
+
+  // Mirror the bulk update onto matching catch-up adjustments.
+  await execute(`
+    UPDATE abatement_adjustments
+    SET
+      abatement_status = '${escapeSqlString(normalizedStatus)}',
+      abatement_marked_at = ${
+        normalizedStatus === "applied" ? "CURRENT_TIMESTAMP" : "NULL"
+      },
+      updated_at = CURRENT_TIMESTAMP
+    WHERE EXISTS (
+      SELECT 1
+      FROM monthly_donor_summary
+      WHERE monthly_donor_summary.id IN (${idList})
+        AND monthly_donor_summary.donor_id = abatement_adjustments.donor_id
+        AND monthly_donor_summary.reference_month = abatement_adjustments.reference_month
+    )
   `);
 }
 

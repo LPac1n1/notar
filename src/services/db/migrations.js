@@ -435,6 +435,53 @@ export const MIGRATIONS = [
       }
     },
   },
+  {
+    id: 3,
+    name: "abatement-adjustments",
+    up: async (conn) => {
+      // Holds explicit "catch-up" entries — extra abatement amounts a donor
+      // should receive in a given reference month, typically representing the
+      // accumulated total from earlier months (e.g. donor was registered with
+      // Nota Fiscal Paulista months before being added to Notar).
+      //
+      // Each row stays alongside the regular monthly_donor_summary row for
+      // that (donor, month). The report and monthly view sum them so the
+      // donor sees their full owed amount in one line.
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS abatement_adjustments (
+          id TEXT,
+          donor_id TEXT,
+          reference_month DATE,
+          range_start_month DATE,
+          range_end_month DATE,
+          notes_count INTEGER DEFAULT 0,
+          abatement_amount DOUBLE DEFAULT 0,
+          description TEXT,
+          abatement_status TEXT DEFAULT 'pending',
+          abatement_marked_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await conn.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_abatement_adjustments_id
+          ON abatement_adjustments(id)
+      `).catch(() => null);
+
+      // One adjustment per (donor, target month). If the user wants to change
+      // the catch-up amount, they edit the existing row instead of stacking.
+      await conn.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_abatement_adjustments_donor_month
+          ON abatement_adjustments(donor_id, reference_month)
+      `).catch(() => null);
+
+      await conn.query(`
+        CREATE INDEX IF NOT EXISTS idx_abatement_adjustments_month
+          ON abatement_adjustments(reference_month)
+      `).catch(() => null);
+    },
+  },
 ];
 
 export async function runMigrations(conn) {
