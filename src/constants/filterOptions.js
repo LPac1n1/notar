@@ -14,6 +14,11 @@ export const DONOR_TYPE_OPTIONS = [
   { value: "auxiliary", label: "Auxiliares", tone: "default" },
 ];
 
+export const DONOR_FORM_TYPE_OPTIONS = [
+  { value: "holder", label: "Titular" },
+  { value: "auxiliary", label: "Auxiliar" },
+];
+
 export const DONATION_START_DATE_OPTIONS = [
   { value: "all", label: "Com ou sem data de início" },
   { value: "with-date", label: "Com data de início", tone: "success" },

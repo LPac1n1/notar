@@ -57,6 +57,20 @@ const FORMAT_BUTTONS = [
 ];
 
 const EDITABLE_BLOCK_SELECTOR = 'p,h2,h3,li,div[data-note-checklist="true"]';
+const INLINE_COMMANDS = {
+  bold: {
+    tagName: "strong",
+    aliases: ["B", "STRONG"],
+  },
+  italic: {
+    tagName: "em",
+    aliases: ["EM", "I"],
+  },
+  strikeThrough: {
+    tagName: "s",
+    aliases: ["DEL", "S"],
+  },
+};
 
 function getChecklistElement(node, root) {
   if (!node || !root) {
@@ -150,6 +164,131 @@ function replaceShortcutBlock(block, replacement, caretTarget, root) {
   placeCaretAtEnd(caretTarget ?? replacement);
 }
 
+function isNodeInsideRoot(node, root) {
+  return Boolean(node && root && (node === root || root.contains(node)));
+}
+
+function getSelectedTextSegments(range, root) {
+  if (!range || !root || range.collapsed) {
+    return [];
+  }
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const segments = [];
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+
+    if (!range.intersectsNode(node)) {
+      continue;
+    }
+
+    const startOffset = node === range.startContainer ? range.startOffset : 0;
+    const endOffset =
+      node === range.endContainer ? range.endOffset : node.textContent.length;
+    const selectedText = node.textContent.slice(startOffset, endOffset);
+
+    if (!selectedText.trim()) {
+      continue;
+    }
+
+    segments.push({
+      node,
+      text: selectedText,
+    });
+  }
+
+  return segments;
+}
+
+function hasInlineAncestor(node, aliases, root) {
+  let current = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+
+  while (current && current !== root) {
+    if (aliases.includes(current.tagName)) {
+      return true;
+    }
+
+    current = current.parentElement;
+  }
+
+  return false;
+}
+
+function isSelectionFullyFormatted(range, root, aliases) {
+  const segments = getSelectedTextSegments(range, root);
+
+  if (segments.length === 0) {
+    return false;
+  }
+
+  return segments.every((segment) =>
+    hasInlineAncestor(segment.node, aliases, root),
+  );
+}
+
+function unwrapInlineElements(root, aliases) {
+  if (!root.querySelectorAll) {
+    return;
+  }
+
+  const selector = aliases.map((tagName) => tagName.toLowerCase()).join(",");
+
+  root.querySelectorAll(selector).forEach((element) => {
+    element.replaceWith(...Array.from(element.childNodes));
+  });
+}
+
+function removeEmptyInlineElements(root) {
+  root
+    .querySelectorAll("strong,b,em,i,s,del")
+    .forEach((element) => {
+      if (!element.textContent.trim() && element.children.length === 0) {
+        element.remove();
+      }
+    });
+}
+
+function selectNodeContents(node) {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function insertPlainTextAtRange(range, text) {
+  const fragment = document.createDocumentFragment();
+  const lines = String(text ?? "").replace(/\r\n/g, "\n").split("\n");
+  let lastInsertedNode = null;
+
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      const br = document.createElement("br");
+      fragment.appendChild(br);
+      lastInsertedNode = br;
+    }
+
+    if (line || lines.length === 1) {
+      const textNode = document.createTextNode(line);
+      fragment.appendChild(textNode);
+      lastInsertedNode = textNode;
+    }
+  });
+
+  range.deleteContents();
+  range.insertNode(fragment);
+
+  if (lastInsertedNode) {
+    const nextRange = document.createRange();
+    nextRange.setStartAfter(lastInsertedNode);
+    nextRange.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+  }
+}
+
 export default function RichNoteEditor({
   label = "Conteúdo",
   onChange,
@@ -236,9 +375,36 @@ export default function RichNoteEditor({
 
   const runCommand = (command, commandValue = null) => {
     restoreSelection();
+    const editor = editorRef.current;
+    const inlineCommand = INLINE_COMMANDS[command];
+
+    if (inlineCommand && editor) {
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+
+      if (
+        range &&
+        !range.collapsed &&
+        isNodeInsideRoot(range.commonAncestorContainer, editor) &&
+        !isSelectionFullyFormatted(range, editor, inlineCommand.aliases)
+      ) {
+        const wrapper = document.createElement(inlineCommand.tagName);
+        const selectedContent = range.extractContents();
+        unwrapInlineElements(selectedContent, inlineCommand.aliases);
+        wrapper.appendChild(selectedContent);
+        range.insertNode(wrapper);
+        removeEmptyInlineElements(editor);
+        selectNodeContents(wrapper);
+        emitChange();
+        saveSelection();
+        return;
+      }
+    }
+
     const normalizedValue =
       command === "formatBlock" && commandValue ? `<${commandValue}>` : commandValue;
     document.execCommand(command, false, normalizedValue);
+    removeEmptyInlineElements(editor);
     emitChange();
     saveSelection();
   };
@@ -402,8 +568,24 @@ export default function RichNoteEditor({
     }
 
     event.preventDefault();
-    restoreSelection();
-    document.execCommand("insertText", false, text);
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+
+    if (editor && range && isNodeInsideRoot(range.commonAncestorContainer, editor)) {
+      insertPlainTextAtRange(range, text);
+    } else {
+      restoreSelection();
+      const restoredSelection = window.getSelection();
+      const restoredRange = restoredSelection?.rangeCount
+        ? restoredSelection.getRangeAt(0)
+        : null;
+
+      if (restoredRange) {
+        insertPlainTextAtRange(restoredRange, text);
+      }
+    }
+
     emitChange();
     saveSelection();
   };

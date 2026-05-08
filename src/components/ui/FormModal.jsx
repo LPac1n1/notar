@@ -9,9 +9,11 @@ export default function FormModal({
   description,
   feedbackMessage = "",
   feedbackTone = "error",
+  footerContent = null,
   isLoading = false,
   onClose,
   onSubmit,
+  showSubmit = true,
   size = "lg",
   title,
 }) {
@@ -31,23 +33,29 @@ export default function FormModal({
 
         {children}
 
-        <div className="flex flex-wrap justify-end gap-3">
-          <Button
-            type="button"
-            variant="subtle"
-            onClick={onClose}
-            disabled={isLoading}
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            type="submit"
-            disabled={isLoading}
-            isLoading={isLoading}
-            loadingLabel="Salvando..."
-          >
-            {confirmLabel}
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">{footerContent}</div>
+
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button
+              type="button"
+              variant="subtle"
+              onClick={onClose}
+              disabled={isLoading}
+            >
+              {cancelLabel}
+            </Button>
+            {showSubmit ? (
+              <Button
+                type="submit"
+                disabled={isLoading}
+                isLoading={isLoading}
+                loadingLabel="Salvando..."
+              >
+                {confirmLabel}
+              </Button>
+            ) : null}
+          </div>
         </div>
       </form>
     </Modal>

@@ -44,7 +44,7 @@ export async function createNote({
   title,
   content,
   color = DEFAULT_NOTE_COLOR,
-}) {
+}, { recordHistory = true } = {}) {
   const normalizedNote = normalizeNotePayload({ title, content, color });
 
   if (!normalizedNote.title) {
@@ -70,16 +70,20 @@ export async function createNote({
     )
   `);
 
-  await createActionHistoryEntry({
-    actionType: "create",
-    entityType: "note",
-    entityId: id,
-    label: normalizedNote.title,
-    description: `Anotação ${normalizedNote.title} criada.`,
-    payload: {
-      color: normalizedNote.color,
-    },
-  });
+  if (recordHistory) {
+    await createActionHistoryEntry({
+      actionType: "create",
+      entityType: "note",
+      entityId: id,
+      label: normalizedNote.title,
+      description: `Anotação ${normalizedNote.title} criada.`,
+      payload: {
+        color: normalizedNote.color,
+      },
+    });
+  }
+
+  return id;
 }
 
 export async function updateNote({
@@ -87,7 +91,7 @@ export async function updateNote({
   title,
   content,
   color = DEFAULT_NOTE_COLOR,
-}) {
+}, { recordHistory = true } = {}) {
   const normalizedNote = normalizeNotePayload({ title, content, color });
 
   if (!id) {
@@ -108,16 +112,18 @@ export async function updateNote({
     WHERE id = '${escapeSqlString(id)}'
   `);
 
-  await createActionHistoryEntry({
-    actionType: "update",
-    entityType: "note",
-    entityId: id,
-    label: normalizedNote.title,
-    description: `Anotação ${normalizedNote.title} atualizada.`,
-    payload: {
-      color: normalizedNote.color,
-    },
-  });
+  if (recordHistory) {
+    await createActionHistoryEntry({
+      actionType: "update",
+      entityType: "note",
+      entityId: id,
+      label: normalizedNote.title,
+      description: `Anotação ${normalizedNote.title} atualizada.`,
+      payload: {
+        color: normalizedNote.color,
+      },
+    });
+  }
 }
 
 export async function deleteNote(id) {

@@ -16,6 +16,13 @@ test("auxiliary donor can link to a reference person who is not an active donor"
 
   await page.goto("/");
 
+  await page.getByRole("link", { name: "Demandas" }).click();
+  await page.getByRole("button", { name: "Adicionar demanda" }).click();
+  const demandDialog = page.getByRole("dialog", { name: "Adicionar demanda" });
+  await demandDialog.getByPlaceholder("Nome da demanda").fill("Demanda Conversao");
+  await demandDialog.getByRole("button", { name: "Adicionar demanda" }).click();
+  await expect(page.getByText("DEMANDA CONVERSAO")).toBeVisible();
+
   await page.getByRole("link", { name: "Pessoas" }).click();
   await page.getByRole("button", { name: "Adicionar pessoa" }).click();
   const personDialog = page.getByRole("dialog", { name: "Adicionar pessoa" });
@@ -76,4 +83,27 @@ test("auxiliary donor can link to a reference person who is not an active donor"
   await expect(page.getByRole("button", { name: "JOAO AUXILIAR" })).toBeVisible();
   await expect(page.getByText("Vinculado a: CARLOS REFERENCIA").first()).toBeVisible();
   await expect(page.getByText("Pessoa de referência").first()).toBeVisible();
+
+  await page.getByRole("link", { name: "Pessoas" }).click();
+  const referenceCard = page.locator("li").filter({ hasText: "CARLOS REFERENCIA" }).first();
+  await referenceCard.getByRole("button", { name: "Converter" }).click();
+  const convertDialog = page.getByRole("dialog", {
+    name: "Converter pessoa em doador",
+  });
+  await expect(convertDialog.locator('input[name="name"]')).toHaveValue("CARLOS REFERENCIA");
+  await expect(convertDialog.getByText("conversão como auxiliar")).toBeVisible();
+  await selectOption(page, convertDialog, "demand", "DEMANDA CONVERSAO");
+  await convertDialog.locator('input[name="donationStartDate"]').fill("02/2026");
+  await convertDialog.getByRole("button", { name: "Converter em doador" }).click();
+  await expect(page.getByText("Pessoa convertida em doador")).toBeVisible();
+
+  await page.getByRole("link", { name: "Doadores" }).click();
+  const convertedHolderCard = page
+    .locator("li")
+    .filter({ has: page.getByRole("button", { name: "CARLOS REFERENCIA" }) })
+    .first();
+  await expect(convertedHolderCard.getByText("Titular")).toBeVisible();
+  await expect(convertedHolderCard.getByText("DEMANDA CONVERSAO")).toBeVisible();
+  await expect(convertedHolderCard.getByText("1 auxiliar(es)")).toBeVisible();
+  await expect(convertedHolderCard.getByText("JOAO AUXILIAR")).toBeVisible();
 });

@@ -31,6 +31,37 @@ test("monthly management shows donors with and without donations", async ({ page
   const monthlySection = page
     .getByRole("heading", { name: "Resumo mensal" })
     .locator("xpath=ancestor::section[1]");
+  const consolidatedSection = page
+    .getByRole("heading", { name: "Abatimentos por doador" })
+    .locator("xpath=ancestor::section[1]");
+  const mariaConsolidatedCard = consolidatedSection
+    .locator("article")
+    .filter({ hasText: "MARIA SILVA" })
+    .first();
+
+  await expect(
+    mariaConsolidatedCard.getByRole("button", {
+      name: "Abater todas as pendências",
+    }),
+  ).toBeVisible();
+  await mariaConsolidatedCard
+    .getByRole("button", { name: "Abater todas as pendências" })
+    .click();
+  await expect(
+    page.getByText("1 mês(es) de MARIA SILVA marcado(s) como realizado."),
+  ).toBeVisible();
+  await expect(
+    mariaConsolidatedCard.getByText("Todas as pendências abatidas"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Desfazer" }).click();
+  await expect(
+    page.getByText("Abatimentos do doador restaurados como pendente(s)."),
+  ).toBeVisible();
+  await expect(
+    mariaConsolidatedCard.getByRole("button", {
+      name: "Abater todas as pendências",
+    }),
+  ).toBeVisible();
 
   await monthlySection.locator('input[name="referenceMonth"]').fill("03/2026");
 

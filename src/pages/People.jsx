@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
@@ -16,10 +16,15 @@ import SelectInput from "../components/ui/SelectInput";
 import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
 import {
+  DonorIcon,
   EditIcon,
   PlusIcon,
   TrashIcon,
 } from "../components/ui/icons";
+import { DONOR_FORM_TYPE_OPTIONS } from "../constants/filterOptions";
+import DonorForm from "../features/donors/components/DonorForm";
+import { listDemands } from "../services/demandService";
+import { createDonor } from "../services/donorService";
 import {
   createPerson,
   deletePerson,
@@ -35,6 +40,7 @@ import { getErrorMessage } from "../utils/error";
 import {
   getFirstValidationError,
   hasValidationErrors,
+  validateDonorForm,
   validatePersonForm,
 } from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
@@ -48,6 +54,15 @@ const EMPTY_PERSON_FORM = {
   cpf: "",
 };
 
+const EMPTY_CONVERT_FORM = {
+  name: "",
+  cpf: "",
+  demand: "",
+  donationStartDate: "",
+  donorType: "holder",
+  holderPersonId: "",
+};
+
 const INITIAL_FILTERS = {
   personId: "",
   cpf: "",
@@ -58,14 +73,20 @@ const loadReferencePeople = (currentFilters) =>
 
 export default function People() {
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
+  const [allPeople, setAllPeople] = useState([]);
+  const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_PERSON_FORM });
   const [createFormErrors, setCreateFormErrors] = useState({});
   const [editForm, setEditForm] = useState({ ...EMPTY_PERSON_FORM });
   const [editFormErrors, setEditFormErrors] = useState({});
+  const [convertForm, setConvertForm] = useState({ ...EMPTY_CONVERT_FORM });
+  const [convertFormErrors, setConvertFormErrors] = useState({});
   const [editingPerson, setEditingPerson] = useState(null);
+  const [convertingPerson, setConvertingPerson] = useState(null);
   const [personPendingRemoval, setPersonPendingRemoval] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
@@ -93,7 +114,25 @@ export default function People() {
     dataSyncFeedback.isVisible ||
     (dataSyncFeedback.isSettling && isRefreshing);
 
-  useDatabaseChangeEffect(reloadPeople);
+  const loadSupportingData = useCallback(async () => {
+    const [personRows, demandRows] = await Promise.all([
+      listPeople(),
+      listDemands(),
+    ]);
+
+    setAllPeople(personRows);
+    setDemands(demandRows);
+  }, []);
+
+  const refreshPeople = useCallback(async () => {
+    await Promise.all([reloadPeople(), loadSupportingData()]);
+  }, [loadSupportingData, reloadPeople]);
+
+  useEffect(() => {
+    loadSupportingData();
+  }, [loadSupportingData]);
+
+  useDatabaseChangeEffect(refreshPeople);
 
   const handleRestoreDeletedPerson = useCallback(
     async (trashItemId) => {
@@ -102,14 +141,14 @@ export default function People() {
         setSuccessMessage("");
         setSuccessAction(null);
         await restoreTrashItem(trashItemId);
-        await reloadPeople();
+        await refreshPeople();
         setSuccessMessage("Pessoa restaurada com sucesso.");
       } catch (err) {
         logError("PeoplePage.restore", err);
         setError(getErrorMessage(err, "Não foi possível restaurar a pessoa."));
       }
     },
-    [reloadPeople, setError],
+    [refreshPeople, setError],
   );
 
   const handleFormChange = (setter, setFormErrors) => (event) => {
@@ -118,12 +157,23 @@ export default function People() {
     setFormErrors((current) => ({
       ...current,
       [name]: "",
+      ...(name === "donorType" ? { demand: "", holderPersonId: "" } : {}),
     }));
 
-    setter((current) => ({
-      ...current,
-      [name]: name === "cpf" ? formatCpf(value) : value,
-    }));
+    setter((current) => {
+      if (name === "donorType") {
+        return {
+          ...current,
+          donorType: value,
+          ...(value === "holder" ? { holderPersonId: "" } : {}),
+        };
+      }
+
+      return {
+        ...current,
+        [name]: name === "cpf" ? formatCpf(value) : value,
+      };
+    });
   };
 
   const handleFilterChange = (event) => {
@@ -154,8 +204,72 @@ export default function People() {
     [peopleOptionSource],
   );
 
+  const donorFormDemandOptions = useMemo(
+    () =>
+      buildSelectOptions(demands, {
+        getValue: (demand) => demand.name,
+        getLabel: (demand) => demand.name,
+        emptyLabel: "Selecione uma demanda",
+      }),
+    [demands],
+  );
+
+  const conversionHolderOptions = useMemo(
+    () =>
+      buildSelectOptions(
+        allPeople.filter(
+          (person) =>
+            person.id !== convertingPerson?.id &&
+            (!person.donorId || person.donorType === "holder"),
+        ),
+        {
+          getValue: (person) => person.id,
+          getLabel: (person) =>
+            `${person.name} • ${
+              person.donorType === "holder" ? "Doador titular" : "Pessoa"
+            }`,
+          emptyLabel: "Selecione titular ou pessoa",
+        },
+      ),
+    [allPeople, convertingPerson?.id],
+  );
+
+  const selectedConversionHolder = useMemo(
+    () =>
+      allPeople.find((person) => person.id === convertForm.holderPersonId) ??
+      null,
+    [allPeople, convertForm.holderPersonId],
+  );
+
+  const conversionTypeOptions = useMemo(
+    () =>
+      convertingPerson?.referencedByAuxiliaries > 0
+        ? DONOR_FORM_TYPE_OPTIONS.filter((option) => option.value === "holder")
+        : DONOR_FORM_TYPE_OPTIONS,
+    [convertingPerson?.referencedByAuxiliaries],
+  );
+
   const handleClearFilters = () => {
     setFilters({ ...INITIAL_FILTERS });
+  };
+
+  const handleOpenConvertModal = (person) => {
+    setError("");
+    setSuccessMessage("");
+    setSuccessAction(null);
+    setConvertingPerson(person);
+    setConvertFormErrors({});
+    setConvertForm({
+      ...EMPTY_CONVERT_FORM,
+      name: person.name,
+      cpf: person.cpf,
+    });
+  };
+
+  const handleCloseConvertModal = () => {
+    setConvertingPerson(null);
+    setConvertForm({ ...EMPTY_CONVERT_FORM });
+    setConvertFormErrors({});
   };
 
   const handleAdd = async () => {
@@ -181,12 +295,53 @@ export default function People() {
       setCreateForm({ ...EMPTY_PERSON_FORM });
       setCreateFormErrors({});
       setSuccessMessage("Pessoa cadastrada com sucesso.");
-      await reloadPeople();
+      await refreshPeople();
     } catch (err) {
       logError("PeoplePage.create", err);
       setError(getErrorMessage(err, "Não foi possível cadastrar a pessoa."));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleConvertToDonor = async () => {
+    if (!convertingPerson) {
+      return;
+    }
+
+    const validationErrors = validateDonorForm(convertForm);
+
+    if (hasValidationErrors(validationErrors)) {
+      setConvertFormErrors(validationErrors);
+      setError(getFirstValidationError(validationErrors));
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsConverting(true);
+      await createDonor({
+        id: nanoid(),
+        personId: convertingPerson.id,
+        name: convertingPerson.name,
+        cpf: convertingPerson.cpf,
+        demand: convertForm.demand,
+        donationStartDate: convertForm.donationStartDate,
+        donorType: convertForm.donorType,
+        holderPersonId: convertForm.holderPersonId,
+      });
+      handleCloseConvertModal();
+      setSuccessMessage(
+        "Pessoa convertida em doador e reconciliada com as importações existentes.",
+      );
+      await refreshPeople();
+    } catch (err) {
+      logError("PeoplePage.convertToDonor", err);
+      setError(getErrorMessage(err, "Não foi possível converter a pessoa em doador."));
+    } finally {
+      setIsConverting(false);
     }
   };
 
@@ -217,7 +372,7 @@ export default function People() {
       setEditForm({ ...EMPTY_PERSON_FORM });
       setEditFormErrors({});
       setSuccessMessage("Pessoa atualizada com sucesso.");
-      await reloadPeople();
+      await refreshPeople();
     } catch (err) {
       logError("PeoplePage.update", err);
       setError(getErrorMessage(err, "Não foi possível atualizar a pessoa."));
@@ -237,7 +392,7 @@ export default function People() {
       setSuccessAction(null);
       setIsDeleting(true);
       const trashItemId = await deletePerson(personPendingRemoval.id);
-      await reloadPeople();
+      await refreshPeople();
       setPersonPendingRemoval(null);
       setSuccessMessage("Pessoa enviada para a lixeira com sucesso.");
       if (trashItemId) {
@@ -333,7 +488,11 @@ export default function People() {
       </SectionCard>
 
       <FeedbackMessage
-        message={isCreateModalOpen || editingPerson || personPendingRemoval ? "" : error}
+        message={
+          isCreateModalOpen || editingPerson || convertingPerson || personPendingRemoval
+            ? ""
+            : error
+        }
         tone="error"
       />
       <FeedbackMessage
@@ -407,7 +566,15 @@ export default function People() {
                 ) : null}
               </div>
 
-              <div className="flex w-full flex-col gap-2 md:w-40 md:self-stretch">
+              <div className="flex w-full flex-col gap-2 md:w-44 md:self-stretch">
+                <Button
+                  className="w-full md:flex-1"
+                  variant="subtle"
+                  onClick={() => handleOpenConvertModal(person)}
+                  leftIcon={<DonorIcon className="h-4 w-4" />}
+                >
+                  Converter
+                </Button>
                 <Button
                   className="w-full md:flex-1"
                   variant="subtle"
@@ -520,6 +687,54 @@ export default function People() {
                 value={editForm.cpf}
                 onChange={handleFormChange(setEditForm, setEditFormErrors)}
                 error={editFormErrors.cpf}
+              />
+            </div>
+          </FormModal>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {convertingPerson ? (
+          <FormModal
+            title="Converter pessoa em doador"
+            description="Informe apenas os dados do papel de doador. Nome e CPF serão preservados."
+            confirmLabel="Converter em doador"
+            feedbackMessage={error}
+            isLoading={isConverting}
+            onClose={handleCloseConvertModal}
+            onSubmit={handleConvertToDonor}
+          >
+            <div className="space-y-4">
+              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                  Pessoa selecionada
+                </p>
+                <p className="mt-1 font-semibold text-[var(--text-main)]">
+                  {convertingPerson.name}
+                </p>
+                <p className="text-sm text-[var(--muted)]">
+                  CPF: {convertingPerson.cpf}
+                </p>
+                {convertingPerson.referencedByAuxiliaries > 0 ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    Referência de{" "}
+                    {formatInteger(convertingPerson.referencedByAuxiliaries)}{" "}
+                    auxiliar(es). Ao converter como titular, esses vínculos serão
+                    mantidos. Por isso, a conversão como auxiliar não fica
+                    disponível neste caso.
+                  </p>
+                ) : null}
+              </div>
+
+              <DonorForm
+                demandOptions={donorFormDemandOptions}
+                errors={convertFormErrors}
+                form={convertForm}
+                holderOptions={conversionHolderOptions}
+                isIdentityLocked
+                onChange={handleFormChange(setConvertForm, setConvertFormErrors)}
+                selectedHolder={selectedConversionHolder}
+                typeOptions={conversionTypeOptions}
               />
             </div>
           </FormModal>

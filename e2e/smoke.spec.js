@@ -34,6 +34,20 @@ test("main flow smoke test", async ({ page }) => {
   await expect(page.getByRole("button", { name: "MARIA SILVA" })).toBeVisible();
 
   await page.getByRole("button", { name: "Adicionar doador" }).click();
+  const duplicateDonorDialog = page.getByRole("dialog", { name: "Adicionar doador" });
+  await duplicateDonorDialog.locator('input[name="name"]').fill("Maria Silva");
+  await duplicateDonorDialog.getByPlaceholder("CPF", { exact: true }).fill("12345678909");
+  await selectOption(page, duplicateDonorDialog, "demand", "DEMANDA TESTE");
+  await duplicateDonorDialog.locator('input[name="donationStartDate"]').fill("01/2026");
+  await duplicateDonorDialog.getByRole("button", { name: "Adicionar doador" }).click();
+  const duplicateCpfError = duplicateDonorDialog.getByText(/CPF já está vinculado/i);
+  await expect(duplicateCpfError).toBeVisible();
+  await page.waitForTimeout(700);
+  await expect(duplicateCpfError).toBeVisible();
+  await duplicateDonorDialog.getByRole("button", { name: "Cancelar" }).click();
+  await expect(duplicateDonorDialog).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Adicionar doador" }).click();
   donorDialog = page.getByRole("dialog", { name: "Adicionar doador" });
   await selectOption(page, donorDialog, "donorType", "Auxiliar");
   await selectOption(page, donorDialog, "holderPersonId", /MARIA SILVA/);

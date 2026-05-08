@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Button from "../../../components/ui/Button";
+import CopyButton from "../../../components/ui/CopyButton";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import EmptyState from "../../../components/ui/EmptyState";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
+import PaginationControls from "../../../components/ui/PaginationControls";
 import SectionCard from "../../../components/ui/SectionCard";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { SearchIcon } from "../../../components/ui/icons";
+import { usePagination } from "../../../hooks/usePagination";
 import { searchImportedCpfs } from "../../../services/importService";
 import { formatCpf, parseCpfList } from "../../../utils/cpf";
 import { formatMonthYear } from "../../../utils/date";
@@ -122,21 +125,62 @@ function CpfResultRow({ entry, showDonations, onOpenDonorProfile }) {
 }
 
 function ResultGroup({ definition, items, onOpenDonorProfile }) {
+  const pagination = usePagination(items, { initialPageSize: 10 });
+  const shouldShowPagination = items.length > 10;
+  const copyValue = useMemo(
+    () => items.map((entry) => formatCpf(entry.cpf)).join("\n"),
+    [items],
+  );
+
   if (items.length === 0) {
     return null;
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge label={`${formatInteger(items.length)} CPF(s)`} tone={definition.tone} />
-        <h3 className="font-[var(--font-display)] text-base font-bold text-[var(--text-main)]">
-          {definition.title}
-        </h3>
+    <div
+      className="space-y-3"
+      data-testid={`cpf-list-result-${definition.key}`}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge
+              label={`${formatInteger(items.length)} CPF(s)`}
+              tone={definition.tone}
+            />
+            <h3 className="font-[var(--font-display)] text-base font-bold text-[var(--text-main)]">
+              {definition.title}
+            </h3>
+          </div>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {definition.description}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1.5 text-xs font-medium text-[var(--muted-strong)]">
+          <span>Copiar todos os CPFs</span>
+          <CopyButton
+            label={`Copiar todos os CPFs de ${definition.title}`}
+            value={copyValue}
+          />
+        </div>
       </div>
-      <p className="text-sm text-[var(--muted)]">{definition.description}</p>
+
+      {shouldShowPagination ? (
+        <PaginationControls
+          className="bg-[var(--surface-strong)]"
+          endItem={pagination.endItem}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+        />
+      ) : null}
+
       <div className="space-y-2">
-        {items.map((entry) => (
+        {pagination.visibleItems.map((entry) => (
           <CpfResultRow
             key={entry.cpf}
             entry={entry}
@@ -145,6 +189,19 @@ function ResultGroup({ definition, items, onOpenDonorProfile }) {
           />
         ))}
       </div>
+
+      {shouldShowPagination && pagination.totalPages > 1 ? (
+        <PaginationControls
+          className="bg-[var(--surface-strong)]"
+          endItem={pagination.endItem}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+        />
+      ) : null}
     </div>
   );
 }

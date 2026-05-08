@@ -1,7 +1,9 @@
+import Button from "../../../components/ui/Button";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import EmptyState from "../../../components/ui/EmptyState";
 import SectionCard from "../../../components/ui/SectionCard";
 import StatusBadge from "../../../components/ui/StatusBadge";
+import { CheckIcon } from "../../../components/ui/icons";
 import { formatCpf } from "../../../utils/cpf";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -23,7 +25,7 @@ export default function ConsolidatedPendingDonors({
   return (
     <SectionCard
       title="Abatimentos por doador"
-      description="Histórico consolidado dos meses com doação. Clique em qualquer mês para alternar entre realizado e pendente."
+      description="Histórico consolidado dos meses com doação."
       className="mb-5"
     >
       {donors.length === 0 ? (
@@ -184,6 +186,28 @@ export default function ConsolidatedPendingDonors({
                         </p>
                       </div>
                     </div>
+
+                    {pendingMonths.length > 0 ? (
+                      <Button
+                        className="w-full"
+                        disabled={isUpdating}
+                        isLoading={isUpdating}
+                        loadingLabel="Abatendo..."
+                        onClick={() =>
+                          onStatusChange?.(donor, "applied", {
+                            operation: "all",
+                            summaryIds: pendingMonths.map((month) => month.id),
+                          })
+                        }
+                        leftIcon={<CheckIcon className="h-4 w-4" />}
+                      >
+                        Abater todas as pendências
+                      </Button>
+                    ) : (
+                      <div className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-3 py-2 text-center text-sm font-semibold text-[var(--success)]">
+                        Todas as pendências abatidas
+                      </div>
+                    )}
                   </aside>
                 </div>
               </article>

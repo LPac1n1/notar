@@ -61,6 +61,63 @@ test("copy buttons and notes flow", async ({ page }) => {
   await expect(
     editor.locator("h2").filter({ hasText: "Titulo por botão" }),
   ).toBeVisible();
+
+  await editor.evaluate((element) => {
+    element.innerHTML = "<p><strong>Negrito</strong> normal</p>";
+    element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    const paragraph = element.querySelector("p");
+    const strongText = paragraph.querySelector("strong").firstChild;
+    const normalText = paragraph.childNodes[1];
+    const range = document.createRange();
+    range.setStart(strongText, 0);
+    range.setEnd(normalText, normalText.textContent.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await noteDialog.getByRole("button", { name: "Negrito" }).click();
+  await expect(editor.locator("strong")).toHaveText("Negrito normal");
+
+  await editor.evaluate((element) => {
+    element.innerHTML = "<p><strong>Negrito</strong> normal</p>";
+    element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    const strongText = element.querySelector("strong").firstChild;
+    const range = document.createRange();
+    range.setStart(strongText, 0);
+    range.setEnd(strongText, strongText.textContent.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await noteDialog.getByRole("button", { name: "Negrito" }).click();
+  await expect(editor.locator("strong")).toHaveCount(0);
+  await expect(editor).toContainText("Negrito normal");
+
+  await editor.evaluate((element) => {
+    element.innerHTML = "<p>palavra</p>";
+    element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    const textNode = element.querySelector("p").firstChild;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "nova ");
+    element.dispatchEvent(
+      new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData,
+      }),
+    );
+  });
+  await expect(editor).toContainText("nova palavra");
+
   await editor.evaluate((element) => {
     element.innerHTML = [
       "<h2>Principal</h2>",
@@ -76,7 +133,7 @@ test("copy buttons and notes flow", async ({ page }) => {
   });
   await expect(noteDialog.getByRole("heading", { name: "Principal" })).toBeVisible();
   await expect(editor.locator('[data-note-checklist="true"]').first()).toBeVisible();
-  await noteDialog.getByRole("button", { name: "Criar anotação" }).click();
+  await noteDialog.getByRole("button", { name: "Fechar", exact: true }).click();
   await expect(noteDialog).not.toBeVisible();
   await expect(page.getByText("Nota de teste")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Principal" })).toBeVisible();
@@ -89,7 +146,8 @@ test("copy buttons and notes flow", async ({ page }) => {
   await expect(editDialog.getByRole("heading", { name: "Principal" })).toBeVisible();
   await expect(editDialog.locator('[data-note-checklist="true"]', { hasText: "Tarefa concluída" })).toBeVisible();
   await editDialog.getByPlaceholder("Título da anotação").fill("Nota editada");
-  await editDialog.getByRole("button", { name: "Salvar anotação" }).click();
+  await expect(editDialog.getByText("Salvo automaticamente")).toBeVisible();
+  await editDialog.getByRole("button", { name: "Fechar", exact: true }).click();
   await expect(page.getByText("Nota editada")).toBeVisible();
 
   await page.getByRole("button", { name: "Excluir" }).click();

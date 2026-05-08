@@ -7,6 +7,7 @@ export default function DonorForm({
   errors = {},
   form,
   holderOptions,
+  isIdentityLocked = false,
   onChange,
   selectedHolder,
   typeOptions,
@@ -63,6 +64,12 @@ export default function DonorForm({
         value={form.name}
         onChange={onChange}
         error={errors.name}
+        readOnly={isIdentityLocked}
+        className={
+          isIdentityLocked
+            ? "cursor-default bg-[var(--surface-strong)] text-[var(--muted-strong)]"
+            : ""
+        }
       />
       <TextInput
         label="CPF"
@@ -71,6 +78,12 @@ export default function DonorForm({
         value={form.cpf}
         onChange={onChange}
         error={errors.cpf}
+        readOnly={isIdentityLocked}
+        className={
+          isIdentityLocked
+            ? "cursor-default bg-[var(--surface-strong)] text-[var(--muted-strong)]"
+            : ""
+        }
       />
 
       <MonthInput

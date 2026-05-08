@@ -169,6 +169,12 @@ export async function createDonor({
   holderDonorId = "",
 }) {
   const normalizedDonorType = normalizeDonorType(donorType);
+  const normalizedInputCpf = normalizeCpf(cpf);
+
+  if (!personId && normalizedInputCpf.length === 11) {
+    await ensureDonationCpfIsAvailable(normalizedInputCpf);
+  }
+
   const person = await resolveCreatePersonContext({
     personId,
     name,
@@ -185,7 +191,9 @@ export async function createDonor({
     await ensurePersonCanBeAuxiliary(person.id);
   }
 
-  await ensureDonationCpfIsAvailable(person.cpfValue);
+  if (personId || person.cpfValue !== normalizedInputCpf) {
+    await ensureDonationCpfIsAvailable(person.cpfValue);
+  }
 
   const holderContext =
     normalizedDonorType === "auxiliary"

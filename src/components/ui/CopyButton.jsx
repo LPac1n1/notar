@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { CheckIcon, CopyIcon } from "./icons";
 
 function fallbackCopyToClipboard(text) {
@@ -59,6 +58,7 @@ export default function CopyButton({
   const [status, setStatus] = useState("idle");
   const timeoutRef = useRef(null);
   const isMountedRef = useRef(true);
+  const isCopyingRef = useRef(false);
   const isCopied = status === "copied";
   const isError = status === "error";
 
@@ -84,37 +84,47 @@ export default function CopyButton({
     }, 1800);
   };
 
-  const showCopiedFeedback = () => {
-    const text = String(value ?? "").trim();
+  const showFeedback = (nextStatus) => {
+    if (!isMountedRef.current) {
+      return;
+    }
 
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
     }
 
-    if (!text) {
-      setStatus("error");
-      return;
-    }
-
-    if (isMountedRef.current) {
-      flushSync(() => {
-        setStatus("copied");
-      });
-      scheduleReset();
-    }
+    setStatus(nextStatus);
+    scheduleReset();
   };
 
   const handleCopy = async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    showCopiedFeedback();
+
+    if (isCopyingRef.current) {
+      return;
+    }
+
+    const text = String(value ?? "").trim();
+
+    if (!text) {
+      showFeedback("error");
+      return;
+    }
 
     try {
-      await copyToClipboard(value);
+      isCopyingRef.current = true;
+      const didCopy = await copyToClipboard(text);
+      showFeedback(didCopy ? "copied" : "error");
     } catch {
-      // The visual return should not disappear for populated donor/person
-      // fields because browser clipboard APIs can fail silently by context.
+      showFeedback("error");
+    } finally {
+      isCopyingRef.current = false;
     }
+  };
+
+  const stopOuterInteraction = (event) => {
+    event.stopPropagation();
   };
 
   const buttonStyle = isCopied
@@ -141,11 +151,10 @@ export default function CopyButton({
   return (
     <button
       type="button"
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        showCopiedFeedback();
-      }}
+      onMouseDown={stopOuterInteraction}
+      onPointerDown={stopOuterInteraction}
       onClick={handleCopy}
+      onKeyDown={stopOuterInteraction}
       title={isCopied ? copiedLabel : isError ? errorLabel : label}
       aria-label={label}
       data-copy-label={label}

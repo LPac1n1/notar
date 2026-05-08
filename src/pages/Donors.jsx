@@ -17,6 +17,7 @@ import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import {
   ACTIVE_STATUS_OPTIONS,
   DONATION_START_DATE_OPTIONS,
+  DONOR_FORM_TYPE_OPTIONS,
   DONOR_TYPE_OPTIONS,
 } from "../constants/filterOptions";
 import DonorForm from "../features/donors/components/DonorForm";
@@ -70,11 +71,6 @@ const INITIAL_DONOR_FILTERS = {
   activeStatus: "active",
 };
 
-const DONOR_FORM_TYPE_OPTIONS = [
-  { value: "holder", label: "Titular" },
-  { value: "auxiliary", label: "Auxiliar" },
-];
-
 export default function Donors() {
   const location = useLocation();
   const [people, setPeople] = useState([]);
@@ -97,6 +93,7 @@ export default function Donors() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
@@ -280,6 +277,7 @@ export default function Donors() {
   const handleFormChange = (setter, setFormErrors) => (event) => {
     const { name, value } = event.target;
 
+    setFormError("");
     setFormErrors((current) => ({
       ...current,
       [name]: "",
@@ -314,6 +312,7 @@ export default function Donors() {
 
   const handleOpenCreateModal = () => {
     setError("");
+    setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
     setCreateForm({ ...EMPTY_DONOR_FORM });
@@ -324,6 +323,7 @@ export default function Donors() {
   const handleCloseCreateModal = () => {
     setCreateForm({ ...EMPTY_DONOR_FORM });
     setCreateFormErrors({});
+    setFormError("");
     setIsCreateModalOpen(false);
   };
 
@@ -332,12 +332,13 @@ export default function Donors() {
 
     if (hasValidationErrors(validationErrors)) {
       setCreateFormErrors(validationErrors);
-      setError(getFirstValidationError(validationErrors));
+      setFormError(getFirstValidationError(validationErrors));
       return;
     }
 
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsSubmitting(true);
@@ -357,7 +358,7 @@ export default function Donors() {
       await refreshDonors();
     } catch (err) {
       logError("DonorsPage.create", err);
-      setError(getErrorMessage(err, "Não foi possível adicionar o doador."));
+      setFormError(getErrorMessage(err, "Não foi possível adicionar o doador."));
     } finally {
       setIsSubmitting(false);
     }
@@ -365,6 +366,7 @@ export default function Donors() {
 
   const handleOpenEditModal = (donor) => {
     setError("");
+    setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
     setEditingDonor(donor);
@@ -383,6 +385,7 @@ export default function Donors() {
     setEditingDonor(null);
     setEditForm({ ...EMPTY_DONOR_FORM });
     setEditFormErrors({});
+    setFormError("");
   };
 
   const handleSaveEdit = async () => {
@@ -394,12 +397,13 @@ export default function Donors() {
 
     if (hasValidationErrors(validationErrors)) {
       setEditFormErrors(validationErrors);
-      setError(getFirstValidationError(validationErrors));
+      setFormError(getFirstValidationError(validationErrors));
       return;
     }
 
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsSubmitting(true);
@@ -419,7 +423,7 @@ export default function Donors() {
       await refreshDonors();
     } catch (err) {
       logError("DonorsPage.update", err);
-      setError(getErrorMessage(err, "Não foi possível atualizar o doador."));
+      setFormError(getErrorMessage(err, "Não foi possível atualizar o doador."));
     } finally {
       setIsSubmitting(false);
     }
@@ -704,7 +708,7 @@ export default function Donors() {
             title="Adicionar doador"
             description="Cadastre titulares ou auxiliares com abatimento próprio."
             confirmLabel="Adicionar doador"
-            feedbackMessage={error}
+            feedbackMessage={formError || error}
             isLoading={isSubmitting}
             onClose={handleCloseCreateModal}
             onSubmit={handleAdd}
@@ -728,7 +732,7 @@ export default function Donors() {
             title="Editar doador"
             description="Atualize os dados do doador e seu vínculo informativo."
             confirmLabel="Salvar alterações"
-            feedbackMessage={error}
+            feedbackMessage={formError || error}
             isLoading={isSubmitting}
             onClose={handleCloseEditModal}
             onSubmit={handleSaveEdit}
