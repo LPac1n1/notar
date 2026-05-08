@@ -62,15 +62,30 @@ export default function MonthlySummaryRow({
             {summary.hasAdjustment && summary.adjustment ? (
               <span
                 className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--warning)]"
-                title={
-                  summary.adjustment.description ||
-                  `Acumulado de ${summary.adjustment.rangeStartMonth} a ${summary.adjustment.rangeEndMonth}`
-                }
+                title={summary.adjustment.description || ""}
               >
                 Acumulado
               </span>
             ) : null}
           </div>
+
+          {summary.hasAdjustment && summary.adjustment ? (
+            <p className="mt-2 text-xs text-[var(--warning)]">
+              {summary.adjustment.rangeStartMonth &&
+              summary.adjustment.rangeEndMonth
+                ? summary.adjustment.rangeStartMonth ===
+                  summary.adjustment.rangeEndMonth
+                  ? `Acumulado de ${formatMonthYear(summary.adjustment.rangeStartMonth)}`
+                  : `Acumulado de ${formatMonthYear(summary.adjustment.rangeStartMonth)} a ${formatMonthYear(summary.adjustment.rangeEndMonth)}`
+                : "Acumulado lançado neste mês"}
+              {summary.adjustmentSubsumesMonth
+                ? " · consolidado neste mês"
+                : " · somado a este mês"}
+              {summary.adjustment.description
+                ? ` — ${summary.adjustment.description}`
+                : ""}
+            </p>
+          ) : null}
 
           {summary.donorType === "auxiliary" && summary.holderName ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -61,6 +61,8 @@ function addPersonToDemandGroup(group, summary) {
     monthNotesCount: 0,
     adjustmentNotesCount: 0,
     adjustmentDescription: "",
+    adjustmentRangeStartMonth: "",
+    adjustmentRangeEndMonth: "",
     adjustmentSubsumesMonth: false,
   };
 
@@ -83,6 +85,14 @@ function addPersonToDemandGroup(group, summary) {
 
     if (!currentPerson.adjustmentDescription) {
       currentPerson.adjustmentDescription = summary.adjustment.description ?? "";
+    }
+    if (!currentPerson.adjustmentRangeStartMonth) {
+      currentPerson.adjustmentRangeStartMonth =
+        summary.adjustment.rangeStartMonth ?? "";
+    }
+    if (!currentPerson.adjustmentRangeEndMonth) {
+      currentPerson.adjustmentRangeEndMonth =
+        summary.adjustment.rangeEndMonth ?? "";
     }
   } else {
     currentPerson.monthNotesCount += Number(summary.notesCount ?? 0);
@@ -177,6 +187,33 @@ export function getZipReportFileName(reportData) {
 
 export function getDemandRowCount(group) {
   return group.holders.length + group.auxiliaries.length;
+}
+
+function getAdjustmentNoteText(row) {
+  if (!row || (row.adjustmentNotesCount ?? 0) <= 0) {
+    return "";
+  }
+
+  const start = row.adjustmentRangeStartMonth;
+  const end = row.adjustmentRangeEndMonth;
+
+  // Prefer an explicit period label so the recipient understands which months
+  // are being charged together. Fall back to the user-typed description, then
+  // to a generic label if neither is available.
+  if (start && end) {
+    const startLabel = formatMonthYear(start);
+    const endLabel = formatMonthYear(end);
+    const period =
+      startLabel === endLabel
+        ? `Acumulado de ${startLabel}`
+        : `Acumulado de ${startLabel} a ${endLabel}`;
+
+    return row.adjustmentSubsumesMonth
+      ? `${period} (consolidado neste mês)`
+      : `${period} somado a este mês`;
+  }
+
+  return row.adjustmentDescription || "Inclui acumulado de meses anteriores";
 }
 
 function getDonationCountLabel(row, reportData) {
@@ -366,12 +403,19 @@ function drawTableTitle(doc, reportData, pageState, group, title) {
   pageState.y += 26;
 }
 
+function getColumnLineCount(column, row) {
+  const mainLines = wrapText(column.getValue(row), column.width - 16, 9).length;
+  const subText = column.getSubValue ? column.getSubValue(row) : "";
+  const subLines = subText
+    ? wrapText(subText, column.width - 16, 8).length
+    : 0;
+  return mainLines + subLines;
+}
+
 function getRowHeight(columns, row) {
   const lineCount = Math.max(
     1,
-    ...columns.map((column) =>
-      wrapText(column.getValue(row), column.width - 16, 9).length,
-    ),
+    ...columns.map((column) => getColumnLineCount(column, row)),
   );
 
   return Math.max(28, lineCount * 12 + 14);
@@ -392,9 +436,9 @@ function drawTableRow(doc, pageState, columns, row, rowIndex) {
   });
 
   for (const column of columns) {
-    const lines = wrapText(column.getValue(row), column.width - 16, 9);
+    const mainLines = wrapText(column.getValue(row), column.width - 16, 9);
 
-    lines.forEach((line, lineIndex) => {
+    mainLines.forEach((line, lineIndex) => {
       doc.drawText({
         text: line,
         x: x + 8,
@@ -404,6 +448,21 @@ function drawTableRow(doc, pageState, columns, row, rowIndex) {
         color: column.color ?? TEXT,
       });
     });
+
+    const subText = column.getSubValue ? column.getSubValue(row) : "";
+    if (subText) {
+      const subLines = wrapText(subText, column.width - 16, 8);
+      subLines.forEach((line, lineIndex) => {
+        doc.drawText({
+          text: line,
+          x: x + 8,
+          y: pageState.y + 17 + (mainLines.length + lineIndex) * 12,
+          font: "regular",
+          size: 8,
+          color: MUTED,
+        });
+      });
+    }
 
     x += column.width;
   }
@@ -478,6 +537,7 @@ export function drawDonationReport(doc, reportData) {
       label: "Doador titular",
       width: tableWidth * 0.72,
       getValue: (row) => row.name,
+      getSubValue: (row) => getAdjustmentNoteText(row),
       bold: true,
     },
     {
@@ -492,6 +552,7 @@ export function drawDonationReport(doc, reportData) {
       label: "Doador auxiliar",
       width: tableWidth * 0.48,
       getValue: (row) => row.name,
+      getSubValue: (row) => getAdjustmentNoteText(row),
       bold: true,
     },
     {
