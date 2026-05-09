@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import {
   escapeSqlString,
   execute,
+  executePrepared,
   normalizeCpf,
   query,
   runInTransaction,
@@ -57,24 +58,24 @@ export async function createTrashItem({
   label,
   payload,
 }) {
-  await execute(`
-    INSERT INTO trash_items (
-      id,
-      entity_type,
-      entity_id,
-      label,
-      payload_json,
-      deleted_at
-    )
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(entityType)}',
-      '${escapeSqlString(entityId)}',
-      '${escapeSqlString(label)}',
-      '${escapeSqlString(JSON.stringify(payload ?? {}))}',
-      CURRENT_TIMESTAMP
-    )
-  `);
+  // `label` is whatever name the deleted entity carried — user-facing free
+  // text. Bind through a prepared parameter so any input is isolated from the
+  // SQL boundary; the JSON payload is application-generated but routed the
+  // same way for consistency.
+  await executePrepared(
+    `
+      INSERT INTO trash_items (
+        id,
+        entity_type,
+        entity_id,
+        label,
+        payload_json,
+        deleted_at
+      )
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+    [id, entityType, entityId, label, JSON.stringify(payload ?? {})],
+  );
 
   return id;
 }

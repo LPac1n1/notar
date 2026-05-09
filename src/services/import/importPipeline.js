@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import {
   escapeSqlString,
   execute,
+  executePrepared,
   normalizeCpf,
   notifyDatabaseChanged,
   query,
@@ -187,26 +188,32 @@ export async function createImportRecord({
     );
   }
 
-  await execute(`
-    INSERT INTO imports (
+  // `fileName` and `notes` are user-supplied strings — bind them through a
+  // prepared statement so any future pathological inputs are isolated from
+  // the SQL boundary entirely.
+  await executePrepared(
+    `
+      INSERT INTO imports (
+        id,
+        reference_month,
+        file_name,
+        value_per_note,
+        status,
+        notes,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+    [
       id,
-      reference_month,
-      file_name,
-      value_per_note,
+      normalizedMonth,
+      fileName || "importacao-manual",
+      numericValuePerNote,
       status,
       notes,
-      updated_at
-    )
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(normalizedMonth)}',
-      '${escapeSqlString(fileName || "importacao-manual")}',
-      ${numericValuePerNote},
-      '${escapeSqlString(status)}',
-      '${escapeSqlString(notes)}',
-      CURRENT_TIMESTAMP
-    )
-  `, { flush: emitChange });
+    ],
+    { flush: emitChange },
+  );
 
   return id;
 }
@@ -388,14 +395,19 @@ export async function processImportedFile({
     const errorMessage = getErrorMessage(error, "Falha ao processar a importação.");
 
     if (importId) {
-      await execute(`
-        UPDATE imports
-        SET
-          status = 'error',
-          notes = '${escapeSqlString(errorMessage)}',
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = '${escapeSqlString(importId)}'
-      `).catch(() => null);
+      // `errorMessage` is whatever the failure surfaced — could include
+      // arbitrary characters from upstream libraries, so bind it as a param.
+      await executePrepared(
+        `
+          UPDATE imports
+          SET
+            status = 'error',
+            notes = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [errorMessage, importId],
+      ).catch(() => null);
     }
     throw error;
   } finally {

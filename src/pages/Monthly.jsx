@@ -16,6 +16,7 @@ import MonthlySummaryList from "../features/monthly/components/MonthlySummaryLis
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
 import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
+import { useStatusChangeAction } from "../features/monthly/hooks/useStatusChangeAction";
 import { buildAbatementHistoryEntry } from "../features/monthly/utils/abatementHistory";
 import { groupChangesByStatus } from "../features/monthly/utils/statusChanges";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
@@ -121,6 +122,18 @@ export default function Monthly() {
       return override ? { ...summary, ...override } : summary;
     });
   }, [rawSummaries, optimisticStatusOverrides]);
+
+  // Shared runner for status-change mutations. Each handler below feeds it a
+  // mutation function plus a success/undo blueprint and the hook handles the
+  // surrounding boilerplate (clear flags, run, reload, message, error).
+  const runStatusChangeAction = useStatusChangeAction({
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+    setUpdatingDonorId,
+    setUpdatingSummaryId,
+    reload: reloadSummaries,
+  });
 
   const loadAvailableImports = useCallback(async () => {
     const rows = await listImports({ status: "processed" });
@@ -389,60 +402,48 @@ export default function Monthly() {
       return;
     }
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setUpdatingDonorId(donor.donorId);
-      const history = buildAbatementHistoryEntry({
-        donor,
-        monthLimit,
-        months: changedMonths,
-        operation,
-        status,
-      });
-      await updateAbatementStatusesWithHistory({
-        history,
-        summaryIds: changedMonths.map((month) => month.id),
-        adjustmentIds: changedMonths
-          .map((month) => month.adjustmentId)
-          .filter(Boolean),
-        status,
-      });
-      await reloadSummaries();
-      const statusLabel = status === "applied" ? "realizado" : "pendente";
-      const previousStatusLabel =
-        status === "applied" ? "pendente(s)" : "realizado(s)";
-      const message = `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como ${statusLabel}.`;
-      setSuccessMessage(message);
-      setSuccessAction({
-        label: "Desfazer",
-        onAction: () =>
-          handleUndoStatusChanges({
-            changes: changedMonths.map((month) => ({
-              summaryId: month.id,
-              adjustmentId: month.adjustmentId,
-              status: month.abatementStatus,
-            })),
-            donorId: donor.donorId,
-            history: buildAbatementHistoryEntry({
-              actionType: "monthly_abatement_status_undo",
-              donor,
-              months: changedMonths,
-              operation: "undo",
-              status: status === "applied" ? "pending" : "applied",
-            }),
-            message: `Abatimentos do doador restaurados como ${previousStatusLabel}.`,
+    const statusLabel = status === "applied" ? "realizado" : "pendente";
+    const previousStatusLabel =
+      status === "applied" ? "pendente(s)" : "realizado(s)";
+
+    await runStatusChangeAction({
+      scope: "MonthlyPage.updateDonorAbatement",
+      donorId: donor.donorId,
+      run: () =>
+        updateAbatementStatusesWithHistory({
+          history: buildAbatementHistoryEntry({
+            donor,
+            monthLimit,
+            months: changedMonths,
+            operation,
+            status,
           }),
-      });
-    } catch (err) {
-      logError("MonthlyPage.updateDonorAbatement", err);
-      setError(
-        getErrorMessage(err, "Não foi possível atualizar os abatimentos do doador."),
-      );
-    } finally {
-      setUpdatingDonorId("");
-    }
+          summaryIds: changedMonths.map((month) => month.id),
+          adjustmentIds: changedMonths
+            .map((month) => month.adjustmentId)
+            .filter(Boolean),
+          status,
+        }),
+      successMessage: `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como ${statusLabel}.`,
+      errorMessage: "Não foi possível atualizar os abatimentos do doador.",
+      undo: () =>
+        handleUndoStatusChanges({
+          changes: changedMonths.map((month) => ({
+            summaryId: month.id,
+            adjustmentId: month.adjustmentId,
+            status: month.abatementStatus,
+          })),
+          donorId: donor.donorId,
+          history: buildAbatementHistoryEntry({
+            actionType: "monthly_abatement_status_undo",
+            donor,
+            months: changedMonths,
+            operation: "undo",
+            status: status === "applied" ? "pending" : "applied",
+          }),
+          message: `Abatimentos do doador restaurados como ${previousStatusLabel}.`,
+        }),
+    });
   };
 
   const handleExport = async () => {

@@ -20,15 +20,20 @@ import { formatMonthYear } from "../../utils/date";
  * existing imports keep working.
  */
 
-export async function listDonors(filters = {}) {
-  const {
-    donorId = "",
-    cpf = "",
-    demand = "",
-    donorType = "",
-    donationStartDate = "all",
-    activeStatus = "active",
-  } = filters;
+/**
+ * Build the donors WHERE/params pair shared by `listDonors` and `countDonors`.
+ * Kept private so the two callers cannot drift in the conditions they apply
+ * — server-side pagination only works correctly when the count and the slice
+ * are computed against the exact same predicate.
+ */
+function buildDonorListConditions({
+  donorId = "",
+  cpf = "",
+  demand = "",
+  donorType = "",
+  donationStartDate = "all",
+  activeStatus = "active",
+} = {}) {
   const conditions = [];
   const params = [];
 
@@ -72,6 +77,40 @@ export async function listDonors(filters = {}) {
   if (donationStartDate === "without-date") {
     conditions.push("donors.donation_start_date IS NULL");
   }
+
+  return { conditions, params };
+}
+
+export async function listDonors(filters = {}) {
+  const {
+    donorId = "",
+    cpf = "",
+    demand = "",
+    donorType = "",
+    donationStartDate = "all",
+    activeStatus = "active",
+    // Server-side pagination is opt-in. When `limit` is omitted (the default)
+    // the function returns every matching row, preserving the historical
+    // contract that pages relying on `usePagination` expect.
+    limit,
+    offset = 0,
+  } = filters;
+  const { conditions: baseConditions, params: baseParams } =
+    buildDonorListConditions({
+      donorId,
+      cpf,
+      demand,
+      donorType,
+      donationStartDate,
+      activeStatus,
+    });
+  const conditions = [...baseConditions];
+  const params = [...baseParams];
+
+  const limitClause =
+    typeof limit === "number" && Number.isFinite(limit) && limit >= 0
+      ? `LIMIT ${Math.max(0, Math.floor(limit))} OFFSET ${Math.max(0, Math.floor(offset))}`
+      : "";
 
   const rows = await queryPrepared(`
     SELECT
@@ -136,9 +175,28 @@ export async function listDonors(filters = {}) {
       AND holder_active_donors.is_active = TRUE
     ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
     ORDER BY donors.created_at DESC, donors.name ASC
+    ${limitClause}
   `, params);
 
   return rows.map(mapDonorRow);
+}
+
+/**
+ * Returns the count of donors matching the same filter shape as `listDonors`.
+ * Pair with `listDonors({ ...filters, limit, offset })` to drive server-side
+ * pagination. Kept ignored by callers that still rely on client-side
+ * `usePagination`.
+ */
+export async function countDonors(filters = {}) {
+  const { conditions, params } = buildDonorListConditions(filters);
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const rows = await queryPrepared(
+    `SELECT count(*) AS total FROM donors ${whereClause}`,
+    params,
+  );
+
+  return Number(rows[0]?.total ?? 0);
 }
 
 export async function listHolderDonors() {

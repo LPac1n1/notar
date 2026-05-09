@@ -66,9 +66,18 @@ function mapPersonRow(row) {
   };
 }
 
-async function queryPersonRows({ conditions = [], params = [] } = {}) {
+async function queryPersonRows({
+  conditions = [],
+  params = [],
+  limit,
+  offset = 0,
+} = {}) {
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const limitClause =
+    typeof limit === "number" && Number.isFinite(limit) && limit >= 0
+      ? `LIMIT ${Math.max(0, Math.floor(limit))} OFFSET ${Math.max(0, Math.floor(offset))}`
+      : "";
 
   const rows = await queryPrepared(
     `
@@ -120,6 +129,7 @@ async function queryPersonRows({ conditions = [], params = [] } = {}) {
       FROM people
       ${whereClause}
       ORDER BY people.name ASC, people.id ASC
+      ${limitClause}
     `,
     params,
   );
@@ -127,41 +137,16 @@ async function queryPersonRows({ conditions = [], params = [] } = {}) {
   return rows.map(mapPersonRow);
 }
 
-export async function findPersonById(id) {
-  if (!id) {
-    return null;
-  }
-
-  const rows = await queryPersonRows({
-    conditions: ["people.id = ?", "people.is_active = TRUE"],
-    params: [id],
-  });
-
-  return rows[0] ?? null;
-}
-
-export async function findPersonByCpf(cpf) {
-  const normalizedCpf = normalizeCpf(cpf);
-
-  if (normalizedCpf.length !== 11) {
-    return null;
-  }
-
-  const rows = await queryPersonRows({
-    conditions: ["people.cpf = ?", "people.is_active = TRUE"],
-    params: [normalizedCpf],
-  });
-
-  return rows[0] ?? null;
-}
-
-export async function listPeople(filters = {}) {
-  const {
-    personId = "",
-    cpf = "",
-    role = "",
-  } = filters;
-
+/**
+ * Build the people WHERE/params pair shared by `listPeople` and `countPeople`.
+ * Server-side pagination relies on count and slice running against the
+ * exact same predicate.
+ */
+function buildPeopleListConditions({
+  personId = "",
+  cpf = "",
+  role = "",
+} = {}) {
   const conditions = ["people.is_active = TRUE"];
   const params = [];
 
@@ -210,7 +195,57 @@ export async function listPeople(filters = {}) {
     `);
   }
 
-  return queryPersonRows({ conditions, params });
+  return { conditions, params };
+}
+
+export async function findPersonById(id) {
+  if (!id) {
+    return null;
+  }
+
+  const rows = await queryPersonRows({
+    conditions: ["people.id = ?", "people.is_active = TRUE"],
+    params: [id],
+  });
+
+  return rows[0] ?? null;
+}
+
+export async function findPersonByCpf(cpf) {
+  const normalizedCpf = normalizeCpf(cpf);
+
+  if (normalizedCpf.length !== 11) {
+    return null;
+  }
+
+  const rows = await queryPersonRows({
+    conditions: ["people.cpf = ?", "people.is_active = TRUE"],
+    params: [normalizedCpf],
+  });
+
+  return rows[0] ?? null;
+}
+
+export async function listPeople(filters = {}) {
+  const { conditions, params } = buildPeopleListConditions(filters);
+  // `limit`/`offset` are opt-in for server-side pagination; omitted by default
+  // so callers using client-side `usePagination` keep getting every row.
+  const { limit, offset = 0 } = filters;
+
+  return queryPersonRows({ conditions, params, limit, offset });
+}
+
+export async function countPeople(filters = {}) {
+  const { conditions, params } = buildPeopleListConditions(filters);
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const rows = await queryPrepared(
+    `SELECT count(*) AS total FROM people ${whereClause}`,
+    params,
+  );
+
+  return Number(rows[0]?.total ?? 0);
 }
 
 export async function createPerson({

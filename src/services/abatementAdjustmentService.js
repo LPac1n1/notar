@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import {
   escapeSqlString,
   execute,
+  executePrepared,
   queryPrepared,
   runInTransaction,
   startOfMonth,
@@ -309,34 +310,37 @@ export async function createAbatementAdjustment({
   const id = nanoid();
 
   await runInTransaction(async () => {
-    await execute(`
-      INSERT INTO abatement_adjustments (
+    // `description` is free-form user text — keep it in a prepared parameter
+    // rather than splicing it through `escapeSqlString` so any future
+    // pathological inputs cannot affect the SQL boundary.
+    await executePrepared(
+      `
+        INSERT INTO abatement_adjustments (
+          id,
+          donor_id,
+          reference_month,
+          range_start_month,
+          range_end_month,
+          notes_count,
+          abatement_amount,
+          description,
+          abatement_status,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
         id,
-        donor_id,
-        reference_month,
-        range_start_month,
-        range_end_month,
-        notes_count,
-        abatement_amount,
+        donorId,
+        normalizedReferenceMonth,
+        normalizedStart,
+        normalizedEnd,
+        safeNotesCount,
+        safeAmount,
         description,
-        abatement_status,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        '${escapeSqlString(id)}',
-        '${escapeSqlString(donorId)}',
-        '${escapeSqlString(normalizedReferenceMonth)}',
-        '${escapeSqlString(normalizedStart)}',
-        '${escapeSqlString(normalizedEnd)}',
-        ${safeNotesCount},
-        ${safeAmount},
-        '${escapeSqlString(description)}',
-        'pending',
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-    `);
+      ],
+    );
   });
 
   await createActionHistoryEntry({

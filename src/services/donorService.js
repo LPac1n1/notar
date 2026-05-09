@@ -15,6 +15,7 @@ export {
   listHolderDonors,
   listDonorCpfLinks,
   getDonorProfile,
+  countDonors,
 } from "./donor/donorProfile";
 
 export {
