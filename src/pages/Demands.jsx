@@ -36,7 +36,7 @@ import { buildSelectOptions } from "../utils/select";
 import { useDataResource } from "../hooks/useDataResource";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 
 const INITIAL_DEMAND_FILTERS = {
   demandId: "",
@@ -58,6 +58,7 @@ export default function Demands() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
 
@@ -80,11 +81,8 @@ export default function Demands() {
   const demandsPagination = usePagination(demands, {
     initialPageSize: 25,
   });
-  const dataSyncFeedback = useDataSyncFeedback();
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive ||
-    dataSyncFeedback.isVisible ||
-    (dataSyncFeedback.isSettling && isRefreshing);
+  const { dataSyncFeedback, showDataRefreshLoading } =
+    useDataRefreshStatus(isRefreshing);
 
   useDatabaseChangeEffect(reloadDemands);
 
@@ -108,6 +106,7 @@ export default function Demands() {
   const handleFormChange = (setter) => (event) => {
     const { name: fieldName, value } = event.target;
 
+    setFormError("");
     setter((current) => ({
       ...current,
       [fieldName]: value,
@@ -115,10 +114,14 @@ export default function Demands() {
   };
 
   const handleAdd = async () => {
-    if (!createForm.name.trim()) return;
+    if (!createForm.name.trim()) {
+      setFormError("Nome da demanda é obrigatório.");
+      return;
+    }
 
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsSubmitting(true);
@@ -129,7 +132,7 @@ export default function Demands() {
       await reloadDemands();
     } catch (err) {
       logError("DemandsPage.create", err);
-      setError(
+      setFormError(
         getErrorMessage(err, "Não foi possível adicionar a demanda."),
       );
     } finally {
@@ -139,6 +142,7 @@ export default function Demands() {
 
   const handleOpenEditModal = (demand) => {
     setError("");
+    setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
     setEditingDemand(demand);
@@ -151,6 +155,7 @@ export default function Demands() {
   const handleCloseEditModal = () => {
     setEditingDemand(null);
     setEditForm({ ...EMPTY_DEMAND_FORM });
+    setFormError("");
   };
 
   const handleSaveEdit = async () => {
@@ -158,8 +163,14 @@ export default function Demands() {
       return;
     }
 
+    if (!editForm.name.trim()) {
+      setFormError("Nome da demanda é obrigatório.");
+      return;
+    }
+
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsSubmitting(true);
@@ -172,7 +183,7 @@ export default function Demands() {
       await reloadDemands();
     } catch (err) {
       logError("DemandsPage.update", err);
-      setError(
+      setFormError(
         getErrorMessage(err, "Não foi possível atualizar a demanda."),
       );
     } finally {
@@ -260,6 +271,7 @@ export default function Demands() {
         <Button
           onClick={() => {
             setError("");
+            setFormError("");
             setSuccessMessage("");
             setSuccessAction(null);
             setCreateForm({ ...EMPTY_DEMAND_FORM });
@@ -395,10 +407,11 @@ export default function Demands() {
             title="Adicionar demanda"
             description="Cadastre o nome da demanda."
             confirmLabel="Adicionar demanda"
-            feedbackMessage={error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={() => {
               setCreateForm({ ...EMPTY_DEMAND_FORM });
+              setFormError("");
               setIsCreateModalOpen(false);
             }}
             onSubmit={handleAdd}
@@ -429,7 +442,7 @@ export default function Demands() {
             onClose={handleCloseEditModal}
             onSubmit={handleSaveEdit}
             confirmLabel="Salvar alterações"
-            feedbackMessage={error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             size="md"
           >

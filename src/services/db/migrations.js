@@ -482,6 +482,49 @@ export const MIGRATIONS = [
       `).catch(() => null);
     },
   },
+  {
+    id: 4,
+    name: "performance-indexes",
+    up: async (conn) => {
+      // Composite and additional indexes that target the hot paths in
+      // listMonthlySummariesByMonth, listHistoricalMonthlySummaries,
+      // getDonorActivityContext and previewCatchUpRange. These were missing
+      // in v1 because the queries that need them have grown organically; the
+      // monthly listing in particular does many subselects keyed by
+      // (reference_month, donor_id).
+      const performanceIndexes = [
+        [
+          "idx_monthly_summary_month_donor",
+          "monthly_donor_summary(reference_month, donor_id)",
+        ],
+        [
+          "idx_monthly_summary_donor",
+          "monthly_donor_summary(donor_id)",
+        ],
+        [
+          "idx_donor_activity_history_donor_month",
+          "donor_activity_history(donor_id, reference_month)",
+        ],
+        [
+          "idx_import_cpf_summary_month",
+          "import_cpf_summary(reference_month)",
+        ],
+      ];
+
+      for (const [indexName, columns] of performanceIndexes) {
+        await conn
+          .query(
+            `CREATE INDEX IF NOT EXISTS ${indexName} ON ${columns}`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v4: skipping index ${indexName} on ${columns}.`,
+              error,
+            );
+          });
+      }
+    },
+  },
 ];
 
 export async function runMigrations(conn) {

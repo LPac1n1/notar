@@ -3,7 +3,6 @@ import { AnimatePresence } from "framer-motion";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
-import CopyableValue from "../components/ui/CopyableValue";
 import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -13,16 +12,11 @@ import PageHeader from "../components/ui/PageHeader";
 import PaginationControls from "../components/ui/PaginationControls";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
-import StatusBadge from "../components/ui/StatusBadge";
 import TextInput from "../components/ui/TextInput";
-import {
-  DonorIcon,
-  EditIcon,
-  PlusIcon,
-  TrashIcon,
-} from "../components/ui/icons";
+import { PlusIcon } from "../components/ui/icons";
 import { DONOR_FORM_TYPE_OPTIONS } from "../constants/filterOptions";
-import DonorForm from "../features/donors/components/DonorForm";
+import ConvertPersonToDonorModal from "../features/people/components/ConvertPersonToDonorModal";
+import PersonListItem from "../features/people/components/PersonListItem";
 import { listDemands } from "../services/demandService";
 import { createDonor } from "../services/donorService";
 import {
@@ -45,8 +39,7 @@ import {
 } from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
-import { formatDateTimePtBR } from "../utils/date";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 import { formatInteger } from "../utils/format";
 
 const EMPTY_PERSON_FORM = {
@@ -88,6 +81,7 @@ export default function People() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
 
@@ -108,11 +102,8 @@ export default function People() {
   });
 
   const peoplePagination = usePagination(people, { initialPageSize: 25 });
-  const dataSyncFeedback = useDataSyncFeedback();
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive ||
-    dataSyncFeedback.isVisible ||
-    (dataSyncFeedback.isSettling && isRefreshing);
+  const { dataSyncFeedback, showDataRefreshLoading } =
+    useDataRefreshStatus(isRefreshing);
 
   const loadSupportingData = useCallback(async () => {
     const [personRows, demandRows] = await Promise.all([
@@ -154,6 +145,7 @@ export default function People() {
   const handleFormChange = (setter, setFormErrors) => (event) => {
     const { name, value } = event.target;
 
+    setFormError("");
     setFormErrors((current) => ({
       ...current,
       [name]: "",
@@ -255,6 +247,7 @@ export default function People() {
 
   const handleOpenConvertModal = (person) => {
     setError("");
+    setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
     setConvertingPerson(person);
@@ -266,10 +259,24 @@ export default function People() {
     });
   };
 
+  const handleOpenEditModal = (person) => {
+    setError("");
+    setFormError("");
+    setSuccessMessage("");
+    setSuccessAction(null);
+    setEditingPerson(person);
+    setEditFormErrors({});
+    setEditForm({
+      name: person.name,
+      cpf: person.cpf,
+    });
+  };
+
   const handleCloseConvertModal = () => {
     setConvertingPerson(null);
     setConvertForm({ ...EMPTY_CONVERT_FORM });
     setConvertFormErrors({});
+    setFormError("");
   };
 
   const handleAdd = async () => {
@@ -277,12 +284,13 @@ export default function People() {
 
     if (hasValidationErrors(validationErrors)) {
       setCreateFormErrors(validationErrors);
-      setError(getFirstValidationError(validationErrors));
+      setFormError(getFirstValidationError(validationErrors));
       return;
     }
 
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsSubmitting(true);
@@ -298,7 +306,7 @@ export default function People() {
       await refreshPeople();
     } catch (err) {
       logError("PeoplePage.create", err);
-      setError(getErrorMessage(err, "Não foi possível cadastrar a pessoa."));
+      setFormError(getErrorMessage(err, "Não foi possível cadastrar a pessoa."));
     } finally {
       setIsSubmitting(false);
     }
@@ -313,12 +321,13 @@ export default function People() {
 
     if (hasValidationErrors(validationErrors)) {
       setConvertFormErrors(validationErrors);
-      setError(getFirstValidationError(validationErrors));
+      setFormError(getFirstValidationError(validationErrors));
       return;
     }
 
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsConverting(true);
@@ -339,7 +348,9 @@ export default function People() {
       await refreshPeople();
     } catch (err) {
       logError("PeoplePage.convertToDonor", err);
-      setError(getErrorMessage(err, "Não foi possível converter a pessoa em doador."));
+      setFormError(
+        getErrorMessage(err, "Não foi possível converter a pessoa em doador."),
+      );
     } finally {
       setIsConverting(false);
     }
@@ -354,12 +365,13 @@ export default function People() {
 
     if (hasValidationErrors(validationErrors)) {
       setEditFormErrors(validationErrors);
-      setError(getFirstValidationError(validationErrors));
+      setFormError(getFirstValidationError(validationErrors));
       return;
     }
 
     try {
       setError("");
+      setFormError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setIsSubmitting(true);
@@ -375,7 +387,7 @@ export default function People() {
       await refreshPeople();
     } catch (err) {
       logError("PeoplePage.update", err);
-      setError(getErrorMessage(err, "Não foi possível atualizar a pessoa."));
+      setFormError(getErrorMessage(err, "Não foi possível atualizar a pessoa."));
     } finally {
       setIsSubmitting(false);
     }
@@ -437,6 +449,7 @@ export default function People() {
         <Button
           onClick={() => {
             setError("");
+            setFormError("");
             setSuccessMessage("");
             setSuccessAction(null);
             setCreateForm({ ...EMPTY_PERSON_FORM });
@@ -527,82 +540,13 @@ export default function People() {
           </li>
 
           {peoplePagination.visibleItems.map((person) => (
-            <li
+            <PersonListItem
               key={person.id}
-              className="flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <CopyableValue
-                    copyLabel="Copiar nome"
-                    value={person.name}
-                  >
-                    <span className="font-semibold text-[var(--text-main)]">
-                      {person.name}
-                    </span>
-                  </CopyableValue>
-                  <StatusBadge label="Pessoa de referência" tone="neutral" />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
-                  <span>CPF:</span>
-                  <CopyableValue
-                    copyLabel="Copiar CPF"
-                    value={person.cpf}
-                  >
-                    <span>{person.cpf}</span>
-                  </CopyableValue>
-                </div>
-
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {person.referencedByAuxiliaries > 0
-                    ? `Referência de ${formatInteger(person.referencedByAuxiliaries)} auxiliar(es).`
-                    : "Disponível para vínculo com auxiliar."}
-                </p>
-                {person.createdAt ? (
-                  <p className="mt-5 text-xs text-[var(--muted)]">
-                    Cadastrada em {formatDateTimePtBR(person.createdAt)}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex w-full flex-col gap-2 md:w-44 md:self-stretch">
-                <Button
-                  className="w-full md:flex-1"
-                  variant="subtle"
-                  onClick={() => handleOpenConvertModal(person)}
-                  leftIcon={<DonorIcon className="h-4 w-4" />}
-                >
-                  Converter
-                </Button>
-                <Button
-                  className="w-full md:flex-1"
-                  variant="subtle"
-                  onClick={() => {
-                    setError("");
-                    setSuccessMessage("");
-                    setSuccessAction(null);
-                    setEditingPerson(person);
-                    setEditFormErrors({});
-                    setEditForm({
-                      name: person.name,
-                      cpf: person.cpf,
-                    });
-                  }}
-                  leftIcon={<EditIcon className="h-4 w-4" />}
-                >
-                  Editar
-                </Button>
-                <Button
-                  className="w-full md:flex-1"
-                  variant="danger"
-                  onClick={() => setPersonPendingRemoval(person)}
-                  leftIcon={<TrashIcon className="h-4 w-4" />}
-                >
-                  Remover
-                </Button>
-              </div>
-            </li>
+              onConvert={handleOpenConvertModal}
+              onEdit={handleOpenEditModal}
+              onRemove={setPersonPendingRemoval}
+              person={person}
+            />
           ))}
 
           <li>
@@ -625,12 +569,13 @@ export default function People() {
             title="Adicionar pessoa"
             description="Cadastre uma pessoa para uso como referência de um auxiliar."
             confirmLabel="Adicionar pessoa"
-            feedbackMessage={error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={() => {
               setIsCreateModalOpen(false);
               setCreateForm({ ...EMPTY_PERSON_FORM });
               setCreateFormErrors({});
+              setFormError("");
             }}
             onSubmit={handleAdd}
           >
@@ -662,12 +607,13 @@ export default function People() {
             title="Editar pessoa"
             description="Atualize os dados da pessoa de referência."
             confirmLabel="Salvar alterações"
-            feedbackMessage={error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={() => {
               setEditingPerson(null);
               setEditForm({ ...EMPTY_PERSON_FORM });
               setEditFormErrors({});
+              setFormError("");
             }}
             onSubmit={handleSaveEdit}
           >
@@ -695,49 +641,20 @@ export default function People() {
 
       <AnimatePresence>
         {convertingPerson ? (
-          <FormModal
-            title="Converter pessoa em doador"
-            description="Informe apenas os dados do papel de doador. Nome e CPF serão preservados."
-            confirmLabel="Converter em doador"
-            feedbackMessage={error}
-            isLoading={isConverting}
+          <ConvertPersonToDonorModal
+            demandOptions={donorFormDemandOptions}
+            errors={convertFormErrors}
+            feedbackMessage={formError}
+            form={convertForm}
+            holderOptions={conversionHolderOptions}
+            isConverting={isConverting}
             onClose={handleCloseConvertModal}
             onSubmit={handleConvertToDonor}
-          >
-            <div className="space-y-4">
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
-                  Pessoa selecionada
-                </p>
-                <p className="mt-1 font-semibold text-[var(--text-main)]">
-                  {convertingPerson.name}
-                </p>
-                <p className="text-sm text-[var(--muted)]">
-                  CPF: {convertingPerson.cpf}
-                </p>
-                {convertingPerson.referencedByAuxiliaries > 0 ? (
-                  <p className="mt-2 text-xs text-[var(--muted)]">
-                    Referência de{" "}
-                    {formatInteger(convertingPerson.referencedByAuxiliaries)}{" "}
-                    auxiliar(es). Ao converter como titular, esses vínculos serão
-                    mantidos. Por isso, a conversão como auxiliar não fica
-                    disponível neste caso.
-                  </p>
-                ) : null}
-              </div>
-
-              <DonorForm
-                demandOptions={donorFormDemandOptions}
-                errors={convertFormErrors}
-                form={convertForm}
-                holderOptions={conversionHolderOptions}
-                isIdentityLocked
-                onChange={handleFormChange(setConvertForm, setConvertFormErrors)}
-                selectedHolder={selectedConversionHolder}
-                typeOptions={conversionTypeOptions}
-              />
-            </div>
-          </FormModal>
+            onChange={handleFormChange(setConvertForm, setConvertFormErrors)}
+            person={convertingPerson}
+            selectedHolder={selectedConversionHolder}
+            typeOptions={conversionTypeOptions}
+          />
         ) : null}
       </AnimatePresence>
 

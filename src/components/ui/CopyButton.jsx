@@ -160,14 +160,14 @@ export default function CopyButton({
       data-copy-label={label}
       data-copy-state={status}
       style={buttonStyle}
-      className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${className}`.trim()}
+      className={`relative inline-flex h-7 w-7 shrink-0 transform-gpu items-center justify-center rounded-md border text-xs font-semibold transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] active:scale-95 ${className}`.trim()}
     >
       {isCopied ? (
         <CheckIcon className="h-3.5 w-3.5 scale-105 transition-transform duration-200 ease-out" />
       ) : (
         <CopyIcon className="h-3.5 w-3.5 transition-transform duration-200 ease-out" />
       )}
-      <span className="sr-only">
+      <span className="sr-only" aria-live="polite">
         {isCopied ? copiedLabel : isError ? errorLabel : label}
       </span>
     </button>

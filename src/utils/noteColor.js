@@ -1,7 +1,7 @@
 import {
   DEFAULT_DEMAND_COLOR,
   DEMAND_COLOR_PALETTE,
-} from "./demandColor";
+} from "./demandColor.js";
 
 export const DEFAULT_NOTE_COLOR = DEFAULT_DEMAND_COLOR;
 

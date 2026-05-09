@@ -15,7 +15,7 @@ import {
 } from "../features/history/constants";
 import { listActionHistory } from "../services/actionHistoryService";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { usePagination } from "../hooks/usePagination";
 import { getErrorMessage } from "../utils/error";
@@ -36,9 +36,7 @@ export default function ActionHistory() {
   const historyRequestIdRef = useRef(0);
   const hasInitializedRef = useRef(false);
   const historyPagination = usePagination(actions, { initialPageSize: 25 });
-  const dataSyncFeedback = useDataSyncFeedback();
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive || dataSyncFeedback.isVisible;
+  const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshStatus();
 
   const loadHistory = useCallback(async (
     currentFilters = INITIAL_FILTERS,

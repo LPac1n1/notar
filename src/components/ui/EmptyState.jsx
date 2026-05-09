@@ -1,12 +1,14 @@
-import { motion as Motion } from "framer-motion";
+import { motion as Motion, useReducedMotion } from "framer-motion";
 import { EmptyIcon } from "./icons";
 
 export default function EmptyState({ title, description }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <Motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={{ duration: shouldReduceMotion ? 0.08 : 0.2 }}
       className="rounded-md border border-dashed border-[var(--line-strong)] bg-[var(--surface-strong)] p-6 text-center"
     >
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)] text-[var(--accent)]">

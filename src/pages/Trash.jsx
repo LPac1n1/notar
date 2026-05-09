@@ -17,7 +17,7 @@ import {
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 
 export default function Trash() {
   const [trashItems, setTrashItems] = useState([]);
@@ -29,9 +29,7 @@ export default function Trash() {
     useState(null);
   const [isClearTrashConfirmOpen, setIsClearTrashConfirmOpen] = useState(false);
   const trashRequestIdRef = useRef(0);
-  const dataSyncFeedback = useDataSyncFeedback();
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive || dataSyncFeedback.isVisible;
+  const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshStatus();
 
   const refreshTrashItems = useCallback(async () => {
     const requestId = trashRequestIdRef.current + 1;

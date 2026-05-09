@@ -7,11 +7,6 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { SkeletonRows } from "../components/ui/Skeleton";
-import {
-  DonorIcon,
-  MonthlyIcon,
-  WarningIcon,
-} from "../components/ui/icons";
 import { INITIAL_MONTHLY_FILTERS } from "../features/monthly/constants";
 import BulkAbatementModal from "../features/monthly/components/BulkAbatementModal";
 import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
@@ -19,6 +14,9 @@ import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonth
 import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
 import MonthlySummaryList from "../features/monthly/components/MonthlySummaryList";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
+import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
+import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
+import { buildAbatementHistoryEntry } from "../features/monthly/utils/abatementHistory";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
@@ -44,32 +42,6 @@ import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { useDelayedLoading } from "../hooks/useDelayedLoading";
 import { logError } from "../services/logger";
 
-function getAbatementStatusLabel(status) {
-  return status === "applied" ? "realizado" : "pendente";
-}
-
-function getAbatementOperationLabel(operation, monthLimit = "") {
-  if (operation === "all") {
-    return "Realizar todos";
-  }
-
-  if (operation === "through") {
-    return monthLimit
-      ? `Realizar até ${formatMonthYear(monthLimit)}`
-      : "Realizar até";
-  }
-
-  if (operation === "selected") {
-    return "Realizar selecionados";
-  }
-
-  if (operation === "undo") {
-    return "Desfazer";
-  }
-
-  return "Alteração manual";
-}
-
 function normalizeMonthlyFilters(filters) {
   return filters.referenceMonth
     ? filters
@@ -91,51 +63,6 @@ function loadMonthlySummariesForOptions(filters) {
     abatementStatus: "all",
     abatementSort: "",
   });
-}
-
-function buildAbatementHistoryEntry({
-  actionType = "monthly_abatement_status_update",
-  donor,
-  monthLimit = "",
-  months,
-  operation = "manual",
-  status,
-}) {
-  const normalizedMonths = months.map((month) => ({
-    id: month.id,
-    referenceMonth: month.referenceMonth,
-    previousStatus: month.abatementStatus,
-    amount: Number(month.abatementAmount ?? 0),
-  }));
-  const totalAmount = normalizedMonths.reduce(
-    (total, month) => total + month.amount,
-    0,
-  );
-  const statusLabel = getAbatementStatusLabel(status);
-  const actionVerb = actionType.includes("undo")
-    ? "restaurado(s) como"
-    : "marcado(s) como";
-
-  return {
-    actionType,
-    entityType: "monthly_abatement",
-    entityId: donor.donorId,
-    label: donor.donorName,
-    description: `${formatInteger(normalizedMonths.length)} mês(es) de ${donor.donorName} ${actionVerb} ${statusLabel}.`,
-    payload: {
-      demand: donor.demand ?? "",
-      donorId: donor.donorId,
-      donorName: donor.donorName,
-      donorType: donor.donorType,
-      monthCount: normalizedMonths.length,
-      monthLimit,
-      months: normalizedMonths,
-      operation,
-      operationLabel: getAbatementOperationLabel(operation, monthLimit),
-      status,
-      totalAmount,
-    },
-  };
 }
 
 export default function Monthly() {
@@ -709,95 +636,17 @@ export default function Monthly() {
     }));
   };
 
-  const totalAbatement = summaries.reduce(
-    (accumulator, item) => accumulator + item.abatementAmount,
-    0,
-  );
-  const donationSummaries = useMemo(
-    () => summaries.filter((summary) => summary.hasDonationsInMonth),
-    [summaries],
-  );
-  const pendingSummaries = useMemo(
-    () =>
-      donationSummaries.filter(
-        (summary) => summary.abatementStatus !== "applied",
-      ),
-    [donationSummaries],
-  );
-  const totalPendingAbatement = pendingSummaries.reduce(
-    (accumulator, item) => accumulator + item.abatementAmount,
-    0,
-  );
-  const totalAppliedAbatement = donationSummaries.reduce(
-    (accumulator, item) =>
-      item.abatementStatus === "applied"
-        ? accumulator + item.abatementAmount
-        : accumulator,
-    0,
-  );
-  const consolidatedPendingDonors = useMemo(() => {
-    const donorsById = new Map();
-
-    for (const summary of donationSummaries) {
-      const current = donorsById.get(summary.donorId) ?? {
-        donorId: summary.donorId,
-        donorName: summary.donorName,
-        donorType: summary.donorType,
-        holderName: summary.holderName,
-        holderIsActiveDonor: summary.holderIsActiveDonor,
-        cpf: summary.cpf,
-        demand: summary.demand,
-        months: [],
-        totalPending: 0,
-        totalApplied: 0,
-        invalidNotesCount: 0,
-      };
-
-      current.months.push({
-        id: summary.id,
-        referenceMonth: summary.referenceMonth,
-        abatementAmount: summary.abatementAmount,
-        abatementStatus: summary.abatementStatus,
-        adjustmentId: summary.adjustment?.id ?? "",
-      });
-      current.invalidNotesCount += Number(summary.invalidNotesCount ?? 0);
-      if (summary.abatementStatus === "applied") {
-        current.totalApplied += summary.abatementAmount;
-      } else {
-        current.totalPending += summary.abatementAmount;
-      }
-      donorsById.set(summary.donorId, current);
-    }
-
-    return Array.from(donorsById.values())
-      .map((donor) => ({
-        ...donor,
-        months: donor.months.sort((left, right) =>
-          left.referenceMonth.localeCompare(right.referenceMonth),
-        ),
-      }))
-      .sort(
-        (left, right) =>
-          right.totalPending - left.totalPending ||
-          right.totalApplied - left.totalApplied ||
-          left.donorName.localeCompare(right.donorName, "pt-BR"),
-      );
-  }, [donationSummaries]);
-  const filteredConsolidatedDonors = useMemo(() => {
-    if (filters.abatementStatus === "pending") {
-      return consolidatedPendingDonors.filter(
-        (donor) => donor.totalPending > 0,
-      );
-    }
-
-    if (filters.abatementStatus === "applied") {
-      return consolidatedPendingDonors.filter(
-        (donor) => donor.totalPending === 0,
-      );
-    }
-
-    return consolidatedPendingDonors;
-  }, [consolidatedPendingDonors, filters.abatementStatus]);
+  const {
+    donatedCount,
+    filteredConsolidatedDonors,
+    notDonatedCount,
+    totalAbatement,
+    totalAppliedAbatement,
+    totalPendingAbatement,
+  } = useConsolidatedMonthlyDonors({
+    abatementStatus: filters.abatementStatus,
+    summaries,
+  });
   const selectedImport = availableImports.find(
     (item) => item.referenceMonth.slice(0, 7) === filters.referenceMonth,
   );
@@ -814,9 +663,6 @@ export default function Monthly() {
   const monthlyPagination = usePagination(summaries, {
     initialPageSize: 25,
   });
-  const donatedCount = summaries.filter((summary) => summary.hasDonationsInMonth)
-    .length;
-  const notDonatedCount = summaries.length - donatedCount;
   const visibleDonatedSummaries = useMemo(
     () =>
       monthlyPagination.visibleItems.filter((summary) => summary.hasDonationsInMonth),
@@ -829,62 +675,19 @@ export default function Monthly() {
       ),
     [monthlyPagination.visibleItems],
   );
-  const overviewMetrics = useMemo(() => {
-    const metrics = [
-      {
-        icon: DonorIcon,
-        label: hasSelectedReferenceMonth ? "Doadores filtrados" : "Registros filtrados",
-        value: formatInteger(summaries.length),
-        helper:
-          summaries.length > 0
-            ? `Mostrando ${formatInteger(monthlyPagination.startItem)}-${formatInteger(monthlyPagination.endItem)} nesta página`
-            : "Nenhum item com os filtros atuais.",
-      },
-      {
-        icon: MonthlyIcon,
-        label: hasSelectedReferenceMonth ? "Total filtrado" : "Total pendente",
-        value: formatCurrency(
-          hasSelectedReferenceMonth ? totalAbatement : totalPendingAbatement,
-        ),
-        helper: hasSelectedReferenceMonth
-          ? "Somatório dos abatimentos exibidos abaixo."
-          : `Pendente: ${formatCurrency(totalPendingAbatement)} • Abatido: ${formatCurrency(totalAppliedAbatement)}`,
-      },
-    ];
-
-    if (hasSelectedReferenceMonth) {
-      metrics.splice(
-        1,
-        0,
-        {
-          icon: MonthlyIcon,
-          label: "Doaram no mês",
-          value: formatInteger(donatedCount),
-          helper: "Doadores com notas conciliadas no período.",
-          tone: "success",
-        },
-        {
-          icon: WarningIcon,
-          label: "Não doaram no mês",
-          value: formatInteger(notDonatedCount),
-          helper: "Continuam visíveis para acompanhamento.",
-          tone: "warning",
-        },
-      );
-    }
-
-    return metrics;
-  }, [
+  const overviewMetrics = useMonthlyOverviewMetrics({
     donatedCount,
     hasSelectedReferenceMonth,
-    monthlyPagination.endItem,
-    monthlyPagination.startItem,
     notDonatedCount,
-    summaries.length,
+    summariesCount: summaries.length,
     totalAbatement,
     totalAppliedAbatement,
     totalPendingAbatement,
-  ]);
+    visibleRange: {
+      endItem: monthlyPagination.endItem,
+      startItem: monthlyPagination.startItem,
+    },
+  });
 
   if (isLoading && !availableImports.length && !error) {
     return (

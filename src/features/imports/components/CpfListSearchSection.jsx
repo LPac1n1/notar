@@ -10,6 +10,7 @@ import StatusBadge from "../../../components/ui/StatusBadge";
 import { SearchIcon } from "../../../components/ui/icons";
 import { usePagination } from "../../../hooks/usePagination";
 import { searchImportedCpfs } from "../../../services/importService";
+import { logError } from "../../../services/logger";
 import { formatCpf, parseCpfList } from "../../../utils/cpf";
 import { formatMonthYear } from "../../../utils/date";
 import { getErrorMessage } from "../../../utils/error";
@@ -241,10 +242,9 @@ export default function CpfListSearchSection({ onOpenDonorProfile }) {
       const data = await searchImportedCpfs(tokens);
       setResults(data);
     } catch (err) {
-      console.error(
-        "Erro ao buscar CPFs nas importações:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
+      logError("CpfListSearchSection.search", err, {
+        tokenCount: tokens.length,
+      });
       setError(
         getErrorMessage(err, "Não foi possível buscar a lista de CPFs nas importações."),
       );

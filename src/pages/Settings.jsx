@@ -24,6 +24,7 @@ import {
   openDatabaseFile,
   STORAGE_INFO_EVENT,
 } from "../services/db";
+import { logError } from "../services/logger";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   finishDataSyncFeedback,
@@ -95,10 +96,7 @@ export default function Settings() {
           setStorageInfo(info);
         }
       } catch (storageError) {
-        console.error(
-          "Erro ao verificar armazenamento local:",
-          getErrorMessage(storageError, "Erro desconhecido."),
-        );
+        logError("Settings.loadStorageInfo", storageError);
 
         if (isMounted) {
           setError(

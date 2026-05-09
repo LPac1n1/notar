@@ -1,4 +1,4 @@
-import { motion as Motion } from "framer-motion";
+import { motion as Motion, useReducedMotion } from "framer-motion";
 import { LoadingIcon } from "./icons";
 
 export default function LoadingScreen({
@@ -6,6 +6,7 @@ export default function LoadingScreen({
   description = "Preparando as informações do sistema para você.",
   compact = false,
 }) {
+  const shouldReduceMotion = useReducedMotion();
   const containerClassName = `rounded-md border border-[var(--line)] bg-[var(--surface-strong)] ${compact ? "p-5" : "min-h-[260px] p-6 md:p-8"}`.trim();
 
   return (
@@ -13,17 +14,24 @@ export default function LoadingScreen({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+      animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+      transition={{
+        duration: shouldReduceMotion ? 0.08 : 0.18,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className={containerClassName}
     >
       <div className={`mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center ${compact ? "gap-3" : "gap-4"}`}>
         <div className="flex h-12 w-12 items-center justify-center rounded-md border border-[var(--line)] bg-[color:var(--surface-elevated)]">
           <Motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1.1, ease: "linear", repeat: Infinity }}
+            animate={shouldReduceMotion ? undefined : { rotate: 360 }}
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : { duration: 1.1, ease: "linear", repeat: Infinity }
+            }
           >
             <LoadingIcon className="h-6 w-6 text-[var(--accent-strong)]" />
           </Motion.div>
@@ -43,13 +51,21 @@ export default function LoadingScreen({
             <Motion.div
               key={item}
               className={`h-3 rounded-full bg-[color:var(--surface-muted)] ${item === 2 ? "w-10/12" : item === 3 ? "w-8/12" : ""}`.trim()}
-              animate={{ opacity: [0.45, 0.95, 0.45], x: ["-4%", "4%", "-4%"] }}
-              transition={{
-                duration: 1.4,
-                ease: "easeInOut",
-                repeat: Infinity,
-                delay: item * 0.12,
-              }}
+              animate={
+                shouldReduceMotion
+                  ? { opacity: 0.72 }
+                  : { opacity: [0.45, 0.95, 0.45], x: ["-4%", "4%", "-4%"] }
+              }
+              transition={
+                shouldReduceMotion
+                  ? { duration: 0.08 }
+                  : {
+                      duration: 1.4,
+                      ease: "easeInOut",
+                      repeat: Infinity,
+                      delay: item * 0.12,
+                    }
+              }
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import CopyableValue from "../components/ui/CopyableValue";
@@ -23,23 +23,39 @@ import MetricCard from "../features/dashboard/components/MetricCard";
 import CopyableCpf from "../features/donors/components/CopyableCpf";
 import CopyableDonorName from "../features/donors/components/CopyableDonorName";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataResource } from "../hooks/useDataResource";
 import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatDatePtBR, formatMonthYear } from "../utils/date";
-import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
 
 export default function Dashboard() {
   const location = useLocation();
-  const [dashboard, setDashboard] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
   const [activeModal, setActiveModal] = useState("");
-  const dashboardRequestIdRef = useRef(0);
   const restoredScrollTopRef = useRef(location.state?.dashboardScrollTop ?? null);
   const navigate = useNavigate();
-  const dataSyncFeedback = useDataSyncFeedback();
+
+  const dashboardLoader = useCallback(() => getDashboardOverview(), []);
+  const dashboardFilters = useMemo(() => ({}), []);
+  const {
+    data: dashboard,
+    isLoading,
+    isRefreshing,
+    error,
+    reload: reloadDashboard,
+  } = useDataResource({
+    loader: dashboardLoader,
+    filters: dashboardFilters,
+    errorMessage: "Não foi possível carregar os indicadores do dashboard.",
+    scope: "Dashboard",
+    initialData: null,
+  });
+
+  const {
+    dataSyncFeedback,
+    showDataRefreshLoading: hasDataRefreshLoading,
+  } = useDataRefreshStatus(isRefreshing);
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
@@ -57,47 +73,7 @@ export default function Dashboard() {
     }
   };
 
-  const loadDashboard = useCallback(async () => {
-    const requestId = dashboardRequestIdRef.current + 1;
-    dashboardRequestIdRef.current = requestId;
-
-    try {
-      setIsLoading(true);
-      setError("");
-      const overview = await getDashboardOverview();
-
-      if (requestId !== dashboardRequestIdRef.current) {
-        return;
-      }
-
-      setDashboard(overview);
-    } catch (dashboardError) {
-      if (requestId !== dashboardRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar dashboard:",
-        getErrorMessage(dashboardError, "Erro desconhecido."),
-      );
-      setError(
-        getErrorMessage(
-          dashboardError,
-          "Não foi possível carregar os indicadores do dashboard.",
-        ),
-      );
-    } finally {
-      if (requestId === dashboardRequestIdRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
-
-  useDatabaseChangeEffect(loadDashboard);
+  useDatabaseChangeEffect(reloadDashboard);
 
   useEffect(() => {
     if (isLoading || restoredScrollTopRef.current === null) {
@@ -140,10 +116,7 @@ export default function Dashboard() {
     totals.importCount > 0 ||
     totals.processedImportCount > 0;
   const showDataRefreshLoading =
-    Boolean(dashboard) &&
-    (dataSyncFeedback.isActive ||
-      dataSyncFeedback.isVisible ||
-      (dataSyncFeedback.isSettling && isLoading));
+    Boolean(dashboard) && hasDataRefreshLoading;
   const showInitialLoading = isLoading && !dashboard && !error;
   const showRefreshing = showDataRefreshLoading;
   const showCards = !showRefreshing && (!isLoading || Boolean(dashboard));

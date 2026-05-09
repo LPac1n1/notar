@@ -267,3 +267,33 @@ test("migration v3 creates abatement_adjustments table with proper indexes", asy
     conn.close();
   }
 });
+
+test("migration v4 creates performance indexes", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    const expectedIndexes = [
+      "idx_monthly_summary_month_donor",
+      "idx_monthly_summary_donor",
+      "idx_donor_activity_history_donor_month",
+      "idx_import_cpf_summary_month",
+    ];
+
+    const rows = (
+      await conn.query(
+        "SELECT index_name FROM duckdb_indexes() WHERE schema_name = 'main'",
+      )
+    ).toArray();
+    const indexSet = new Set(rows.map((row) => String(row.index_name)));
+
+    for (const indexName of expectedIndexes) {
+      assert.ok(
+        indexSet.has(indexName),
+        `expected migration v4 to create index ${indexName}`,
+      );
+    }
+  } finally {
+    conn.close();
+  }
+});

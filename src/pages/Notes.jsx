@@ -8,14 +8,21 @@ import FeedbackMessage from "../components/ui/FeedbackMessage";
 import FormModal from "../components/ui/FormModal";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
-import TextInput from "../components/ui/TextInput";
 import { PlusIcon } from "../components/ui/icons";
+import AutoSaveStatus from "../features/notes/components/AutoSaveStatus";
 import NoteCard from "../features/notes/components/NoteCard";
-import NoteColorPicker from "../features/notes/components/NoteColorPicker";
-import RichNoteEditor from "../features/notes/components/RichNoteEditor";
-import { isNoteContentEmpty } from "../features/notes/utils/noteContent";
+import NoteFormFields from "../features/notes/components/NoteFormFields";
+import {
+  AUTO_SAVE_DELAY_MS,
+  EMPTY_NOTE_FORM,
+} from "../features/notes/constants";
+import {
+  getNoteFingerprint,
+  hasNoteDraftContent,
+  normalizeNoteDraft,
+} from "../features/notes/utils/noteDraft";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 import {
   createNote,
   deleteNote,
@@ -24,97 +31,6 @@ import {
 } from "../services/noteService";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
-import { DEFAULT_NOTE_COLOR } from "../utils/noteColor";
-
-const EMPTY_NOTE_FORM = {
-  title: "",
-  content: "",
-  color: DEFAULT_NOTE_COLOR,
-};
-const AUTO_SAVE_DELAY_MS = 800;
-const UNTITLED_NOTE_TITLE = "Sem título";
-const AUTO_SAVE_STATUS_CONFIG = {
-  idle: {
-    dotClass: "bg-[var(--muted)]",
-    label: "Salvamento automático ativo",
-  },
-  pending: {
-    dotClass: "bg-amber-400",
-    label: "Alterações pendentes",
-  },
-  saving: {
-    dotClass: "bg-[var(--accent)]",
-    label: "Salvando...",
-  },
-  saved: {
-    dotClass: "bg-emerald-400",
-    label: "Salvo automaticamente",
-  },
-  error: {
-    dotClass: "bg-red-400",
-    label: "Falha ao salvar automaticamente",
-  },
-};
-
-function normalizeNoteDraft(form) {
-  return {
-    title: String(form.title ?? "").trim() || UNTITLED_NOTE_TITLE,
-    content: String(form.content ?? "").trim(),
-    color: form.color || DEFAULT_NOTE_COLOR,
-  };
-}
-
-function getNoteFingerprint(form) {
-  return JSON.stringify(normalizeNoteDraft(form));
-}
-
-function hasNoteDraftContent(form) {
-  return (
-    Boolean(String(form.title ?? "").trim()) ||
-    !isNoteContentEmpty(form.content)
-  );
-}
-
-function AutoSaveStatus({ status }) {
-  const config = AUTO_SAVE_STATUS_CONFIG[status] ?? AUTO_SAVE_STATUS_CONFIG.idle;
-
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex min-w-0 items-center gap-2 text-xs text-[var(--muted)]"
-    >
-      <span
-        aria-hidden="true"
-        className={`h-2 w-2 shrink-0 rounded-full ${config.dotClass} ${
-          status === "saving" ? "animate-pulse" : ""
-        }`}
-      />
-      <span className="truncate">{config.label}</span>
-    </div>
-  );
-}
-
-function NoteFormFields({ form, onChange, onContentChange }) {
-  return (
-    <div className="space-y-4">
-      <TextInput
-        label="Título"
-        name="title"
-        placeholder="Título da anotação"
-        value={form.title}
-        onChange={onChange}
-      />
-
-      <RichNoteEditor
-        value={form.content}
-        onChange={onContentChange}
-      />
-
-      <NoteColorPicker value={form.color} onChange={onChange} />
-    </div>
-  );
-}
 
 export default function Notes() {
   const [notes, setNotes] = useState([]);
@@ -145,11 +61,8 @@ export default function Notes() {
   const isClosingCreateRef = useRef(false);
   const isClosingEditRef = useRef(false);
   const isMountedRef = useRef(true);
-  const dataSyncFeedback = useDataSyncFeedback();
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive ||
-    dataSyncFeedback.isVisible ||
-    (dataSyncFeedback.isSettling && isRefreshing);
+  const { dataSyncFeedback, showDataRefreshLoading } =
+    useDataRefreshStatus(isRefreshing);
 
   const loadNotes = useCallback(async ({ showLoading = false } = {}) => {
     const requestId = notesRequestIdRef.current + 1;

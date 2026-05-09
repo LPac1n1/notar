@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion as Motion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion as Motion,
+  useReducedMotion,
+} from "framer-motion";
 import {
   CloseIcon,
   ConnectedIcon,
@@ -63,16 +67,17 @@ function getToastViewport() {
 }
 
 function AlertBox({ message, tone, className }) {
+  const shouldReduceMotion = useReducedMotion();
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
   const ToneIcon = toneStyles.icon;
 
   return (
     <Motion.div
       role="alert"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.18 }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+      animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+      transition={{ duration: shouldReduceMotion ? 0.08 : 0.18 }}
       className={`mb-4 rounded-md border px-4 py-3 text-sm ${toneStyles.container} ${className}`.trim()}
     >
       <div className="flex min-h-10 items-center gap-3">
@@ -98,6 +103,7 @@ function ToastMessage({
   const [isVisible, setIsVisible] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [remainingMs, setRemainingMs] = useState(duration);
+  const shouldReduceMotion = useReducedMotion();
   const lastTickRef = useRef(null);
   const didExpireRef = useRef(false);
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
@@ -154,10 +160,25 @@ function ToastMessage({
       {isVisible ? (
         <Motion.div
           role="alert"
-          initial={{ opacity: 0, x: 20, scale: 0.98 }}
-          animate={{ opacity: 1, x: 0, scale: 1 }}
-          exit={{ opacity: 0, x: 16, scale: 0.98 }}
-          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          initial={
+            shouldReduceMotion
+              ? { opacity: 0 }
+              : { opacity: 0, x: 20, scale: 0.98 }
+          }
+          animate={
+            shouldReduceMotion
+              ? { opacity: 1 }
+              : { opacity: 1, x: 0, scale: 1 }
+          }
+          exit={
+            shouldReduceMotion
+              ? { opacity: 0 }
+              : { opacity: 0, x: 16, scale: 0.98 }
+          }
+          transition={{
+            duration: shouldReduceMotion ? 0.08 : 0.18,
+            ease: [0.22, 1, 0.36, 1],
+          }}
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
           className={`pointer-events-auto overflow-hidden rounded-md border shadow-xl backdrop-blur-xl ${toneStyles.container} ${className}`.trim()}

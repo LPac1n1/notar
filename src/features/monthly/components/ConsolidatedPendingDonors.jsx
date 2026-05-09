@@ -133,6 +133,7 @@ export default function ConsolidatedPendingDonors({
                               type="button"
                               disabled={isUpdating}
                               title={tooltip}
+                              aria-label={`${formatMonthYear(month.referenceMonth)}, ${formatCurrency(month.abatementAmount)}, status ${isApplied ? "realizado" : "pendente"}. Clique para ${isApplied ? "marcar como pendente" : "marcar como realizado"}.`}
                               onClick={() =>
                                 onStatusChange?.(
                                   donor,

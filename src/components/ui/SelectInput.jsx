@@ -403,7 +403,7 @@ export default function SelectInput({
         disabled={disabled}
         onClick={toggleMenu}
         onKeyDown={handleTriggerKeyDown}
-        className={`flex w-full items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-left outline-none transition-colors duration-150 focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] ${stateToneClassName} ${
+        className={`flex w-full items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-left outline-none transition-colors duration-150 focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${stateToneClassName} ${
           disabled
             ? "cursor-not-allowed bg-[var(--surface-muted)] text-[var(--muted)]"
             : "text-[var(--text-main)] hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)]"
@@ -488,7 +488,7 @@ export default function SelectInput({
                               ? `Buscar em ${label.toLowerCase()}`
                               : "Buscar opção"
                           }
-                          className="w-full bg-transparent text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--muted)]"
+                          className="w-full rounded-sm bg-transparent text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                         />
                       </div>
                     </div>

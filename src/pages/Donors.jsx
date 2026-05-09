@@ -51,7 +51,7 @@ import {
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 
 const EMPTY_DONOR_FORM = {
   name: "",
@@ -115,12 +115,9 @@ export default function Donors() {
   });
 
   const donorsPagination = usePagination(donors, { initialPageSize: 25 });
-  const dataSyncFeedback = useDataSyncFeedback();
+  const { dataSyncFeedback, showDataRefreshLoading } =
+    useDataRefreshStatus(isRefreshing);
   const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive ||
-    dataSyncFeedback.isVisible ||
-    (dataSyncFeedback.isSettling && isRefreshing);
 
   const openDonorProfile = useCallback(
     (donorId) => {
@@ -708,7 +705,7 @@ export default function Donors() {
             title="Adicionar doador"
             description="Cadastre titulares ou auxiliares com abatimento próprio."
             confirmLabel="Adicionar doador"
-            feedbackMessage={formError || error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={handleCloseCreateModal}
             onSubmit={handleAdd}
@@ -732,7 +729,7 @@ export default function Donors() {
             title="Editar doador"
             description="Atualize os dados do doador e seu vínculo informativo."
             confirmLabel="Salvar alterações"
-            feedbackMessage={formError || error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={handleCloseEditModal}
             onSubmit={handleSaveEdit}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Button from "../components/ui/Button";
@@ -29,62 +29,42 @@ import {
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataResource } from "../hooks/useDataResource";
 
 export default function DonorProfile() {
   const { donorId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showReactivateModal, setShowReactivateModal] = useState(false);
   const [showCatchUpModal, setShowCatchUpModal] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [isReactivating, setIsReactivating] = useState(false);
-  const profileRequestIdRef = useRef(0);
-  const dataSyncFeedback = useDataSyncFeedback();
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive ||
-    dataSyncFeedback.isVisible ||
-    (dataSyncFeedback.isSettling && isLoading);
 
-  const loadProfile = useCallback(async () => {
-    const requestId = profileRequestIdRef.current + 1;
-    profileRequestIdRef.current = requestId;
+  const profileLoader = useCallback(
+    (currentFilters) => getDonorProfile(currentFilters?.donorId ?? ""),
+    [],
+  );
+  const profileFilters = useMemo(() => ({ donorId }), [donorId]);
+  const {
+    data: profile,
+    isLoading,
+    isRefreshing,
+    error,
+    setError,
+    reload: loadProfile,
+  } = useDataResource({
+    loader: profileLoader,
+    filters: profileFilters,
+    errorMessage: "Não foi possível carregar o perfil do doador.",
+    scope: "DonorProfile",
+    initialData: null,
+  });
 
-    try {
-      setIsLoading(true);
-      setError("");
-      const donorProfile = await getDonorProfile(donorId);
-
-      if (requestId !== profileRequestIdRef.current) {
-        return;
-      }
-
-      setProfile(donorProfile);
-    } catch (err) {
-      if (requestId !== profileRequestIdRef.current) {
-        return;
-      }
-
-      console.error(
-        "Erro ao carregar perfil do doador:",
-        getErrorMessage(err, "Erro desconhecido."),
-      );
-      setError("Não foi possível carregar o perfil do doador.");
-    } finally {
-      if (requestId === profileRequestIdRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [donorId]);
-
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
+  const { dataSyncFeedback, showDataRefreshLoading } =
+    useDataRefreshStatus(isRefreshing);
 
   useDatabaseChangeEffect(loadProfile);
 
@@ -108,7 +88,8 @@ export default function DonorProfile() {
       setSuccessMessage("Doador desativado com sucesso.");
       await loadProfile();
     } catch (err) {
-      setError(err.message ?? "Não foi possível desativar o doador.");
+      logError("DonorProfile.deactivate", err, { donorId });
+      setError(getErrorMessage(err, "Não foi possível desativar o doador."));
     } finally {
       setIsDeactivating(false);
     }
@@ -124,7 +105,8 @@ export default function DonorProfile() {
       setSuccessMessage("Doador reativado com sucesso.");
       await loadProfile();
     } catch (err) {
-      setError(err.message ?? "Não foi possível reativar o doador.");
+      logError("DonorProfile.reactivate", err, { donorId });
+      setError(getErrorMessage(err, "Não foi possível reativar o doador."));
     } finally {
       setIsReactivating(false);
     }
@@ -146,8 +128,8 @@ export default function DonorProfile() {
       setSuccessMessage("Lançamento de acumulado removido.");
       await loadProfile();
     } catch (err) {
-      logError("DonorProfile.deleteAdjustment", err);
-      setError(err.message ?? "Não foi possível remover o lançamento.");
+      logError("DonorProfile.deleteAdjustment", err, { donorId });
+      setError(getErrorMessage(err, "Não foi possível remover o lançamento."));
     }
   };
 

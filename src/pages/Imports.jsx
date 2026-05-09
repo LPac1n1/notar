@@ -49,7 +49,7 @@ import {
 } from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
+import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
 
 const INITIAL_IMPORT_FILTERS = {
   importId: "",
@@ -147,13 +147,10 @@ export default function Imports() {
   });
   const restoredScrollTopRef = useRef(location.state?.importsScrollTop ?? null);
   const importOperation = useAsync({ reportGlobal: true });
-  const dataSyncFeedback = useDataSyncFeedback();
   const isLoading = isLoadingImports || isLoadingCpfSummary;
-  const showDataRefreshLoading =
-    dataSyncFeedback.isActive ||
-    dataSyncFeedback.isVisible ||
-    (dataSyncFeedback.isSettling &&
-      (isImportHistoryRefreshing || isCpfSummaryRefreshing));
+  const { showDataRefreshLoading } = useDataRefreshStatus(
+    isImportHistoryRefreshing || isCpfSummaryRefreshing,
+  );
 
   const openDonorProfile = (donorId) => {
     if (donorId) {

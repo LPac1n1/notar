@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "./useDebouncedValue";
 import { logError } from "../services/logger";
 
@@ -41,6 +41,11 @@ const EMPTY_NEUTRALIZED_KEYS = Object.freeze([]);
  * @param {(filters: object) => Promise<TItem[]>} [options.optionLoader]
  *   Override for the secondary load. Defaults to the primary `loader` invoked
  *   with the neutralized filters.
+ * @param {*} [options.initialData]
+ *   Seed value for `data` before the first load resolves. Defaults to `[]` so
+ *   list pages can render an empty state without nullchecks. Pass `null` for
+ *   single-object loaders (e.g. Dashboard, DonorProfile) so consumers can
+ *   distinguish "not loaded yet" from "loaded empty".
  *
  * @returns {{
  *   data: TItem[],
@@ -60,8 +65,16 @@ export function useDataResource({
   debounceMs = 180,
   neutralizedKeys = EMPTY_NEUTRALIZED_KEYS,
   optionLoader,
+  initialData,
 } = {}) {
-  const [data, setData] = useState([]);
+  // Memoized so the value identity stays stable across renders. Without this,
+  // every render would build a fresh `[]` (when caller didn't pass
+  // initialData), invalidating the runLoad useCallback and cascading reloads.
+  const fallbackValue = useMemo(
+    () => (initialData === undefined ? [] : initialData),
+    [initialData],
+  );
+  const [data, setData] = useState(fallbackValue);
   const [optionSource, setOptionSource] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -107,8 +120,6 @@ export function useDataResource({
           setIsRefreshing(true);
         }
 
-        setError("");
-
         const optionFilters = buildOptionFilters(currentFilters);
         const [primary, options] = await Promise.all([
           loader(currentFilters),
@@ -121,10 +132,11 @@ export function useDataResource({
           return;
         }
 
-        setData(primary ?? []);
+        setData(primary ?? fallbackValue);
         if (optionFilters) {
           setOptionSource(options ?? []);
         }
+        setError("");
       } catch (loaderError) {
         if (requestId !== requestIdRef.current) {
           return;
@@ -139,7 +151,7 @@ export function useDataResource({
         }
       }
     },
-    [loader, optionLoader, scope, errorMessage, buildOptionFilters],
+    [loader, optionLoader, scope, errorMessage, buildOptionFilters, fallbackValue],
   );
 
   const reload = useCallback(async () => {
