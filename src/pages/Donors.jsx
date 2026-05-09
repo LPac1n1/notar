@@ -51,7 +51,7 @@ import {
 import { buildSelectOptions } from "../utils/select";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 
 const EMPTY_DONOR_FORM = {
   name: "",
@@ -116,7 +116,7 @@ export default function Donors() {
 
   const donorsPagination = usePagination(donors, { initialPageSize: 25 });
   const { dataSyncFeedback, showDataRefreshLoading } =
-    useDataRefreshStatus(isRefreshing);
+    useDataRefreshIndicator(isRefreshing);
   const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
 
   const openDonorProfile = useCallback(

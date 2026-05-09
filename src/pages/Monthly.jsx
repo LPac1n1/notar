@@ -17,6 +17,7 @@ import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummary
 import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
 import { buildAbatementHistoryEntry } from "../features/monthly/utils/abatementHistory";
+import { groupChangesByStatus } from "../features/monthly/utils/statusChanges";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
@@ -221,27 +222,8 @@ export default function Monthly() {
   };
 
   const applyStatusChanges = useCallback(async (changes = [], history = null) => {
-    const changesByStatus = new Map();
+    const changesByStatus = groupChangesByStatus(changes);
     let didRecordHistory = false;
-
-    for (const change of changes) {
-      if (!change.summaryId && !change.adjustmentId) {
-        continue;
-      }
-
-      const normalizedStatus = change.status === "applied" ? "applied" : "pending";
-      const bucket = changesByStatus.get(normalizedStatus) ?? {
-        summaryIds: [],
-        adjustmentIds: [],
-      };
-      if (change.summaryId) {
-        bucket.summaryIds.push(change.summaryId);
-      }
-      if (change.adjustmentId) {
-        bucket.adjustmentIds.push(change.adjustmentId);
-      }
-      changesByStatus.set(normalizedStatus, bucket);
-    }
 
     for (const [status, { summaryIds, adjustmentIds }] of changesByStatus.entries()) {
       if (history && !didRecordHistory) {
@@ -423,19 +405,19 @@ export default function Monthly() {
   };
 
   const handleExport = async () => {
+    setError("");
     setSuccessAction(null);
-
-    if (!hasSelectedReferenceMonth) {
-      setSuccessMessage(
-        "Exportando a visão geral. Se quiser um mês específico, selecione um mês antes.",
-      );
-    }
+    // Show the hint up-front when no month is selected so the user sees it
+    // while the CSV builds. After the export resolves we replace it with the
+    // result message.
+    setSuccessMessage(
+      !hasSelectedReferenceMonth
+        ? "Exportando a visão geral. Se quiser um mês específico, selecione um mês antes."
+        : "",
+    );
+    setIsExporting(true);
 
     try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsExporting(true);
       const result = await monthlyOperation.run(
         () => exportMonthlySummariesCsv(filters),
         {

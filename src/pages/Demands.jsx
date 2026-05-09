@@ -36,7 +36,7 @@ import { buildSelectOptions } from "../utils/select";
 import { useDataResource } from "../hooks/useDataResource";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 
 const INITIAL_DEMAND_FILTERS = {
   demandId: "",
@@ -82,7 +82,7 @@ export default function Demands() {
     initialPageSize: 25,
   });
   const { dataSyncFeedback, showDataRefreshLoading } =
-    useDataRefreshStatus(isRefreshing);
+    useDataRefreshIndicator(isRefreshing);
 
   useDatabaseChangeEffect(reloadDemands);
 

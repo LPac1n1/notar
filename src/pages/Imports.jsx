@@ -49,7 +49,7 @@ import {
 } from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 
 const INITIAL_IMPORT_FILTERS = {
   importId: "",
@@ -148,7 +148,7 @@ export default function Imports() {
   const restoredScrollTopRef = useRef(location.state?.importsScrollTop ?? null);
   const importOperation = useAsync({ reportGlobal: true });
   const isLoading = isLoadingImports || isLoadingCpfSummary;
-  const { showDataRefreshLoading } = useDataRefreshStatus(
+  const { showDataRefreshLoading } = useDataRefreshIndicator(
     isImportHistoryRefreshing || isCpfSummaryRefreshing,
   );
 

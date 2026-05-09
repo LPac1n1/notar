@@ -23,7 +23,7 @@ import MetricCard from "../features/dashboard/components/MetricCard";
 import CopyableCpf from "../features/donors/components/CopyableCpf";
 import CopyableDonorName from "../features/donors/components/CopyableDonorName";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
 import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
@@ -55,7 +55,7 @@ export default function Dashboard() {
   const {
     dataSyncFeedback,
     showDataRefreshLoading: hasDataRefreshLoading,
-  } = useDataRefreshStatus(isRefreshing);
+  } = useDataRefreshIndicator(isRefreshing);
 
   const openDonorProfile = (donorId) => {
     if (donorId) {

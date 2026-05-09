@@ -39,7 +39,7 @@ import {
 } from "../utils/preventiveValidation";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { formatInteger } from "../utils/format";
 
 const EMPTY_PERSON_FORM = {
@@ -103,7 +103,7 @@ export default function People() {
 
   const peoplePagination = usePagination(people, { initialPageSize: 25 });
   const { dataSyncFeedback, showDataRefreshLoading } =
-    useDataRefreshStatus(isRefreshing);
+    useDataRefreshIndicator(isRefreshing);
 
   const loadSupportingData = useCallback(async () => {
     const [personRows, demandRows] = await Promise.all([

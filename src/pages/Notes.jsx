@@ -22,7 +22,7 @@ import {
   normalizeNoteDraft,
 } from "../features/notes/utils/noteDraft";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import {
   createNote,
   deleteNote,
@@ -62,7 +62,7 @@ export default function Notes() {
   const isClosingEditRef = useRef(false);
   const isMountedRef = useRef(true);
   const { dataSyncFeedback, showDataRefreshLoading } =
-    useDataRefreshStatus(isRefreshing);
+    useDataRefreshIndicator(isRefreshing);
 
   const loadNotes = useCallback(async ({ showLoading = false } = {}) => {
     const requestId = notesRequestIdRef.current + 1;

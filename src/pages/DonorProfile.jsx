@@ -29,7 +29,7 @@ import {
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshStatus } from "../hooks/useDataRefreshStatus";
+import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
 
 export default function DonorProfile() {
@@ -64,7 +64,7 @@ export default function DonorProfile() {
   });
 
   const { dataSyncFeedback, showDataRefreshLoading } =
-    useDataRefreshStatus(isRefreshing);
+    useDataRefreshIndicator(isRefreshing);
 
   useDatabaseChangeEffect(loadProfile);
 

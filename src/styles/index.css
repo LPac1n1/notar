@@ -24,6 +24,11 @@
   --success-line: rgba(26, 230, 128, 0.45);
   --warning: #ffd24d;
   --warning-line: rgba(255, 210, 77, 0.45);
+  /* Standard elevations. Use these instead of inline shadow-[...] arbitrary
+   * values so spacing stays consistent across modals, popovers and toasts. */
+  --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.72);
+  --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.58);
+  --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.52);
   --font-sans:
     "Montserrat", "Aptos", "Segoe UI Variable", "Segoe UI", "Noto Sans",
     Arial, sans-serif;

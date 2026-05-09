@@ -16,7 +16,7 @@ import {
 const TONE_STYLES = {
   error: {
     container:
-      "border-[color:var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[color:var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--text-main)] shadow-[var(--shadow-toast)]",
     bar: "bg-[color:var(--danger)]",
     button: "text-[color:var(--danger)] hover:bg-black/10",
     icon: WarningIcon,
@@ -24,7 +24,7 @@ const TONE_STYLES = {
   },
   success: {
     container:
-      "border-[color:var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[color:var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--text-main)] shadow-[var(--shadow-toast)]",
     bar: "bg-[color:var(--success)]",
     button: "text-[color:var(--success)] hover:bg-black/10",
     icon: ConnectedIcon,
@@ -32,7 +32,7 @@ const TONE_STYLES = {
   },
   info: {
     container:
-      "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] shadow-[var(--shadow-toast)]",
     bar: "bg-[color:var(--accent)]",
     button: "text-[var(--muted-strong)] hover:bg-black/10",
     icon: InfoIcon,
@@ -40,7 +40,7 @@ const TONE_STYLES = {
   },
   warning: {
     container:
-      "border-[color:var(--warning-line)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.52)]",
+      "border-[color:var(--warning-line)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[var(--shadow-toast)]",
     bar: "bg-[color:var(--warning)]",
     button: "text-[color:var(--warning)] hover:bg-black/10",
     icon: DisconnectedIcon,

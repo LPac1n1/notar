@@ -207,7 +207,7 @@ export default function Modal({
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[0_20px_48px_-28px_rgba(0,0,0,0.72)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
+        className={`relative z-[111] max-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-elevated)] ${SIZE_CLASSES[size] || SIZE_CLASSES.md}`}
         initial={{ opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 18, scale: 0.985 }}
