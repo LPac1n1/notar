@@ -117,33 +117,22 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
           donors.demand
       `);
 
-      for (const row of matchedRows) {
-        const notesCount = Number(row.notes_count ?? 0);
-        const invalidNotesCount = Number(row.invalid_notes_count ?? 0);
-        const valuePerNote = importValuePerNote;
-        const abatementAmount = notesCount * valuePerNote;
-        const existingSummary = summaryStatusByDonorId.get(row.donor_id);
-        const abatementStatus = existingSummary?.abatementStatus ?? "pending";
-        const abatementMarkedAt = existingSummary?.abatementMarkedAt ?? "";
+      if (matchedRows.length > 0) {
+        // Bulk insert in chunks to avoid running 1k+ statements one-by-one
+        // through DuckDB-WASM's single-threaded executor. The chunk size keeps
+        // each SQL string under a comfortable limit even for the largest
+        // historical imports we have observed.
+        const BULK_INSERT_CHUNK_SIZE = 200;
+        const buildValuesClause = (row) => {
+          const notesCount = Number(row.notes_count ?? 0);
+          const invalidNotesCount = Number(row.invalid_notes_count ?? 0);
+          const valuePerNote = importValuePerNote;
+          const abatementAmount = notesCount * valuePerNote;
+          const existingSummary = summaryStatusByDonorId.get(row.donor_id);
+          const abatementStatus = existingSummary?.abatementStatus ?? "pending";
+          const abatementMarkedAt = existingSummary?.abatementMarkedAt ?? "";
 
-        await execute(`
-          INSERT INTO monthly_donor_summary (
-            id,
-            import_id,
-            donor_id,
-            reference_month,
-            cpf,
-            donor_name,
-            demand,
-            notes_count,
-            invalid_notes_count,
-            value_per_note,
-            abatement_amount,
-            abatement_status,
-            abatement_marked_at,
-            updated_at
-          )
-          VALUES (
+          return `(
             '${escapeSqlString(nanoid())}',
             '${escapeSqlString(row.import_id)}',
             '${escapeSqlString(row.donor_id)}',
@@ -158,8 +147,40 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
             '${escapeSqlString(abatementStatus)}',
             ${abatementMarkedAt ? `'${escapeSqlString(abatementMarkedAt)}'` : "NULL"},
             CURRENT_TIMESTAMP
-          )
-        `);
+          )`;
+        };
+
+        for (
+          let chunkStart = 0;
+          chunkStart < matchedRows.length;
+          chunkStart += BULK_INSERT_CHUNK_SIZE
+        ) {
+          const chunk = matchedRows.slice(
+            chunkStart,
+            chunkStart + BULK_INSERT_CHUNK_SIZE,
+          );
+          const valuesSql = chunk.map(buildValuesClause).join(",\n");
+
+          await execute(`
+            INSERT INTO monthly_donor_summary (
+              id,
+              import_id,
+              donor_id,
+              reference_month,
+              cpf,
+              donor_name,
+              demand,
+              notes_count,
+              invalid_notes_count,
+              value_per_note,
+              abatement_amount,
+              abatement_status,
+              abatement_marked_at,
+              updated_at
+            )
+            VALUES ${valuesSql}
+          `);
+        }
       }
 
       await execute(`

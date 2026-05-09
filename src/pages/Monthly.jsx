@@ -85,7 +85,7 @@ export default function Monthly() {
   const navigate = useNavigate();
 
   const {
-    data: summaries,
+    data: rawSummaries,
     optionSource: summaryOptionSource,
     isLoading,
     error,
@@ -99,6 +99,28 @@ export default function Monthly() {
     neutralizedKeys: ["donorId", "cpf", "demand"],
     optionLoader: loadMonthlySummariesForOptions,
   });
+
+  // Optimistic UI for status toggles. The keys are summary ids (the synthetic
+  // adjustment-only ids included). Each value is a partial row replacement —
+  // status, amount, marker — applied on top of the row from the server. The
+  // overlay is cleared whenever the underlying `rawSummaries` reference
+  // changes (i.e. after a real reload), so once the server's truth lands the
+  // optimistic guess is automatically discarded.
+  const [optimisticStatusOverrides, setOptimisticStatusOverrides] = useState({});
+
+  useEffect(() => {
+    setOptimisticStatusOverrides({});
+  }, [rawSummaries]);
+
+  const summaries = useMemo(() => {
+    if (Object.keys(optimisticStatusOverrides).length === 0) {
+      return rawSummaries;
+    }
+    return rawSummaries.map((summary) => {
+      const override = optimisticStatusOverrides[summary.id];
+      return override ? { ...summary, ...override } : summary;
+    });
+  }, [rawSummaries, optimisticStatusOverrides]);
 
   const loadAvailableImports = useCallback(async () => {
     const rows = await listImports({ status: "processed" });
@@ -276,12 +298,24 @@ export default function Monthly() {
     }
 
     const adjustmentId = currentSummary.adjustment?.id ?? "";
+    const previousStatus = currentSummary.abatementStatus;
 
     try {
       setError("");
       setSuccessMessage("");
       setSuccessAction(null);
       setUpdatingSummaryId(summaryId);
+      // Optimistic update: paint the new status before awaiting the round-trip
+      // so the toggle feels instant. The override is cleared once the
+      // useDataResource reload below replaces `rawSummaries`.
+      setOptimisticStatusOverrides((current) => ({
+        ...current,
+        [summaryId]: {
+          abatementStatus: status,
+          abatementMarkedAt:
+            status === "applied" ? new Date().toISOString() : "",
+        },
+      }));
       const history = buildAbatementHistoryEntry({
         donor: currentSummary,
         months: [currentSummary],
@@ -320,6 +354,13 @@ export default function Monthly() {
       });
     } catch (err) {
       logError("MonthlyPage.updateStatus", err);
+      // Roll back to the previous status so the UI matches what the server
+      // still has stored. The override stays in place until the next reload
+      // replaces `rawSummaries`.
+      setOptimisticStatusOverrides((current) => ({
+        ...current,
+        [summaryId]: { abatementStatus: previousStatus },
+      }));
       setError(
         getErrorMessage(err, "Não foi possível atualizar o status do abatimento."),
       );

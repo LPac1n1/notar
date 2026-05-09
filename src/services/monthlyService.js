@@ -13,6 +13,104 @@ import {
   updateAbatementAdjustmentStatus,
 } from "./abatementAdjustmentService";
 
+/**
+ * Source-aggregation subselects shared between the by-month and historical
+ * monthly listings. They project four metadata columns per `monthly_donor_summary`
+ * row:
+ *
+ *   - source_cpfs:                 distinct CPFs that contributed to the row
+ *   - source_details:              "name|cpf|type|notes" tuples (titular first)
+ *   - source_cpf_count:            distinct CPF count
+ *   - source_start_conflict_count: appearances before donor's start date
+ *
+ * Defined as a constant so the two listings stay in sync — any change to
+ * these subselects automatically applies to both code paths.
+ */
+const MONTHLY_SOURCE_SUBSELECTS = `
+  coalesce((
+    SELECT string_agg(DISTINCT import_cpf_summary.cpf, ',')
+    FROM import_cpf_summary
+    WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+      AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+  ), '') AS source_cpfs,
+  coalesce((
+    SELECT string_agg(
+      source_rows.source_name || '|' ||
+      source_rows.source_cpf || '|' ||
+      source_rows.source_type || '|' ||
+      CAST(source_rows.source_notes AS VARCHAR),
+      ';;'
+    )
+    FROM (
+      SELECT
+        donor_cpf_links.name AS source_name,
+        donor_cpf_links.cpf AS source_cpf,
+        donor_cpf_links.link_type AS source_type,
+        sum(import_cpf_summary.notes_count) AS source_notes
+      FROM import_cpf_summary
+      INNER JOIN donor_cpf_links
+        ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+      WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+        AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+      GROUP BY
+        donor_cpf_links.name,
+        donor_cpf_links.cpf,
+        donor_cpf_links.link_type
+      ORDER BY
+        CASE WHEN donor_cpf_links.link_type = 'holder' THEN 0 ELSE 1 END,
+        donor_cpf_links.name ASC
+    ) AS source_rows
+  ), '') AS source_details,
+  coalesce((
+    SELECT count(DISTINCT import_cpf_summary.cpf)
+    FROM import_cpf_summary
+    WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+      AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+  ), 0) AS source_cpf_count,
+  coalesce((
+    SELECT count(*)
+    FROM import_cpf_summary
+    INNER JOIN donor_cpf_links
+      ON donor_cpf_links.id = import_cpf_summary.matched_source_id
+    WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
+      AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
+      AND donor_cpf_links.donation_start_date IS NOT NULL
+      AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
+  ), 0) AS source_start_conflict_count
+`;
+
+/**
+ * Holder lookup chain shared by both listings. Two left joins:
+ *
+ *   - `holder_people`: the human-record currently registered as the holder
+ *     (used for the displayed name/CPF, even if no active donor exists).
+ *   - `holder_active_donors`: the *active* donor whose `person_id` matches
+ *     so navigation links surface only when the holder is still a donor.
+ */
+const MONTHLY_HOLDER_JOINS = `
+  LEFT JOIN people AS holder_people
+    ON holder_people.id = donors.holder_person_id
+  LEFT JOIN donors AS holder_active_donors
+    ON holder_active_donors.person_id = donors.holder_person_id
+    AND holder_active_donors.donor_type = 'holder'
+    AND holder_active_donors.is_active = TRUE
+`;
+
+/**
+ * Donor metadata columns projected by both listings. Excludes the
+ * monthly_donor_summary core columns (id, donor_id, etc.) which differ in
+ * how the two queries select them.
+ */
+const MONTHLY_DONOR_PROJECTION = `
+  donors.donor_type,
+  donors.holder_donor_id,
+  donors.holder_person_id,
+  holder_people.name AS holder_name,
+  holder_people.cpf AS holder_cpf,
+  holder_active_donors.id AS active_holder_donor_id,
+  strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date
+`;
+
 function parseSourceCpfs(value) {
   return String(value ?? "")
     .split(",")
@@ -429,72 +527,12 @@ async function listMonthlySummariesByMonth({
         monthly_donor_summary.abatement_amount,
         monthly_donor_summary.abatement_status,
         strftime(monthly_donor_summary.abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at,
-        donors.donor_type,
-        donors.holder_donor_id,
-        donors.holder_person_id,
-        holder_people.name AS holder_name,
-        holder_people.cpf AS holder_cpf,
-        holder_active_donors.id AS active_holder_donor_id,
-        strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
-        coalesce((
-          SELECT string_agg(DISTINCT import_cpf_summary.cpf, ',')
-          FROM import_cpf_summary
-          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-        ), '') AS source_cpfs,
-        coalesce((
-          SELECT string_agg(
-            source_rows.source_name || '|' ||
-            source_rows.source_cpf || '|' ||
-            source_rows.source_type || '|' ||
-            CAST(source_rows.source_notes AS VARCHAR),
-            ';;'
-          )
-          FROM (
-            SELECT
-              donor_cpf_links.name AS source_name,
-              donor_cpf_links.cpf AS source_cpf,
-              donor_cpf_links.link_type AS source_type,
-              sum(import_cpf_summary.notes_count) AS source_notes
-            FROM import_cpf_summary
-            INNER JOIN donor_cpf_links
-              ON donor_cpf_links.id = import_cpf_summary.matched_source_id
-            WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-              AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-            GROUP BY
-              donor_cpf_links.name,
-              donor_cpf_links.cpf,
-              donor_cpf_links.link_type
-            ORDER BY
-              CASE WHEN donor_cpf_links.link_type = 'holder' THEN 0 ELSE 1 END,
-              donor_cpf_links.name ASC
-          ) AS source_rows
-        ), '') AS source_details,
-        coalesce((
-          SELECT count(DISTINCT import_cpf_summary.cpf)
-          FROM import_cpf_summary
-          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-        ), 0) AS source_cpf_count,
-        coalesce((
-          SELECT count(*)
-          FROM import_cpf_summary
-          INNER JOIN donor_cpf_links
-            ON donor_cpf_links.id = import_cpf_summary.matched_source_id
-          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-            AND donor_cpf_links.donation_start_date IS NOT NULL
-            AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
-        ), 0) AS source_start_conflict_count
+        ${MONTHLY_DONOR_PROJECTION},
+        ${MONTHLY_SOURCE_SUBSELECTS}
       FROM monthly_donor_summary
       INNER JOIN donors
         ON donors.id = monthly_donor_summary.donor_id
-      LEFT JOIN people AS holder_people
-        ON holder_people.id = donors.holder_person_id
-      LEFT JOIN donors AS holder_active_donors
-        ON holder_active_donors.person_id = donors.holder_person_id
-        AND holder_active_donors.donor_type = 'holder'
-        AND holder_active_donors.is_active = TRUE
+      ${MONTHLY_HOLDER_JOINS}
       WHERE ${monthlyRowsConditions.join(" AND ")}
       ORDER BY monthly_donor_summary.donor_name ASC
     `, monthlyRowsParams),
@@ -626,72 +664,12 @@ async function listHistoricalMonthlySummaries({
       monthly_donor_summary.abatement_amount,
       monthly_donor_summary.abatement_status,
       strftime(monthly_donor_summary.abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at,
-      donors.donor_type,
-      donors.holder_donor_id,
-      donors.holder_person_id,
-      holder_people.name AS holder_name,
-      holder_people.cpf AS holder_cpf,
-      holder_active_donors.id AS active_holder_donor_id,
-      strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
-      coalesce((
-        SELECT string_agg(DISTINCT import_cpf_summary.cpf, ',')
-        FROM import_cpf_summary
-        WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-          AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-      ), '') AS source_cpfs,
-      coalesce((
-        SELECT string_agg(
-          source_rows.source_name || '|' ||
-          source_rows.source_cpf || '|' ||
-          source_rows.source_type || '|' ||
-          CAST(source_rows.source_notes AS VARCHAR),
-          ';;'
-        )
-        FROM (
-          SELECT
-            donor_cpf_links.name AS source_name,
-            donor_cpf_links.cpf AS source_cpf,
-            donor_cpf_links.link_type AS source_type,
-            sum(import_cpf_summary.notes_count) AS source_notes
-          FROM import_cpf_summary
-          INNER JOIN donor_cpf_links
-            ON donor_cpf_links.id = import_cpf_summary.matched_source_id
-          WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-            AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-          GROUP BY
-            donor_cpf_links.name,
-            donor_cpf_links.cpf,
-            donor_cpf_links.link_type
-          ORDER BY
-            CASE WHEN donor_cpf_links.link_type = 'holder' THEN 0 ELSE 1 END,
-            donor_cpf_links.name ASC
-        ) AS source_rows
-      ), '') AS source_details,
-      coalesce((
-        SELECT count(DISTINCT import_cpf_summary.cpf)
-        FROM import_cpf_summary
-        WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-          AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-      ), 0) AS source_cpf_count,
-      coalesce((
-        SELECT count(*)
-        FROM import_cpf_summary
-        INNER JOIN donor_cpf_links
-          ON donor_cpf_links.id = import_cpf_summary.matched_source_id
-        WHERE import_cpf_summary.import_id = monthly_donor_summary.import_id
-          AND import_cpf_summary.matched_donor_id = monthly_donor_summary.donor_id
-          AND donor_cpf_links.donation_start_date IS NOT NULL
-          AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
-      ), 0) AS source_start_conflict_count
+      ${MONTHLY_DONOR_PROJECTION},
+      ${MONTHLY_SOURCE_SUBSELECTS}
     FROM monthly_donor_summary
     LEFT JOIN donors
       ON donors.id = monthly_donor_summary.donor_id
-    LEFT JOIN people AS holder_people
-      ON holder_people.id = donors.holder_person_id
-    LEFT JOIN donors AS holder_active_donors
-      ON holder_active_donors.person_id = donors.holder_person_id
-      AND holder_active_donors.donor_type = 'holder'
-      AND holder_active_donors.is_active = TRUE
+    ${MONTHLY_HOLDER_JOINS}
     ${whereClause}
     ORDER BY monthly_donor_summary.reference_month DESC, monthly_donor_summary.donor_name ASC
   `, params);

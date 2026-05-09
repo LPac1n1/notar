@@ -268,6 +268,40 @@ test("migration v3 creates abatement_adjustments table with proper indexes", asy
   }
 });
 
+test("multi-row INSERT into monthly_donor_summary works (bulk reconcile path)", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // The reconcileImport bulk-insert refactor relies on DuckDB-WASM accepting
+    // a multi-row VALUES clause. Verify the pattern works against a real
+    // database before trusting it in production.
+    await conn.query(`
+      INSERT INTO monthly_donor_summary
+        (id, import_id, donor_id, reference_month, cpf, donor_name, demand,
+         notes_count, invalid_notes_count, value_per_note, abatement_amount,
+         abatement_status, abatement_marked_at, updated_at)
+      VALUES
+        ('row-1', 'imp-x', 'donor-x', '2025-01-01', '11111111111', 'Donor X', 'D1',
+         5, 0, 30, 150, 'pending', NULL, CURRENT_TIMESTAMP),
+        ('row-2', 'imp-x', 'donor-y', '2025-01-01', '22222222222', 'Donor Y', 'D2',
+         3, 0, 30, 90, 'pending', NULL, CURRENT_TIMESTAMP),
+        ('row-3', 'imp-x', 'donor-z', '2025-01-01', '33333333333', 'Donor Z', 'D3',
+         8, 1, 30, 240, 'applied', '2025-01-15 10:00:00', CURRENT_TIMESTAMP)
+    `);
+
+    const rows = (
+      await conn.query(
+        "SELECT count(*) AS total, sum(notes_count) AS notes FROM monthly_donor_summary WHERE import_id = 'imp-x'",
+      )
+    ).toArray();
+    assert.equal(Number(rows[0].total), 3);
+    assert.equal(Number(rows[0].notes), 16);
+  } finally {
+    conn.close();
+  }
+});
+
 test("migration v4 creates performance indexes", async () => {
   const conn = await createTestConnection();
   try {
