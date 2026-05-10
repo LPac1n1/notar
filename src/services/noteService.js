@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { normalizeDemandColor } from "../utils/demandColor";
 import { DEFAULT_NOTE_COLOR } from "../utils/noteColor";
 import { createActionHistoryEntry } from "./actionHistoryService";
-import { escapeSqlString, execute, query } from "./db";
+import { escapeSqlString, execute, executePrepared, query } from "./db";
 
 function mapNoteRow(row) {
   return {
@@ -51,24 +51,16 @@ export async function createNote({
     throw new Error("O título da anotação é obrigatório.");
   }
 
-  await execute(`
-    INSERT INTO notes (
-      id,
-      title,
-      content,
-      color,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(normalizedNote.title)}',
-      '${escapeSqlString(normalizedNote.content)}',
-      '${escapeSqlString(normalizedNote.color)}',
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    )
-  `);
+  // Title and content are free-form rich text from the editor — bind via
+  // prepared parameters so any pathological input (curly quotes, embedded
+  // semicolons, accidental SQL-looking text) cannot affect the SQL boundary.
+  await executePrepared(
+    `
+      INSERT INTO notes (id, title, content, color, created_at, updated_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+    [id, normalizedNote.title, normalizedNote.content, normalizedNote.color],
+  );
 
   if (recordHistory) {
     await createActionHistoryEntry({
@@ -102,15 +94,18 @@ export async function updateNote({
     throw new Error("O título da anotação é obrigatório.");
   }
 
-  await execute(`
-    UPDATE notes
-    SET
-      title = '${escapeSqlString(normalizedNote.title)}',
-      content = '${escapeSqlString(normalizedNote.content)}',
-      color = '${escapeSqlString(normalizedNote.color)}',
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+  await executePrepared(
+    `
+      UPDATE notes
+      SET
+        title = ?,
+        content = ?,
+        color = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [normalizedNote.title, normalizedNote.content, normalizedNote.color, id],
+  );
 
   if (recordHistory) {
     await createActionHistoryEntry({

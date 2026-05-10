@@ -1,8 +1,19 @@
 import { createActionHistoryEntry } from "./actionHistoryService";
+import {
+  appendLogEntry,
+  clearLogBuffer,
+  exportLogBuffer,
+  getLogBufferSnapshot,
+} from "./loggerBuffer";
 import { getErrorMessage } from "../utils/error";
 
 // Prevents recursive logging when the persistence path itself raises.
 let isPersisting = false;
+
+// Re-export the buffer surface so callers keep their existing imports
+// (`from "../services/logger"`) while the actual circular-buffer logic
+// lives in a dependency-free module that's safe to import from tests.
+export { clearLogBuffer, exportLogBuffer, getLogBufferSnapshot };
 
 function buildPayload(scope, error, context) {
   return {
@@ -29,6 +40,13 @@ export function logError(scope, error, context = {}) {
   if (typeof console !== "undefined") {
     console.error(`[${scope}]`, message, error);
   }
+
+  // Buffer-then-persist so the in-memory dump always reflects what was
+  // observed even if the action_history insert fails.
+  appendLogEntry({
+    timestamp: new Date().toISOString(),
+    ...buildPayload(scope, error, context),
+  });
 
   if (isPersisting) {
     return;

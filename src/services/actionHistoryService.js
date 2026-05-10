@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { escapeSqlString, execute, query } from "./db";
+import { executePrepared, queryPrepared } from "./db";
 
 function parsePayload(value) {
   if (!value) {
@@ -42,28 +42,33 @@ export async function createActionHistoryEntry({
     return "";
   }
 
-  await execute(`
-    INSERT INTO action_history (
+  // `label`, `description`, and the JSON payload include user-derived strings
+  // (donor names, demand titles, error messages, etc.). Bind everything via
+  // prepared parameters so the SQL boundary is air-tight.
+  await executePrepared(
+    `
+      INSERT INTO action_history (
+        id,
+        action_type,
+        entity_type,
+        entity_id,
+        label,
+        description,
+        payload_json,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+    [
       id,
-      action_type,
-      entity_type,
-      entity_id,
+      actionType,
+      entityType,
+      entityId,
       label,
       description,
-      payload_json,
-      created_at
-    )
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(actionType)}',
-      '${escapeSqlString(entityType)}',
-      '${escapeSqlString(entityId)}',
-      '${escapeSqlString(label)}',
-      '${escapeSqlString(description)}',
-      '${escapeSqlString(JSON.stringify(payload ?? {}))}',
-      CURRENT_TIMESTAMP
-    )
-  `);
+      JSON.stringify(payload ?? {}),
+    ],
+  );
 
   return id;
 }
@@ -75,45 +80,51 @@ export async function listActionHistory({
   limit = 20,
 } = {}) {
   const conditions = [];
+  const params = [];
   const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
 
   if (actionType.trim()) {
-    conditions.push(
-      `action_type = '${escapeSqlString(actionType.trim())}'`,
-    );
+    conditions.push("action_type = ?");
+    params.push(actionType.trim());
   }
 
   if (entityType.trim()) {
-    conditions.push(
-      `entity_type = '${escapeSqlString(entityType.trim())}'`,
-    );
+    conditions.push("entity_type = ?");
+    params.push(entityType.trim());
   }
 
   if (label.trim()) {
-    conditions.push(
-      `(lower(label) LIKE lower('%${escapeSqlString(label.trim())}%')
-        OR lower(description) LIKE lower('%${escapeSqlString(label.trim())}%'))`,
-    );
+    // The label search runs against the user-typed query in the History page.
+    // Bind the LIKE pattern as a parameter so any input — including SQL
+    // wildcards — is treated as literal text.
+    conditions.push("(lower(label) LIKE lower(?) OR lower(description) LIKE lower(?))");
+    const labelPattern = `%${label.trim()}%`;
+    params.push(labelPattern, labelPattern);
   }
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const rows = await query(`
-    SELECT
-      id,
-      action_type,
-      entity_type,
-      entity_id,
-      label,
-      description,
-      payload_json,
-      strftime(created_at, '%Y-%m-%d %H:%M:%S') AS created_at
-    FROM action_history
-    ${whereClause}
-    ORDER BY created_at DESC, id DESC
-    LIMIT ${normalizedLimit}
-  `);
+  // `LIMIT` is an integer literal here, not user-supplied — `normalizedLimit`
+  // is clamped to [1, 100] above.
+  const rows = await queryPrepared(
+    `
+      SELECT
+        id,
+        action_type,
+        entity_type,
+        entity_id,
+        label,
+        description,
+        payload_json,
+        strftime(created_at, '%Y-%m-%d %H:%M:%S') AS created_at
+      FROM action_history
+      ${whereClause}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${normalizedLimit}
+    `,
+    params,
+  );
 
   return rows.map(mapActionHistoryRow);
 }

@@ -144,6 +144,65 @@ test("preview includes the reference month when range_end matches it", async () 
   }
 });
 
+test("reconcileImport SQL backfills matched_source_id for CPFs registered after the import landed", async () => {
+  const conn = await createTestConnection();
+  try {
+    await seedDonorWithHistoricalImports(conn);
+
+    // Pre-condition: rows exist but were imported BEFORE donor registration,
+    // so matched_source_id should still be NULL across the board.
+    const beforeRows = (
+      await conn.query(
+        "SELECT count(*) AS unmatched FROM import_cpf_summary WHERE matched_source_id IS NULL AND cpf = '11111111111'",
+      )
+    ).toArray();
+    assert.equal(Number(beforeRows[0].unmatched), 6);
+
+    // Run the same UPDATE that production `reconcileImport` issues, scoped
+    // to a single import. This is the SQL behind `reconcileImportsForCpfs`
+    // and the one that production donor create/update/delete relies on.
+    await conn.query(`
+      UPDATE import_cpf_summary
+      SET
+        matched_source_id = (
+          SELECT donor_cpf_links.id
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+            AND donor_cpf_links.is_active = TRUE
+          LIMIT 1
+        ),
+        matched_donor_id = (
+          SELECT donor_cpf_links.donor_id
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+            AND donor_cpf_links.is_active = TRUE
+          LIMIT 1
+        ),
+        is_registered_donor = EXISTS (
+          SELECT 1
+          FROM donor_cpf_links
+          WHERE donor_cpf_links.cpf = import_cpf_summary.cpf
+            AND donor_cpf_links.is_active = TRUE
+        )
+      WHERE import_id = 'imp-jun'
+    `);
+
+    // After reconcile, the targeted import resolves to the donor's link;
+    // siblings in other imports are still unmatched (production reconciles
+    // them in a separate loop iteration).
+    const afterRows = (
+      await conn.query(
+        "SELECT matched_donor_id, matched_source_id, is_registered_donor FROM import_cpf_summary WHERE import_id = 'imp-jun'",
+      )
+    ).toArray();
+    assert.equal(String(afterRows[0].matched_donor_id), "donor-x");
+    assert.equal(String(afterRows[0].matched_source_id), "link-x");
+    assert.equal(Boolean(afterRows[0].is_registered_donor), true);
+  } finally {
+    conn.close();
+  }
+});
+
 test("monthly summary join with abatement_adjustments matches by donor + reference_month", async () => {
   const conn = await createTestConnection();
   try {

@@ -1,5 +1,11 @@
 import { nanoid } from "nanoid";
-import { escapeSqlString, execute, query, queryPrepared } from "./db";
+import {
+  escapeSqlString,
+  execute,
+  executePrepared,
+  query,
+  queryPrepared,
+} from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileAllImports } from "./importService";
 import { createTrashItem } from "./trashService";
@@ -66,16 +72,16 @@ export async function createDemand({
     throw new Error("Já existe uma demanda cadastrada com esse nome.");
   }
 
-  await execute(`
-    INSERT INTO demands (id, name, color, is_active, updated_at)
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(trimmedName)}',
-      '${escapeSqlString(normalizedColor)}',
-      TRUE,
-      CURRENT_TIMESTAMP
-    )
-  `);
+  // `name` and `color` are user input (color was through a picker but the
+  // payload still came from the form). Bind them via prepared parameters so
+  // any future input — emojis, special chars, etc. — never touches SQL.
+  await executePrepared(
+    `
+      INSERT INTO demands (id, name, color, is_active, updated_at)
+      VALUES (?, ?, ?, TRUE, CURRENT_TIMESTAMP)
+    `,
+    [id, trimmedName, normalizedColor],
+  );
 
   await createActionHistoryEntry({
     actionType: "create",
@@ -136,22 +142,28 @@ export async function updateDemand({
     throw new Error("Já existe outra demanda cadastrada com esse nome.");
   }
 
-  await execute(`
-    UPDATE demands
-    SET
-      name = '${escapeSqlString(trimmedName)}',
-      color = '${escapeSqlString(normalizedColor)}',
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+  await executePrepared(
+    `
+      UPDATE demands
+      SET
+        name = ?,
+        color = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [trimmedName, normalizedColor, id],
+  );
 
-  await execute(`
-    UPDATE donors
-    SET
-      demand = '${escapeSqlString(trimmedName)}',
-      updated_at = CURRENT_TIMESTAMP
-    WHERE lower(trim(demand)) = lower(trim('${escapeSqlString(currentName)}'))
-  `);
+  await executePrepared(
+    `
+      UPDATE donors
+      SET
+        demand = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE lower(trim(demand)) = lower(trim(?))
+    `,
+    [trimmedName, currentName],
+  );
 
   await reconcileAllImports();
 
