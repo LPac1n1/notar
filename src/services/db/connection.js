@@ -110,13 +110,13 @@ export async function query(sql) {
   return result.toArray();
 }
 
-export async function execute(sql, { flush = true } = {}) {
+export async function execute(sql, { flush = true, source } = {}) {
   const connection = await initDB();
   await connection.query(sql);
 
   if (flush && transactionDepth === 0) {
     await flushAfterTransaction();
-    notifyDatabaseChanged();
+    notifyDatabaseChanged(source ? { source } : undefined);
   }
 }
 
@@ -143,7 +143,11 @@ export async function queryPrepared(sql, params = []) {
  * rules as `queryPrepared`. Honors the connection-level flush hook so the
  * connected file (if any) is persisted after the write.
  */
-export async function executePrepared(sql, params = [], { flush = true } = {}) {
+export async function executePrepared(
+  sql,
+  params = [],
+  { flush = true, source } = {},
+) {
   const connection = await initDB();
   const stmt = await connection.prepare(sql);
   try {
@@ -154,7 +158,7 @@ export async function executePrepared(sql, params = [], { flush = true } = {}) {
 
   if (flush && transactionDepth === 0) {
     await flushAfterTransaction();
-    notifyDatabaseChanged();
+    notifyDatabaseChanged(source ? { source } : undefined);
   }
 }
 

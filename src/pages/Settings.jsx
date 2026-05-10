@@ -11,6 +11,7 @@ import TextInput from "../components/ui/TextInput";
 import {
   BackupExportIcon,
   BackupImportIcon,
+  DownloadIcon,
   FolderOpenIcon,
   StorageIcon,
 } from "../components/ui/icons";
@@ -24,7 +25,7 @@ import {
   openDatabaseFile,
   STORAGE_INFO_EVENT,
 } from "../services/db";
-import { logError } from "../services/logger";
+import { exportLogBuffer, getLogBufferSnapshot, logError } from "../services/logger";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   finishDataSyncFeedback,
@@ -149,6 +150,7 @@ export default function Settings() {
           : "Arquivo criado e conectado. As proximas alteracoes serao gravadas nele.",
       );
     } catch (storageError) {
+      logError("Settings.createFile", storageError);
       setError(
         getErrorMessage(
           storageError,
@@ -206,6 +208,7 @@ export default function Settings() {
           : "Arquivo conectado com sucesso.",
       );
     } catch (storageError) {
+      logError("Settings.openFile", storageError);
       setError(
         getErrorMessage(
           storageError,
@@ -240,6 +243,7 @@ export default function Settings() {
       );
       await refreshStorageInfo();
     } catch (storageError) {
+      logError("Settings.disconnectFile", storageError);
       setError(
         getErrorMessage(
           storageError,
@@ -278,6 +282,7 @@ export default function Settings() {
         `Backup exportado com sucesso: ${formatBackupStats(backup.stats)}.`,
       );
     } catch (backupError) {
+      logError("Settings.exportBackup", backupError);
       setError(
         getErrorMessage(
           backupError,
@@ -340,6 +345,9 @@ export default function Settings() {
         `Backup importado com sucesso: ${formatBackupStats(result.stats)}.`,
       );
     } catch (backupError) {
+      logError("Settings.importBackup", backupError, {
+        fileName: selectedBackupFile?.name ?? "",
+      });
       setError(
         getErrorMessage(
           backupError,
@@ -351,6 +359,28 @@ export default function Settings() {
       setDataSyncMessage("");
       setIsSubmitting(false);
     }
+  };
+
+  const handleDownloadLogBuffer = () => {
+    // Snapshot before exporting so the file size matches what the user sees
+    // in the success message. The log buffer keeps growing in memory while
+    // the session is open, so we capture the count once.
+    const snapshot = getLogBufferSnapshot();
+    const json = exportLogBuffer();
+    const fileName = `notar-log-${new Date().toISOString().slice(0, 10)}.json`;
+
+    downloadFile({
+      fileName,
+      content: json,
+      mimeType: "application/json",
+    });
+
+    setError("");
+    setSuccessMessage(
+      snapshot.length === 0
+        ? "Log salvo. Nenhum erro foi capturado nesta sessão."
+        : `Log salvo com ${formatInteger(snapshot.length)} entrada(s) recente(s).`,
+    );
   };
 
   return (
@@ -511,6 +541,26 @@ export default function Settings() {
               </p>
             ) : null}
           </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Diagnóstico"
+        description="Ferramentas para investigar problemas que apareçam durante o uso."
+        className="mb-6"
+      >
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <Button
+            variant="subtle"
+            onClick={handleDownloadLogBuffer}
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+          >
+            Baixar log de erros
+          </Button>
+          <p className="text-sm text-[var(--muted)]">
+            Gera um JSON com os erros capturados nesta sessão (até 200
+            entradas). Anexe a esse arquivo ao reportar um problema.
+          </p>
         </div>
       </SectionCard>
 

@@ -54,12 +54,15 @@ export async function createNote({
   // Title and content are free-form rich text from the editor — bind via
   // prepared parameters so any pathological input (curly quotes, embedded
   // semicolons, accidental SQL-looking text) cannot affect the SQL boundary.
+  // `source: "notes"` lets pages such as Monthly opt-out via
+  // `useDatabaseChangeEffect({ ignoreSources: ["notes"] })`.
   await executePrepared(
     `
       INSERT INTO notes (id, title, content, color, created_at, updated_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
     [id, normalizedNote.title, normalizedNote.content, normalizedNote.color],
+    { source: "notes" },
   );
 
   if (recordHistory) {
@@ -105,6 +108,7 @@ export async function updateNote({
       WHERE id = ?
     `,
     [normalizedNote.title, normalizedNote.content, normalizedNote.color, id],
+    { source: "notes" },
   );
 
   if (recordHistory) {
@@ -134,10 +138,13 @@ export async function deleteNote(id) {
   `);
   const noteTitle = noteRows[0]?.title ?? "Anotação";
 
-  await execute(`
-    DELETE FROM notes
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+  await execute(
+    `
+      DELETE FROM notes
+      WHERE id = '${escapeSqlString(id)}'
+    `,
+    { source: "notes" },
+  );
 
   await createActionHistoryEntry({
     actionType: "delete",

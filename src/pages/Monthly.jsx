@@ -148,7 +148,10 @@ export default function Monthly() {
     await Promise.all([loadAvailableImports(), reloadSummaries()]);
   }, [loadAvailableImports, reloadSummaries]);
 
-  useDatabaseChangeEffect(refreshAll);
+  // Monthly cares about almost every database mutation (donor/import/abate
+  // change can shift summary rows), but ignore notes — saving an annotation
+  // doesn't move any number on this page.
+  useDatabaseChangeEffect(refreshAll, { ignoreSources: ["notes"] });
 
   const restoredScrollTopRef = useRef(location.state?.monthlyScrollTop ?? null);
   const monthlyOperation = useAsync({ reportGlobal: true });
@@ -282,25 +285,16 @@ export default function Monthly() {
       history = null,
       summaryId = "",
       message = "Alteracao desfeita.",
-    } = {}) => {
-      try {
-        setError("");
-        setSuccessMessage("");
-        setSuccessAction(null);
-        setUpdatingDonorId(donorId);
-        setUpdatingSummaryId(summaryId);
-        await applyStatusChanges(changes, history);
-        await reloadSummaries();
-        setSuccessMessage(message);
-      } catch (err) {
-        logError("MonthlyPage.undoStatus", err);
-        setError(getErrorMessage(err, "Não foi possível desfazer a alteração."));
-      } finally {
-        setUpdatingDonorId("");
-        setUpdatingSummaryId("");
-      }
-    },
-    [applyStatusChanges, reloadSummaries, setError],
+    } = {}) =>
+      runStatusChangeAction({
+        scope: "MonthlyPage.undoStatus",
+        donorId,
+        summaryId,
+        run: () => applyStatusChanges(changes, history),
+        successMessage: message,
+        errorMessage: "Não foi possível desfazer a alteração.",
+      }),
+    [applyStatusChanges, runStatusChangeAction],
   );
 
   const handleStatusChange = async (summaryId, status) => {
@@ -312,74 +306,66 @@ export default function Monthly() {
 
     const adjustmentId = currentSummary.adjustment?.id ?? "";
     const previousStatus = currentSummary.abatementStatus;
+    const history = buildAbatementHistoryEntry({
+      donor: currentSummary,
+      months: [currentSummary],
+      status,
+    });
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setUpdatingSummaryId(summaryId);
-      // Optimistic update: paint the new status before awaiting the round-trip
-      // so the toggle feels instant. The override is cleared once the
-      // useDataResource reload below replaces `rawSummaries`.
-      setOptimisticStatusOverrides((current) => ({
-        ...current,
-        [summaryId]: {
-          abatementStatus: status,
-          abatementMarkedAt:
-            status === "applied" ? new Date().toISOString() : "",
-        },
-      }));
-      const history = buildAbatementHistoryEntry({
-        donor: currentSummary,
-        months: [currentSummary],
-        status,
-      });
-      await updateAbatementStatusWithHistory({
-        history,
-        summaryId,
-        adjustmentId,
-        status,
-      });
-      await reloadSummaries();
-      const message = "Status do abatimento atualizado.";
-      setSuccessMessage(message);
-      setSuccessAction({
-        label: "Desfazer",
-        onAction: () =>
-          handleUndoStatusChanges({
-            changes: [
-              {
-                summaryId,
-                adjustmentId,
-                status: currentSummary.abatementStatus,
-              },
-            ],
-            history: buildAbatementHistoryEntry({
-              actionType: "monthly_abatement_status_undo",
-              donor: currentSummary,
-              months: [currentSummary],
-              operation: "undo",
+    await runStatusChangeAction({
+      scope: "MonthlyPage.updateStatus",
+      summaryId,
+      onStart: () => {
+        // Optimistic update: paint the new status before awaiting the
+        // round-trip so the toggle feels instant. The override is cleared once
+        // the useDataResource reload below replaces `rawSummaries`.
+        setOptimisticStatusOverrides((current) => ({
+          ...current,
+          [summaryId]: {
+            abatementStatus: status,
+            abatementMarkedAt:
+              status === "applied" ? new Date().toISOString() : "",
+          },
+        }));
+      },
+      run: () =>
+        updateAbatementStatusWithHistory({
+          history,
+          summaryId,
+          adjustmentId,
+          status,
+        }),
+      successMessage: "Status do abatimento atualizado.",
+      errorMessage: "Não foi possível atualizar o status do abatimento.",
+      onError: () => {
+        // Roll back to the previous status so the UI matches the server. The
+        // override stays in place until the next reload replaces
+        // `rawSummaries`.
+        setOptimisticStatusOverrides((current) => ({
+          ...current,
+          [summaryId]: { abatementStatus: previousStatus },
+        }));
+      },
+      undo: () =>
+        handleUndoStatusChanges({
+          changes: [
+            {
+              summaryId,
+              adjustmentId,
               status: currentSummary.abatementStatus,
-            }),
-            summaryId,
-            message: "Status anterior restaurado.",
+            },
+          ],
+          history: buildAbatementHistoryEntry({
+            actionType: "monthly_abatement_status_undo",
+            donor: currentSummary,
+            months: [currentSummary],
+            operation: "undo",
+            status: currentSummary.abatementStatus,
           }),
-      });
-    } catch (err) {
-      logError("MonthlyPage.updateStatus", err);
-      // Roll back to the previous status so the UI matches what the server
-      // still has stored. The override stays in place until the next reload
-      // replaces `rawSummaries`.
-      setOptimisticStatusOverrides((current) => ({
-        ...current,
-        [summaryId]: { abatementStatus: previousStatus },
-      }));
-      setError(
-        getErrorMessage(err, "Não foi possível atualizar o status do abatimento."),
-      );
-    } finally {
-      setUpdatingSummaryId("");
-    }
+          summaryId,
+          message: "Status anterior restaurado.",
+        }),
+    });
   };
 
   const handleConsolidatedDonorStatusChange = async (
@@ -405,10 +391,27 @@ export default function Monthly() {
     const statusLabel = status === "applied" ? "realizado" : "pendente";
     const previousStatusLabel =
       status === "applied" ? "pendente(s)" : "realizado(s)";
+    const previousStatusByMonthId = new Map(
+      changedMonths.map((month) => [month.id, month.abatementStatus]),
+    );
+    const optimisticMarker = new Date().toISOString();
 
     await runStatusChangeAction({
       scope: "MonthlyPage.updateDonorAbatement",
       donorId: donor.donorId,
+      onStart: () => {
+        setOptimisticStatusOverrides((current) => {
+          const next = { ...current };
+          for (const month of changedMonths) {
+            next[month.id] = {
+              abatementStatus: status,
+              abatementMarkedAt:
+                status === "applied" ? optimisticMarker : "",
+            };
+          }
+          return next;
+        });
+      },
       run: () =>
         updateAbatementStatusesWithHistory({
           history: buildAbatementHistoryEntry({
@@ -426,6 +429,20 @@ export default function Monthly() {
         }),
       successMessage: `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como ${statusLabel}.`,
       errorMessage: "Não foi possível atualizar os abatimentos do doador.",
+      onError: () => {
+        // Restore each touched month's previous status so the UI matches the
+        // server until the next reload sweeps the overrides.
+        setOptimisticStatusOverrides((current) => {
+          const next = { ...current };
+          for (const month of changedMonths) {
+            next[month.id] = {
+              abatementStatus:
+                previousStatusByMonthId.get(month.id) ?? "pending",
+            };
+          }
+          return next;
+        });
+      },
       undo: () =>
         handleUndoStatusChanges({
           changes: changedMonths.map((month) => ({
@@ -578,56 +595,80 @@ export default function Monthly() {
       return;
     }
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsBulkAbating(true);
+    // Compute affected metadata against `rawSummaries` so the totalAmount
+    // reflects what the server actually has, not the optimistic overlay.
+    const affectedSummaries = rawSummaries.filter((s) =>
+      summaryIds.includes(s.id),
+    );
+    const totalAmount = affectedSummaries.reduce(
+      (sum, s) => sum + Number(s.abatementAmount ?? 0),
+      0,
+    );
+    const affectedAdjustmentIds = affectedSummaries
+      .map((s) => s.adjustment?.id ?? "")
+      .filter(Boolean);
+    const previousStatusBySummaryId = new Map(
+      affectedSummaries.map((s) => [s.id, s.abatementStatus]),
+    );
+    const optimisticMarker =
+      new Date().toISOString();
 
-      const affectedSummaries = summaries.filter((s) =>
-        summaryIds.includes(s.id),
-      );
-      const totalAmount = affectedSummaries.reduce(
-        (sum, s) => sum + Number(s.abatementAmount ?? 0),
-        0,
-      );
-
-      const affectedAdjustmentIds = affectedSummaries
-        .map((s) => s.adjustment?.id ?? "")
-        .filter(Boolean);
-
-      await updateAbatementStatusesWithHistory({
-        history: {
-          actionType: "monthly_abatement_status_update",
-          entityType: "monthly_abatement",
-          entityId: "bulk",
-          label: "Abatimento em massa",
-          description: `${formatInteger(summaryIds.length)} abatimento(s) marcado(s) como realizado.`,
-          payload: {
-            summaryIds,
-            adjustmentIds: affectedAdjustmentIds,
-            donorCount: new Set(affectedSummaries.map((s) => s.donorId)).size,
-            totalAmount,
-            operation: "bulk",
+    const success = await runStatusChangeAction({
+      scope: "MonthlyPage.bulkAbate",
+      setBusy: setIsBulkAbating,
+      onStart: () => {
+        // Optimistic overlay so the bulk action feels instant. The cleanup
+        // useEffect on `rawSummaries` clears these once the reload lands.
+        setOptimisticStatusOverrides((current) => {
+          const next = { ...current };
+          for (const id of summaryIds) {
+            next[id] = {
+              abatementStatus: "applied",
+              abatementMarkedAt: optimisticMarker,
+            };
+          }
+          return next;
+        });
+      },
+      run: () =>
+        updateAbatementStatusesWithHistory({
+          history: {
+            actionType: "monthly_abatement_status_update",
+            entityType: "monthly_abatement",
+            entityId: "bulk",
+            label: "Abatimento em massa",
+            description: `${formatInteger(summaryIds.length)} abatimento(s) marcado(s) como realizado.`,
+            payload: {
+              summaryIds,
+              adjustmentIds: affectedAdjustmentIds,
+              donorCount: new Set(affectedSummaries.map((s) => s.donorId)).size,
+              totalAmount,
+              operation: "bulk",
+            },
           },
-        },
-        status: "applied",
-        summaryIds,
-        adjustmentIds: affectedAdjustmentIds,
-      });
+          status: "applied",
+          summaryIds,
+          adjustmentIds: affectedAdjustmentIds,
+        }),
+      successMessage: `${formatInteger(summaryIds.length)} abatimento(s) realizado(s) — ${formatCurrency(totalAmount)} total.`,
+      errorMessage: "Não foi possível realizar o abatimento em massa.",
+      onError: () => {
+        // Roll back every overlaid id to its previous status.
+        setOptimisticStatusOverrides((current) => {
+          const next = { ...current };
+          for (const id of summaryIds) {
+            next[id] = {
+              abatementStatus:
+                previousStatusBySummaryId.get(id) ?? "pending",
+            };
+          }
+          return next;
+        });
+      },
+    });
 
-      await reloadSummaries();
+    if (success) {
       setShowBulkAbatementModal(false);
-      setSuccessMessage(
-        `${formatInteger(summaryIds.length)} abatimento(s) realizado(s) — ${formatCurrency(totalAmount)} total.`,
-      );
-    } catch (err) {
-      logError("MonthlyPage.bulkAbate", err);
-      setError(
-        getErrorMessage(err, "Não foi possível realizar o abatimento em massa."),
-      );
-    } finally {
-      setIsBulkAbating(false);
     }
   };
 

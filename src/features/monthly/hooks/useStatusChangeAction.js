@@ -51,7 +51,19 @@ export function useStatusChangeAction({
       successMessage = "",
       errorMessage = "Não foi possível concluir a operação.",
       undo,
+      // Optional: per-call busy flag (e.g. `setIsBulkAbating`) when the row's
+      // updating flag is not the right indicator. Called with `true` at start
+      // and `false` in the finally block.
+      setBusy,
+      // Optional: rollback hook so callers with optimistic UI can undo their
+      // local overlay if the server rejected the mutation. Receives the error.
+      onError,
+      // Optional: hook for callers who need to mutate UI before the round-trip
+      // (e.g. seed the optimistic overlay). Runs inside the try block, after
+      // flags are cleared but before `run()`.
+      onStart,
     }) => {
+      setBusy?.(true);
       try {
         setError?.("");
         setSuccessMessage?.("");
@@ -59,6 +71,7 @@ export function useStatusChangeAction({
         setUpdatingDonorId?.(donorId);
         setUpdatingSummaryId?.(summaryId);
 
+        onStart?.();
         await run();
         await reload?.();
 
@@ -73,11 +86,13 @@ export function useStatusChangeAction({
         return true;
       } catch (err) {
         logError(scope, err);
+        onError?.(err);
         setError?.(getErrorMessage(err, errorMessage));
         return false;
       } finally {
         setUpdatingDonorId?.("");
         setUpdatingSummaryId?.("");
+        setBusy?.(false);
       }
     },
     [
