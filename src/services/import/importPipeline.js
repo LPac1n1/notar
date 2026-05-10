@@ -476,28 +476,32 @@ export async function deleteImport(importId) {
   const trashItemId = nanoid();
 
   await runInTransaction(async () => {
-    await execute(`
-      INSERT INTO trash_items (
-        id,
-        entity_type,
-        entity_id,
-        label,
-        payload_json,
-        deleted_at
-      )
-      VALUES (
-        '${escapeSqlString(trashItemId)}',
-        'import',
-        '${escapeSqlString(importId)}',
-        '${escapeSqlString(importRows[0].file_name)}',
-        '${escapeSqlString(JSON.stringify({
+    // The payload JSON includes user-derived strings (file_name, donor_name,
+    // demand from imported rows). Bind via prepared parameters so the largest
+    // INSERT in this domain — by far — never touches the SQL boundary.
+    await executePrepared(
+      `
+        INSERT INTO trash_items (
+          id,
+          entity_type,
+          entity_id,
+          label,
+          payload_json,
+          deleted_at
+        )
+        VALUES (?, 'import', ?, ?, ?, CURRENT_TIMESTAMP)
+      `,
+      [
+        trashItemId,
+        importId,
+        importRows[0].file_name,
+        JSON.stringify({
           imports: importRows,
           importCpfSummary: importCpfSummaryRows,
           monthlyDonorSummary: monthlySummaryRows,
-        }))}',
-        CURRENT_TIMESTAMP
-      )
-    `);
+        }),
+      ],
+    );
 
     await execute(`
       DELETE FROM monthly_donor_summary
