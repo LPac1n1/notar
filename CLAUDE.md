@@ -57,16 +57,54 @@ Objetivo: trocar `escapeSqlString` por prepared statements onde houver entrada d
 
 **Estado atual:** SELECT/filter paths blindados via prepared statements. Identifier injection mitigada com whitelist runtime. 39/39 testes passando (32 unit + 7 integração com DuckDB-Node real). Build OK. Lint 0 erros.
 
-## Reanálise pós-Fase 3 (próximo passo)
+### Fase 4 — Estrutural ✅ CONCLUÍDA (commits 85-89)
 
-Fases 1, 2 e 3 estão **CONCLUÍDAS**. Quando o usuário pedir, rodar:
-1. Diagnóstico técnico completo de novo (mesmos 20 critérios da análise original).
-2. Confrontar com o estado pré-fases (commits 56-62 vs commits 64-77).
-3. Decidir Fase 4 (TypeScript + observabilidade) e Fase 5 (fullstack opcional) com base no que ainda dói.
+Reanálise pós-Fase 3 (commit 84) gerou roadmap; usuário aprovou execução de Quick wins + Fase 4 + Fase 5 (sem TypeScript).
+
+**Quick wins entregues** [commits 85-86]:
+- Migration v4 (`performance-indexes`): `monthly_donor_summary(reference_month, donor_id)`, `monthly_donor_summary(donor_id)`, `donor_activity_history(donor_id, reference_month)`, `import_cpf_summary(reference_month)`.
+- 4 `console.error` migrados para `logError` (Settings, DonorProfile, Dashboard, CpfListSearchSection).
+- Dashboard e DonorProfile migrados para `useDataResource` (com novo `initialData` opt para single-object loaders).
+- Bug `Monthly.handleExport` (set/zera `successMessage` na mesma síncrona) corrigido.
+- Vars `--shadow-elevated`, `--shadow-popover`, `--shadow-toast` em `index.css`; Modal/SelectInput/FeedbackMessage usando-as.
+- `useDataRefreshStatus` → `useDataRefreshIndicator` (renomeado em todos os 10 consumidores).
+- `groupChangesByStatus`/`normalizeStatusForApply` extraídos para `features/monthly/utils/statusChanges.js` + 4 testes unitários.
+- `DonorProfile` padronizado em `getErrorMessage`.
+- `CopyButton` exibe toast de erro (`<FeedbackMessage tone="error" persistent={false}>`) quando `clipboard` falha.
+
+**Estruturais entregues** [commits 87-89]:
+- **donorService split**: `donor/donorWriter.js` + `donor/donorProfile.js` + `donor/donorActivity.js`. `donorService.js` virou barrel (32 linhas vs 1.063).
+- **importService split**: `import/importPipeline.js` + `import/importQueries.js` + `import/importReconcile.js`. Barrel de 31 linhas vs 1.127.
+- **monthlyService refator**: 3 constantes SQL compartilhadas (`MONTHLY_SOURCE_SUBSELECTS`, `MONTHLY_HOLDER_JOINS`, `MONTHLY_DONOR_PROJECTION`) eliminam ~140 linhas de duplicação entre `listMonthlySummariesByMonth` e `listHistoricalMonthlySummaries`.
+- **Bulk INSERT em reconcileImport**: chunks de 200 rows via VALUES multilinha. Acabou com loop 1k+ INSERTs sequenciais. Teste DuckDB integration cobre o pattern.
+- **Optimistic UI no `StatusToggle`**: `Monthly.jsx` mantém `optimisticStatusOverrides` que é overlaid em `summaries`; cleared quando `rawSummaries` reference muda. Reverte no catch.
+- **Server-side pagination opt-in**: `listDonors`/`listPeople`/`listMonthlySummaries` aceitam `limit`/`offset`. Novos `countDonors`/`countPeople`/`countMonthlySummaries` para paginação completa. Default = retorna tudo (back-compat).
+- **`escapeSqlString` user-input → prepared**: `createImportRecord(fileName, notes)`, `processImportedFile(errorMessage)`, `createAbatementAdjustment(description)`, `createTrashItem(label, payload)`. Resíduo de Fase 3 fechado.
+- **`useStatusChangeAction` hook** em `features/monthly/hooks/`. Migrado `handleConsolidatedDonorStatusChange`; outros handlers podem adotar incrementalmente.
+- **Undo em delete**: já presente em Donors/People/Demands/Imports. Auditado e confirmado.
+
+### Fase 5 — Longo prazo (parcial) ✅ CONCLUÍDA (commit 90)
+
+- **`useDatabaseChangeEffect({ sources })`**: opt-in para filtrar reloads por `event.detail.source`. Sem `sources` continua catch-all (back-compat).
+- **Logger circular buffer + dump**: `services/loggerBuffer.js` (zero deps, testável) com `appendLogEntry`, `getLogBufferSnapshot`, `clearLogBuffer`, `exportLogBuffer`, `LOG_BUFFER_CAPACITY=200`. `logger.js` usa internamente; 4 testes unitários.
+- **Auto-reconcile robustness**: novo teste de integração `reconcileImport SQL backfills matched_source_id for CPFs registered after the import landed` valida o SQL do `reconcileImport` direto contra DuckDB-Node.
+- **Migração mecânica de `escapeSqlString` em INSERT/UPDATE**: `noteService` (title/content/color), `demandService` (name/color, update donors em cascade), `actionHistoryService` (label/description/payload + filtro listActionHistory). 5 services agora 100% prepared para qualquer string que toca SQL.
+
+**Estado atual:** 58/58 testes passando, lint 0 erros, build OK. donorService 1.063→32, importService 1.127→31, monthlyService 935→850 (redução modesta + extração de fragments). Quase todo INSERT/UPDATE com texto vai por prepared statements; `escapeSqlString` restantes são para nanoid IDs gerados pelo servidor + identifiers já com whitelist.
+
+### O que ficou para uma futura fase
+
+- TypeScript incremental (excluído explicitamente nesta rodada).
+- Migrar páginas de `usePagination` client-side para o novo `count*`/`limit`/`offset` (infraestrutura pronta, adoção pendente).
+- Aplicar `useStatusChangeAction` aos 3 handlers restantes em Monthly.
+- Virtualização de listas (`react-window`) — só se cargas reais ultrapassarem 5k linhas.
+- NDJSON streaming export/import — só necessário >100k linhas.
+- Filtrar `useDatabaseChangeEffect` por source nas páginas (infra pronta, adoção pendente).
+- Fullstack/sync server (escopo separado).
 
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 62**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 90**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
