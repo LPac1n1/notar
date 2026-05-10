@@ -25,12 +25,10 @@ import {
   listPeople,
   updatePerson,
 } from "../services/personService";
-import { logError } from "../services/logger";
 import { restoreTrashItem } from "../services/trashService";
 import { useDataResource } from "../hooks/useDataResource";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
-import { getErrorMessage } from "../utils/error";
 import {
   getFirstValidationError,
   hasValidationErrors,
@@ -40,6 +38,7 @@ import {
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
+import { useMutationAction } from "../hooks/useMutationAction";
 import { formatInteger } from "../utils/format";
 
 const EMPTY_PERSON_FORM = {
@@ -120,26 +119,49 @@ export default function People() {
   }, [loadSupportingData, reloadPeople]);
 
   useEffect(() => {
+    // The supporting data loader fans out into setAllPeople/setDemands; the
+    // pattern is intentional — this effect is the bootstrap for those state
+    // slices and there's no external system to subscribe to.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSupportingData();
   }, [loadSupportingData]);
 
   useDatabaseChangeEffect(refreshPeople);
 
+  // Three runners share the boilerplate: form mutations route errors to the
+  // modal-scoped `formError`, page-level deletes route to the page-level
+  // `error`, and conversion uses its own `isConverting` busy flag.
+  const runFormMutation = useMutationAction({
+    setError: setFormError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsSubmitting,
+    reload: refreshPeople,
+  });
+  const runConversionMutation = useMutationAction({
+    setError: setFormError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsConverting,
+    reload: refreshPeople,
+  });
+  const runDeleteMutation = useMutationAction({
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsDeleting,
+    reload: refreshPeople,
+  });
+
   const handleRestoreDeletedPerson = useCallback(
-    async (trashItemId) => {
-      try {
-        setError("");
-        setSuccessMessage("");
-        setSuccessAction(null);
-        await restoreTrashItem(trashItemId);
-        await refreshPeople();
-        setSuccessMessage("Pessoa restaurada com sucesso.");
-      } catch (err) {
-        logError("PeoplePage.restore", err);
-        setError(getErrorMessage(err, "Não foi possível restaurar a pessoa."));
-      }
-    },
-    [refreshPeople, setError],
+    (trashItemId) =>
+      runDeleteMutation({
+        scope: "PeoplePage.restore",
+        run: () => restoreTrashItem(trashItemId),
+        successMessage: "Pessoa restaurada com sucesso.",
+        errorMessage: "Não foi possível restaurar a pessoa.",
+      }),
+    [runDeleteMutation],
   );
 
   const handleFormChange = (setter, setFormErrors) => (event) => {
@@ -288,28 +310,22 @@ export default function People() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsSubmitting(true);
-      await createPerson({
-        id: nanoid(),
-        name: createForm.name,
-        cpf: createForm.cpf,
-      });
-      setIsCreateModalOpen(false);
-      setCreateForm({ ...EMPTY_PERSON_FORM });
-      setCreateFormErrors({});
-      setSuccessMessage("Pessoa cadastrada com sucesso.");
-      await refreshPeople();
-    } catch (err) {
-      logError("PeoplePage.create", err);
-      setFormError(getErrorMessage(err, "Não foi possível cadastrar a pessoa."));
-    } finally {
-      setIsSubmitting(false);
-    }
+    await runFormMutation({
+      scope: "PeoplePage.create",
+      run: () =>
+        createPerson({
+          id: nanoid(),
+          name: createForm.name,
+          cpf: createForm.cpf,
+        }),
+      successMessage: "Pessoa cadastrada com sucesso.",
+      errorMessage: "Não foi possível cadastrar a pessoa.",
+      onSuccess: () => {
+        setIsCreateModalOpen(false);
+        setCreateForm({ ...EMPTY_PERSON_FORM });
+        setCreateFormErrors({});
+      },
+    });
   };
 
   const handleConvertToDonor = async () => {
@@ -325,35 +341,24 @@ export default function People() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsConverting(true);
-      await createDonor({
-        id: nanoid(),
-        personId: convertingPerson.id,
-        name: convertingPerson.name,
-        cpf: convertingPerson.cpf,
-        demand: convertForm.demand,
-        donationStartDate: convertForm.donationStartDate,
-        donorType: convertForm.donorType,
-        holderPersonId: convertForm.holderPersonId,
-      });
-      handleCloseConvertModal();
-      setSuccessMessage(
+    await runConversionMutation({
+      scope: "PeoplePage.convertToDonor",
+      run: () =>
+        createDonor({
+          id: nanoid(),
+          personId: convertingPerson.id,
+          name: convertingPerson.name,
+          cpf: convertingPerson.cpf,
+          demand: convertForm.demand,
+          donationStartDate: convertForm.donationStartDate,
+          donorType: convertForm.donorType,
+          holderPersonId: convertForm.holderPersonId,
+        }),
+      successMessage:
         "Pessoa convertida em doador e reconciliada com as importações existentes.",
-      );
-      await refreshPeople();
-    } catch (err) {
-      logError("PeoplePage.convertToDonor", err);
-      setFormError(
-        getErrorMessage(err, "Não foi possível converter a pessoa em doador."),
-      );
-    } finally {
-      setIsConverting(false);
-    }
+      errorMessage: "Não foi possível converter a pessoa em doador.",
+      onSuccess: handleCloseConvertModal,
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -369,28 +374,22 @@ export default function People() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsSubmitting(true);
-      await updatePerson({
-        id: editingPerson.id,
-        name: editForm.name,
-        cpf: editForm.cpf,
-      });
-      setEditingPerson(null);
-      setEditForm({ ...EMPTY_PERSON_FORM });
-      setEditFormErrors({});
-      setSuccessMessage("Pessoa atualizada com sucesso.");
-      await refreshPeople();
-    } catch (err) {
-      logError("PeoplePage.update", err);
-      setFormError(getErrorMessage(err, "Não foi possível atualizar a pessoa."));
-    } finally {
-      setIsSubmitting(false);
-    }
+    await runFormMutation({
+      scope: "PeoplePage.update",
+      run: () =>
+        updatePerson({
+          id: editingPerson.id,
+          name: editForm.name,
+          cpf: editForm.cpf,
+        }),
+      successMessage: "Pessoa atualizada com sucesso.",
+      errorMessage: "Não foi possível atualizar a pessoa.",
+      onSuccess: () => {
+        setEditingPerson(null);
+        setEditForm({ ...EMPTY_PERSON_FORM });
+        setEditFormErrors({});
+      },
+    });
   };
 
   const handleDelete = async () => {
@@ -398,27 +397,15 @@ export default function People() {
       return;
     }
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsDeleting(true);
-      const trashItemId = await deletePerson(personPendingRemoval.id);
-      await refreshPeople();
-      setPersonPendingRemoval(null);
-      setSuccessMessage("Pessoa enviada para a lixeira com sucesso.");
-      if (trashItemId) {
-        setSuccessAction({
-          label: "Desfazer",
-          onAction: () => handleRestoreDeletedPerson(trashItemId),
-        });
-      }
-    } catch (err) {
-      logError("PeoplePage.delete", err);
-      setError(getErrorMessage(err, "Não foi possível remover a pessoa."));
-    } finally {
-      setIsDeleting(false);
-    }
+    await runDeleteMutation({
+      scope: "PeoplePage.delete",
+      run: () => deletePerson(personPendingRemoval.id),
+      successMessage: "Pessoa enviada para a lixeira com sucesso.",
+      errorMessage: "Não foi possível remover a pessoa.",
+      onSuccess: () => setPersonPendingRemoval(null),
+      buildUndo: (trashItemId) =>
+        trashItemId ? () => handleRestoreDeletedPerson(trashItemId) : null,
+    });
   };
 
   if (isLoading && !people.length && !error) {

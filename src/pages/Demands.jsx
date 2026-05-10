@@ -24,19 +24,18 @@ import {
   listDemands,
   updateDemand,
 } from "../services/demandService";
-import { logError } from "../services/logger";
 import { restoreTrashItem } from "../services/trashService";
 import {
   DEFAULT_DEMAND_COLOR,
   getContrastTextColor,
 } from "../utils/demandColor";
-import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import { buildSelectOptions } from "../utils/select";
 import { useDataResource } from "../hooks/useDataResource";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
+import { useMutationAction } from "../hooks/useMutationAction";
 
 const INITIAL_DEMAND_FILTERS = {
   demandId: "",
@@ -86,21 +85,33 @@ export default function Demands() {
 
   useDatabaseChangeEffect(reloadDemands);
 
+  // Two runners share the boilerplate: form mutations push errors into the
+  // modal-scoped `formError`; page-level mutations (delete/restore) push to
+  // the page-level `error`.
+  const runFormMutation = useMutationAction({
+    setError: setFormError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsSubmitting,
+    reload: reloadDemands,
+  });
+  const runPageMutation = useMutationAction({
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsDeleting,
+    reload: reloadDemands,
+  });
+
   const handleRestoreDeletedDemand = useCallback(
-    async (trashItemId) => {
-      try {
-        setError("");
-        setSuccessMessage("");
-        setSuccessAction(null);
-        await restoreTrashItem(trashItemId);
-        await reloadDemands();
-        setSuccessMessage("Demanda restaurada com sucesso.");
-      } catch (err) {
-        logError("DemandsPage.restore", err);
-        setError(getErrorMessage(err, "Não foi possível restaurar a demanda."));
-      }
-    },
-    [reloadDemands, setError],
+    (trashItemId) =>
+      runPageMutation({
+        scope: "DemandsPage.restore",
+        run: () => restoreTrashItem(trashItemId),
+        successMessage: "Demanda restaurada com sucesso.",
+        errorMessage: "Não foi possível restaurar a demanda.",
+      }),
+    [runPageMutation],
   );
 
   const handleFormChange = (setter) => (event) => {
@@ -119,25 +130,16 @@ export default function Demands() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsSubmitting(true);
-      await createDemand(createForm);
-      setCreateForm({ ...EMPTY_DEMAND_FORM });
-      setIsCreateModalOpen(false);
-      setSuccessMessage("Demanda cadastrada com sucesso.");
-      await reloadDemands();
-    } catch (err) {
-      logError("DemandsPage.create", err);
-      setFormError(
-        getErrorMessage(err, "Não foi possível adicionar a demanda."),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    await runFormMutation({
+      scope: "DemandsPage.create",
+      run: () => createDemand(createForm),
+      successMessage: "Demanda cadastrada com sucesso.",
+      errorMessage: "Não foi possível adicionar a demanda.",
+      onSuccess: () => {
+        setCreateForm({ ...EMPTY_DEMAND_FORM });
+        setIsCreateModalOpen(false);
+      },
+    });
   };
 
   const handleOpenEditModal = (demand) => {
@@ -168,27 +170,17 @@ export default function Demands() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsSubmitting(true);
-      await updateDemand({
-        id: editingDemand.id,
-        ...editForm,
-      });
-      handleCloseEditModal();
-      setSuccessMessage("Demanda atualizada com sucesso.");
-      await reloadDemands();
-    } catch (err) {
-      logError("DemandsPage.update", err);
-      setFormError(
-        getErrorMessage(err, "Não foi possível atualizar a demanda."),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    await runFormMutation({
+      scope: "DemandsPage.update",
+      run: () =>
+        updateDemand({
+          id: editingDemand.id,
+          ...editForm,
+        }),
+      successMessage: "Demanda atualizada com sucesso.",
+      errorMessage: "Não foi possível atualizar a demanda.",
+      onSuccess: handleCloseEditModal,
+    });
   };
 
   const handleConfirmRemove = async () => {
@@ -196,30 +188,22 @@ export default function Demands() {
       return;
     }
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsDeleting(true);
-      const trashItemId = await deleteDemand(demandPendingRemoval.id);
-      await reloadDemands();
-      if (editingDemand?.id === demandPendingRemoval.id) {
-        handleCloseEditModal();
-      }
-      setDemandPendingRemoval(null);
-      setSuccessMessage("Demanda enviada para a lixeira com sucesso.");
-      if (trashItemId) {
-        setSuccessAction({
-          label: "Desfazer",
-          onAction: () => handleRestoreDeletedDemand(trashItemId),
-        });
-      }
-    } catch (err) {
-      logError("DemandsPage.delete", err);
-      setError(getErrorMessage(err, "Não foi possível remover a demanda."));
-    } finally {
-      setIsDeleting(false);
-    }
+    await runPageMutation({
+      scope: "DemandsPage.delete",
+      run: () => deleteDemand(demandPendingRemoval.id),
+      successMessage: "Demanda enviada para a lixeira com sucesso.",
+      errorMessage: "Não foi possível remover a demanda.",
+      onSuccess: () => {
+        if (editingDemand?.id === demandPendingRemoval.id) {
+          handleCloseEditModal();
+        }
+        setDemandPendingRemoval(null);
+      },
+      // `deleteDemand` returns the trashItemId; the factory form lets the
+      // Desfazer action capture it after the mutation resolves.
+      buildUndo: (trashItemId) =>
+        trashItemId ? () => handleRestoreDeletedDemand(trashItemId) : null,
+    });
   };
 
   const handleFilterChange = (event) => {
