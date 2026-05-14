@@ -26,6 +26,7 @@ import {
   STORAGE_INFO_EVENT,
 } from "../services/db";
 import { exportLogBuffer, getLogBufferSnapshot, logError } from "../services/logger";
+import { useAuth } from "../hooks/useAuth";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   finishDataSyncFeedback,
@@ -74,6 +75,7 @@ function waitForDataSyncHandoff() {
 }
 
 export default function Settings() {
+  const { user, signOut } = useAuth();
   const [storageInfo, setStorageInfo] = useState(null);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -361,6 +363,22 @@ export default function Settings() {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      setIsSubmitting(true);
+      setError("");
+      setSuccessMessage("");
+      await signOut();
+    } catch (signOutError) {
+      logError("Settings.signOut", signOutError);
+      setError(
+        getErrorMessage(signOutError, "Não foi possível encerrar a sessão."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleDownloadLogBuffer = () => {
     // Snapshot before exporting so the file size matches what the user sees
     // in the success message. The log buffer keeps growing in memory while
@@ -541,6 +559,28 @@ export default function Settings() {
               </p>
             ) : null}
           </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Conta"
+        description="Sessão atual deste dispositivo."
+        className="mb-6"
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm text-[var(--muted)]">E-mail</p>
+            <p className="font-medium text-[var(--text-main)] break-all">
+              {user?.email || "—"}
+            </p>
+          </div>
+          <Button
+            variant="subtle"
+            onClick={handleSignOut}
+            disabled={isSubmitting}
+          >
+            Sair desta conta
+          </Button>
         </div>
       </SectionCard>
 
