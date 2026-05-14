@@ -4,7 +4,6 @@ import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import Loader from "../components/ui/Loader";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import TextInput from "../components/ui/TextInput";
@@ -12,17 +11,15 @@ import {
   BackupExportIcon,
   BackupImportIcon,
   DownloadIcon,
-  FolderOpenIcon,
-  StorageIcon,
 } from "../components/ui/icons";
 import {
-  createDatabaseFile,
-  disconnectDatabaseFile,
   exportDatabaseBackup,
+  flushPendingCloudSync,
+  getCloudSyncStatus,
   getDatabaseStorageInfo,
   importDatabaseBackup,
   notifyDatabaseChanged,
-  openDatabaseFile,
+  onCloudSyncStatusChange,
   STORAGE_INFO_EVENT,
 } from "../services/db";
 import { exportLogBuffer, getLogBufferSnapshot, logError } from "../services/logger";
@@ -34,6 +31,7 @@ import {
 } from "../services/dataSyncFeedback";
 import { reconcileAllImports } from "../services/importService";
 import { downloadFile } from "../utils/download";
+import { formatDatePtBR } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 
@@ -50,6 +48,17 @@ function formatBackupStats(stats = {}) {
     `${formatInteger(stats.actionHistory ?? 0)} ação(ões) no histórico`,
     `${formatInteger(stats.trashItems ?? 0)} item(ns) na lixeira`,
   ].join(", ");
+}
+
+function formatLastSyncedAt(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const time = date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${formatDatePtBR(value)} às ${time}`;
 }
 
 async function recordSettingsAction({
@@ -77,6 +86,7 @@ function waitForDataSyncHandoff() {
 export default function Settings() {
   const { user, signOut } = useAuth();
   const [storageInfo, setStorageInfo] = useState(null);
+  const [syncSnapshot, setSyncSnapshot] = useState(() => getCloudSyncStatus());
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,7 +113,7 @@ export default function Settings() {
 
         if (isMounted) {
           setError(
-            "Não foi possível verificar o modo de armazenamento local do sistema.",
+            "Não foi possível verificar o modo de armazenamento do sistema.",
           );
         }
       }
@@ -117,139 +127,32 @@ export default function Settings() {
     };
 
     window.addEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
+    const unsubscribeSync = onCloudSyncStatusChange((nextSnapshot) => {
+      if (isMounted) {
+        setSyncSnapshot(nextSnapshot);
+      }
+    });
 
     return () => {
       isMounted = false;
       window.removeEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
+      unsubscribeSync();
     };
   }, []);
 
-  const refreshStorageInfo = async () => {
-    const info = await getDatabaseStorageInfo();
-    setStorageInfo(info);
-  };
-
-  const handleCreateFile = async () => {
+  const handleForceSync = async () => {
     try {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
-
-      const result = await createDatabaseFile();
-      await recordSettingsAction({
-        actionType: "storage",
-        label: result.storageInfo.fileName || "Arquivo de dados",
-        description: "Arquivo de dados criado e conectado.",
-        payload: {
-          fileName: result.storageInfo.fileName,
-          migratedCurrentSession: result.migratedCurrentSession,
-        },
-      });
-      setStorageInfo(result.storageInfo);
-      setSuccessMessage(
-        result.migratedCurrentSession
-          ? "Arquivo criado e conectado. Os dados atuais da sessão foram copiados para ele."
-          : "Arquivo criado e conectado. As proximas alteracoes serao gravadas nele.",
-      );
-    } catch (storageError) {
-      logError("Settings.createFile", storageError);
+      await flushPendingCloudSync();
+      setSuccessMessage("Sincronização concluída.");
+    } catch (syncError) {
+      logError("Settings.forceSync", syncError);
       setError(
         getErrorMessage(
-          storageError,
-          "Não foi possível criar e conectar o arquivo de dados.",
-        ),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleOpenFile = async () => {
-    let dataSyncOperationId = "";
-
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-
-      const result = await openDatabaseFile({
-        emitChange: false,
-        onFileSelected: (handle) => {
-          const nextMessage = "Carregando dados";
-          dataSyncOperationId = startDataSyncFeedback({
-            label: nextMessage,
-            source: "database-file-opened",
-          });
-          setDataSyncMessage(nextMessage);
-          setStorageInfo((current) =>
-            current
-              ? {
-                  ...current,
-                  fileName: handle?.name ?? current.fileName,
-                }
-              : current,
-          );
-        },
-      });
-      await reconcileAllImports({ emitChange: false });
-      await recordSettingsAction({
-        actionType: "storage",
-        label: result.storageInfo.fileName || "Arquivo de dados",
-        description: "Arquivo de dados existente conectado.",
-        payload: {
-          fileName: result.storageInfo.fileName,
-          usedExistingFile: result.usedExistingFile,
-        },
-      });
-      notifyDatabaseChanged({ source: "database-file-opened" });
-      await waitForDataSyncHandoff();
-      setStorageInfo(result.storageInfo);
-      setSuccessMessage(
-        result.usedExistingFile
-          ? "Arquivo existente conectado. Os dados carregados agora passam a vir desse arquivo."
-          : "Arquivo conectado com sucesso.",
-      );
-    } catch (storageError) {
-      logError("Settings.openFile", storageError);
-      setError(
-        getErrorMessage(
-          storageError,
-          "Não foi possível abrir o arquivo de dados.",
-        ),
-      );
-    } finally {
-      finishDataSyncFeedback(dataSyncOperationId);
-      setDataSyncMessage("");
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDisconnectFile = async () => {
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-
-      const result = await disconnectDatabaseFile();
-      await recordSettingsAction({
-        actionType: "storage",
-        label: storageInfo?.fileName || "Arquivo de dados",
-        description: "Arquivo de dados desconectado.",
-        payload: {
-          fileName: storageInfo?.fileName ?? "",
-        },
-      });
-      setStorageInfo(result.storageInfo);
-      setSuccessMessage(
-        "Arquivo desconectado. Os dados atuais continuam apenas nesta sessão até que um novo arquivo seja conectado.",
-      );
-      await refreshStorageInfo();
-    } catch (storageError) {
-      logError("Settings.disconnectFile", storageError);
-      setError(
-        getErrorMessage(
-          storageError,
-          "Não foi possível desconectar o arquivo de dados.",
+          syncError,
+          "Não foi possível sincronizar com a nuvem agora.",
         ),
       );
     } finally {
@@ -340,7 +243,6 @@ export default function Settings() {
       });
       notifyDatabaseChanged({ source: "backup-import" });
       await waitForDataSyncHandoff();
-      setStorageInfo(result.storageInfo);
       resetBackupFileSelection();
       setIsImportBackupConfirmOpen(false);
       setSuccessMessage(
@@ -401,11 +303,24 @@ export default function Settings() {
     );
   };
 
+  const syncStatusBadge = (() => {
+    if (syncSnapshot.status === "syncing") {
+      return { tone: "info", label: "Sincronizando…" };
+    }
+    if (syncSnapshot.status === "error") {
+      return {
+        tone: "warning",
+        label: "Falha ao sincronizar — tentaremos novamente na próxima alteração.",
+      };
+    }
+    return { tone: "muted", label: "Tudo sincronizado" };
+  })();
+
   return (
     <div>
       <PageHeader
         title="Configurações"
-        subtitle="Arquivo de dados e backup."
+        subtitle="Sincronização, backup e conta."
         className="mb-6"
       />
       <FeedbackMessage
@@ -415,83 +330,59 @@ export default function Settings() {
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard
-        title="Armazenamento local"
+        title="Sincronização"
+        description="Seus dados ficam salvos automaticamente no Supabase. Não precisa abrir nem salvar arquivo."
         className="mb-6"
       >
         {isLoadingStorage ? (
           <LoadingScreen
             compact
             title="Verificando o armazenamento"
-            description="Carregando opções de armazenamento."
+            description="Carregando informações de sincronização."
           />
         ) : storageInfo ? (
           <div className="space-y-3">
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-              {isApplyingData ? (
-                <div role="status" aria-live="polite" aria-busy="true">
-                  <p className="text-sm text-[var(--muted)]">Status</p>
-                  <div className="mt-1">
-                    <Loader label={dataSyncMessage || "Carregando dados"} />
-                  </div>
-                  <p className="mt-2 text-sm text-[var(--muted)]">
-                    Aplicando o arquivo selecionado e atualizando as telas do sistema.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <p className="text-sm text-[var(--muted)]">Status</p>
-                  <p className="font-medium text-[var(--text-main)]">
-                    {storageInfo.label}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted)]">
-                    {storageInfo.description}
-                  </p>
-                </>
-              )}
+              <p className="text-sm text-[var(--muted)]">Status</p>
+              <p className="font-medium text-[var(--text-main)]">
+                {isApplyingData ? dataSyncMessage : storageInfo.label}
+              </p>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                {storageInfo.description}
+              </p>
+              <p
+                className={`mt-2 text-sm ${
+                  syncStatusBadge.tone === "warning"
+                    ? "text-[var(--warning)]"
+                    : "text-[var(--muted)]"
+                }`}
+              >
+                {syncStatusBadge.label}
+              </p>
             </div>
 
-            {storageInfo.fileName ? (
-              <div>
-                <p className="text-sm text-[var(--muted)]">Arquivo conectado</p>
-                <p className="font-medium text-[var(--text-main)] break-all">
-                  {storageInfo.fileName}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-sm text-[var(--muted)]">Última sincronização</p>
+                <p className="font-medium text-[var(--text-main)]">
+                  {formatLastSyncedAt(syncSnapshot.lastSyncedAt)}
                 </p>
               </div>
-            ) : null}
+              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-sm text-[var(--muted)]">Conta sincronizada</p>
+                <p className="font-medium text-[var(--text-main)] break-all">
+                  {user?.email || "—"}
+                </p>
+              </div>
+            </div>
 
-            {!storageInfo.isPersistent ? (
-              <FeedbackMessage
-                message="Sem um arquivo conectado, os dados atuais só existem nesta sessão e podem se perder ao fechar ou recarregar a aplicação."
-                tone="warning"
-                className="mb-0"
-                persistent
-              />
-            ) : null}
-
-            <div className="flex flex-col gap-3 pt-2 md:flex-row">
-              <Button
-                onClick={handleCreateFile}
-                disabled={isSubmitting}
-                leftIcon={<StorageIcon className="h-4 w-4" />}
-              >
-                Criar arquivo de dados
-              </Button>
-
+            <div className="pt-1">
               <Button
                 variant="subtle"
-                onClick={handleOpenFile}
-                disabled={isSubmitting}
-                leftIcon={<FolderOpenIcon className="h-4 w-4" />}
+                onClick={handleForceSync}
+                disabled={isSubmitting || syncSnapshot.status === "syncing"}
               >
-                Abrir arquivo existente
-              </Button>
-
-              <Button
-                variant="danger"
-                onClick={handleDisconnectFile}
-                disabled={isSubmitting || !storageInfo.fileName}
-              >
-                Desconectar arquivo
+                Sincronizar agora
               </Button>
             </div>
           </div>
@@ -504,7 +395,7 @@ export default function Settings() {
 
       <SectionCard
         title="Cópia de segurança"
-        description="Exportação e restauração em JSON."
+        description="Exportação e restauração em JSON. Útil como rede de segurança offline."
         className="mb-6"
       >
         <div className="space-y-4">
@@ -527,7 +418,7 @@ export default function Settings() {
                 Restaurar backup
               </p>
               <p className="text-sm text-[var(--muted)]">
-                Traz de volta uma cópia salva antes e substitui os dados atuais do sistema.
+                Substitui os dados atuais do sistema pelos do arquivo escolhido. A nuvem é atualizada na sequência.
               </p>
             </div>
 
