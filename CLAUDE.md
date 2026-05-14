@@ -102,9 +102,34 @@ Reanálise pós-Fase 3 (commit 84) gerou roadmap; usuário aprovou execução de
 - Filtrar `useDatabaseChangeEffect` por source nas páginas (infra pronta, adoção pendente).
 - Fullstack/sync server (escopo separado).
 
+### Fase 6 — Reuso + adoção do que ficou opt-in ✅ CONCLUÍDA (commits 92-96)
+
+Diagnóstico no commit 91 listou 7 quick wins + 6 estruturais. Quase tudo entregue.
+
+**Quick wins entregues** [commit 92]:
+- `dashboardService.getDashboardOverview` paralelizado: 10 queries sequenciais → `Promise.all` em 2 grupos. Latência cai 3-5x.
+- `Settings.jsx` 5 catches silenciosos agora chamam `logError` (createFile, openFile, disconnectFile, exportBackup, importBackup).
+- Botão "Baixar log de erros" em nova SectionCard "Diagnóstico" em Settings consumindo `exportLogBuffer()` + `downloadFile`.
+- Os 3 handlers restantes de `Monthly.jsx` (`handleStatusChange`, `handleBulkAbate`, `handleUndoStatusChanges`) agora usam `useStatusChangeAction` — o hook foi estendido com `onError` (rollback) e `setBusy` (per-call busy flag) para suportar optimistic UI.
+- **Optimistic UI estendido** para `handleConsolidatedDonorStatusChange` e `handleBulkAbate` — ambos overlaiam `optimisticStatusOverrides` antes do round-trip e revertem no `onError`.
+- **Source filtering**: `useDatabaseChangeEffect({ sources, ignoreSources })`. `noteService` writes tagged `source: "notes"`. Notes page subscribe a `["notes", "restore", "backup-import", "database-file-opened"]`; Monthly usa `ignoreSources: ["notes"]`.
+- `SkeletonRows`/`SkeletonCard` agora têm `role="status"`/`aria-busy="true"`/`aria-live="polite"` + `<span className="sr-only">` com `loadingLabel` prop.
+
+**Estruturais entregues** [commits 93-96]:
+- **`useMutationAction` hook genérico** em `src/hooks/useMutationAction.js` — orquestrador de CRUD com `setError`/`setSuccessMessage`/`setSuccessAction`/`setBusy`/`reload`. Suporta `onStart`/`onSuccess`/`onError`, `undo` (callback) e `buildUndo: (result) => callback` (factory que recebe o retorno do `run` para construir a ação Desfazer com IDs gerados pela mutation). Adotado em Demands.jsx (3 handlers) e People.jsx (4 handlers). Cortou ~120 linhas de boilerplate.
+- **monthlyService split**: 939 linhas → 91 (barrel) + `monthly/sharedFragments.js` (SQL constants + mappers + filters + `buildDonorConditions` + `isSyntheticSummaryId`) + `monthly/listByMonth.js` + `monthly/listHistorical.js` + `monthly/abatementUpdates.js`.
+- **Dashboard modal split**: `Dashboard.jsx` 802 → 446 linhas via `features/dashboard/components/DashboardModals.jsx` (9 modais inline → 1 componente único parametrizado por `activeModal`).
+- **Prepared para `JSON.stringify` payloads**: `importPipeline.deleteImport` agora usa `executePrepared` para o trash insert (era o último gigante string-built de Fase 3).
+
+**Deferidos com justificativa** [não entregue intencionalmente]:
+- **`useNoteAutoSave`**: extração requer reescrita das duas state machines paralelas (create + edit) que entrelaçam 14 refs em `Notes.jsx`. Sem testes de integração para auto-save, o risco de regressão (ex.: race entre flush-on-close e timer-fire, comportamento de fingerprint quando reabre nota intocada) é alto demais para um refactor cego. O comportamento atual funciona — adiar até que haja teste E2E ou cobertura adicional.
+- **Migração para paginação server-side**: a infra (`countDonors`/`countPeople`/`countMonthlySummaries` + `limit`/`offset`) está pronta desde Fase 4. A adoção exige rework substancial de cada page (state de page/pageSize, count em paralelo, refresh em filter change, cuidado com `optionSource` que precisa de tudo). Para volumes atuais (≤2k linhas) o ganho é marginal; o custo é grande. Adiar até que volumes reais ultrapassem ~5k linhas, quando o ROI inverte.
+
+**Estado atual:** 58/58 testes passando, lint 0 erros, build OK. Dashboard reduzido em -356 linhas; monthlyService 939→91 (barrel); useMutationAction adotado em 7 handlers entre Demands+People.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 90**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 96**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
