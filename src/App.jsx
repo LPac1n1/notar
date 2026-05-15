@@ -4,6 +4,7 @@ import LoadingScreen from "./components/ui/LoadingScreen";
 import FeedbackMessage from "./components/ui/FeedbackMessage";
 import Button from "./components/ui/Button";
 import SignInPanel from "./components/auth/SignInPanel";
+import RemoteConflictBanner from "./components/sync/RemoteConflictBanner";
 import { useAuth } from "./hooks/useAuth";
 import { useCloudSync } from "./hooks/useCloudSync";
 
@@ -15,6 +16,7 @@ function CloudSyncGate() {
       <>
         <AppRoutes />
         <GlobalAsyncFeedback />
+        <RemoteConflictBanner />
       </>
     );
   }

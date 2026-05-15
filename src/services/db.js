@@ -45,6 +45,9 @@ export {
   flushPendingCloudSync,
   onCloudSyncStatusChange,
   getCloudSyncStatus,
+  onRemoteConflict,
+  checkForRemoteChanges,
+  acknowledgeRemoteConflict,
 } from "./db/cloudStorage.js";
 
 export { normalizeCpf, startOfMonth };

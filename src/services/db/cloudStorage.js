@@ -5,6 +5,7 @@ import {
 } from "../../utils/backup.js";
 import {
   STORAGE_BUCKET,
+  STORAGE_OBJECT_NAME,
   getUserStorageObjectPath,
   isSupabaseConfigured,
   supabase,
@@ -42,8 +43,11 @@ let isUploading = false;
 let lastSyncedAt = null;
 let lastError = null;
 let status = "idle"; // idle | syncing | error | offline
+let lastKnownServerVersion = null; // Supabase `updated_at` of the snapshot we've seen
+let remoteConflict = false;
 
 const listeners = new Set();
+const conflictListeners = new Set();
 
 function notifyListeners() {
   const snapshot = getCloudSyncStatus();
@@ -107,6 +111,71 @@ export function getCloudSyncStatus() {
 export function onCloudSyncStatusChange(handler) {
   listeners.add(handler);
   return () => listeners.delete(handler);
+}
+
+export function onRemoteConflict(handler) {
+  conflictListeners.add(handler);
+  return () => conflictListeners.delete(handler);
+}
+
+function notifyConflictListeners() {
+  for (const handler of conflictListeners) {
+    try {
+      handler(remoteConflict);
+    } catch (error) {
+      logError("cloudStorage.conflictListener", error);
+    }
+  }
+}
+
+async function fetchServerVersion(userId) {
+  if (!isSupabaseConfigured || !userId) return null;
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .list(userId, { limit: 100 });
+
+  if (error) {
+    throw error;
+  }
+
+  const entry = (data ?? []).find((item) => item.name === STORAGE_OBJECT_NAME);
+  return entry?.updated_at ?? entry?.created_at ?? null;
+}
+
+/**
+ * Compares the server-side `updated_at` of the snapshot with what we last
+ * uploaded/downloaded. If they don't match, another tab/device has written
+ * to the bucket while this tab was idle.
+ *
+ * Skips the check while a local upload is in flight — the server version
+ * would match a stale local value during that window.
+ */
+export async function checkForRemoteChanges() {
+  if (!isSupabaseConfigured || !activeUserId) return false;
+  if (isUploading) return false;
+
+  try {
+    const version = await fetchServerVersion(activeUserId);
+    if (!version || !lastKnownServerVersion) {
+      return false;
+    }
+    const isConflict = version !== lastKnownServerVersion;
+    if (isConflict && !remoteConflict) {
+      remoteConflict = true;
+      notifyConflictListeners();
+    }
+    return isConflict;
+  } catch (error) {
+    logError("cloudStorage.checkForRemoteChanges", error);
+    return false;
+  }
+}
+
+export function acknowledgeRemoteConflict() {
+  if (!remoteConflict) return;
+  remoteConflict = false;
+  notifyConflictListeners();
 }
 
 export function setActiveCloudUser(userId) {
@@ -197,6 +266,18 @@ async function uploadSnapshotImmediate(userId) {
       if (error) throw error;
       lastSyncedAt = new Date().toISOString();
       status = "idle";
+      // Refresh our anchor of the server-side version so we won't trip the
+      // conflict detector on our own upload. Best-effort — if the metadata
+      // fetch fails, we just leave the previous anchor and accept the
+      // (small) risk of a false positive on next focus.
+      try {
+        const serverVersion = await fetchServerVersion(userId);
+        if (serverVersion) {
+          lastKnownServerVersion = serverVersion;
+        }
+      } catch (versionError) {
+        logError("cloudStorage.refreshServerVersion", versionError);
+      }
     } catch (uploadError) {
       status = "error";
       lastError = uploadError;
@@ -241,6 +322,14 @@ export async function hydrateFromCloud(userId) {
 
   await initDB();
   const snapshot = await downloadSnapshotFromCloud(userId);
+  // Anchor the server version we just observed so the conflict detector
+  // can tell future remote writes from our own.
+  try {
+    lastKnownServerVersion = await fetchServerVersion(userId);
+  } catch (versionError) {
+    logError("cloudStorage.fetchServerVersion", versionError);
+    lastKnownServerVersion = null;
+  }
 
   if (snapshot && snapshotHasData(snapshot)) {
     await restoreDatabaseSnapshot(snapshot, {
@@ -268,6 +357,18 @@ if (typeof window !== "undefined") {
       flushPendingCloudSync();
     }
   });
+
+  // When the tab regains focus, ask Supabase whether another device has
+  // overwritten the snapshot in the meantime. We don't poll on a timer to
+  // avoid burning quota — the user only cares right after they come back
+  // to the tab.
+  const triggerRemoteCheck = () => {
+    if (document.visibilityState === "visible") {
+      checkForRemoteChanges();
+    }
+  };
+  window.addEventListener("focus", triggerRemoteCheck);
+  document.addEventListener("visibilitychange", triggerRemoteCheck);
 }
 
 // Initialize the storage info display once the module loads.
