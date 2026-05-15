@@ -10,6 +10,7 @@ import { useCloudSync } from "./hooks/useCloudSync";
 
 function CloudSyncGate() {
   const { hydrationStatus, hydrationError } = useCloudSync();
+  const { signOut } = useAuth();
 
   if (hydrationStatus === "ready") {
     return (
@@ -36,9 +37,14 @@ function CloudSyncGate() {
               "Não conseguimos baixar o snapshot mais recente da nuvem."
             }
           />
-          <Button onClick={() => window.location.reload()} className="w-full">
-            Tentar novamente
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button onClick={() => window.location.reload()}>
+              Tentar novamente
+            </Button>
+            <Button variant="subtle" onClick={() => signOut()}>
+              Sair desta conta
+            </Button>
+          </div>
         </div>
       </div>
     );

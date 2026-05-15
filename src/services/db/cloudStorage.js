@@ -331,15 +331,33 @@ export async function hydrateFromCloud(userId) {
     lastKnownServerVersion = null;
   }
 
-  if (snapshot && snapshotHasData(snapshot)) {
-    await restoreDatabaseSnapshot(snapshot, {
-      allowEmpty: true,
-      emitChange: false,
-    });
-    return { hydrated: true, hadData: true };
-  }
+  // Always replay the remote snapshot — even when it's empty — so DuckDB
+  // ends up matching the cloud exactly. If we skip this for first-time
+  // users, stale rows from a previous session (e.g., a different account
+  // signing in on the same browser) would leak into the next upload.
+  const effectiveSnapshot = snapshot ?? createEmptySnapshot();
+  await restoreDatabaseSnapshot(effectiveSnapshot, {
+    allowEmpty: true,
+    emitChange: false,
+  });
+  return { hydrated: true, hadData: Boolean(snapshot && snapshotHasData(snapshot)) };
+}
 
-  return { hydrated: true, hadData: false };
+function createEmptySnapshot() {
+  return {
+    demands: [],
+    people: [],
+    donors: [],
+    donorCpfLinks: [],
+    imports: [],
+    importCpfSummary: [],
+    monthlyDonorSummary: [],
+    notes: [],
+    actionHistory: [],
+    donorActivityHistory: [],
+    abatementAdjustments: [],
+    trashItems: [],
+  };
 }
 
 // Register the post-transaction hook so every commit/execute schedules a
