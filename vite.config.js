@@ -6,6 +6,13 @@ import react from "@vitejs/plugin-react";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // DuckDB-WASM ships its own worker + WASM glue and breaks if Vite's
+  // dep-optimization step rewrites its imports (you get
+  // `_setThrew is not defined` at runtime, because the Emscripten linker
+  // can't bind the WASM exports back to the pre-bundled JS).
+  optimizeDeps: {
+    exclude: ["@duckdb/duckdb-wasm"],
+  },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
