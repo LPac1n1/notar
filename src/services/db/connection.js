@@ -1,6 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
-import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
-import duckdbMvpWorker from "../../vendor/duckdb/duckdb-browser-mvp.worker.js?url";
+import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
+import duckdbEhWorker from "../../vendor/duckdb/duckdb-browser-eh.worker.js?url";
 import {
   DEFAULT_STORAGE_INFO,
   notifyDatabaseChanged,
@@ -8,9 +8,13 @@ import {
 } from "./events.js";
 import { runSchemaBootstrap } from "./schema.js";
 
-const MVP_BUNDLE = {
-  mainModule: duckdbMvpWasm,
-  mainWorker: duckdbMvpWorker,
+// We use the EH (WASM exception handling) bundle instead of MVP because
+// the MVP worker in this dev release of duckdb-wasm references an unbound
+// Emscripten symbol (`_setThrew`) and crashes during init. EH is widely
+// supported (Chrome 95+, Firefox 100+, Edge 95+, Safari 15.2+).
+const DUCKDB_BUNDLE = {
+  mainModule: duckdbEhWasm,
+  mainWorker: duckdbEhWorker,
 };
 
 let db = null;
@@ -78,11 +82,11 @@ export async function initDB() {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const worker = new Worker(MVP_BUNDLE.mainWorker);
+    const worker = new Worker(DUCKDB_BUNDLE.mainWorker);
     const logger = new duckdb.VoidLogger();
 
     db = new duckdb.AsyncDuckDB(logger, worker);
-    await db.instantiate(MVP_BUNDLE.mainModule);
+    await db.instantiate(DUCKDB_BUNDLE.mainModule);
     await openDatabase();
 
     conn = await db.connect();
