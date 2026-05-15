@@ -46,6 +46,12 @@ let status = "idle"; // idle | syncing | error | offline
 let lastKnownServerVersion = null; // Supabase `updated_at` of the snapshot we've seen
 let remoteConflict = false;
 
+// Hydration is idempotent at the module level: concurrent callers (React
+// StrictMode runs effects twice in dev) share the same promise, and once
+// we've hydrated a given userId we skip re-running unless the user changes.
+let hydrationPromise = null;
+let hydratedUserId = null;
+
 const listeners = new Set();
 const conflictListeners = new Set();
 
@@ -179,9 +185,16 @@ export function acknowledgeRemoteConflict() {
 }
 
 export function setActiveCloudUser(userId) {
+  const previousUserId = activeUserId;
   activeUserId = userId || null;
   if (!activeUserId) {
     cancelPendingTimer();
+    // Invalidate the hydration cache so a new account on the same tab
+    // forces a fresh download instead of trusting whatever happens to be
+    // sitting in DuckDB right now.
+    if (previousUserId) {
+      resetHydrationCache();
+    }
   }
   notifyListeners();
 }
@@ -320,27 +333,59 @@ export async function hydrateFromCloud(userId) {
     throw new Error("Usuário não autenticado.");
   }
 
-  await initDB();
-  const snapshot = await downloadSnapshotFromCloud(userId);
-  // Anchor the server version we just observed so the conflict detector
-  // can tell future remote writes from our own.
-  try {
-    lastKnownServerVersion = await fetchServerVersion(userId);
-  } catch (versionError) {
-    logError("cloudStorage.fetchServerVersion", versionError);
-    lastKnownServerVersion = null;
+  // Coalesce concurrent calls (e.g., React StrictMode firing the effect
+  // twice in dev). If a hydrate for this user is already in flight, share
+  // the promise. If it already completed, skip — DuckDB already matches
+  // the cloud, so re-running would just race two DELETE+INSERT passes and
+  // trip the PRIMARY KEY constraint.
+  if (hydrationPromise && hydratedUserId === userId) {
+    return hydrationPromise;
+  }
+  if (hydratedUserId === userId && !hydrationPromise) {
+    return { hydrated: true, hadData: false, fromCache: true };
   }
 
-  // Always replay the remote snapshot — even when it's empty — so DuckDB
-  // ends up matching the cloud exactly. If we skip this for first-time
-  // users, stale rows from a previous session (e.g., a different account
-  // signing in on the same browser) would leak into the next upload.
-  const effectiveSnapshot = snapshot ?? createEmptySnapshot();
-  await restoreDatabaseSnapshot(effectiveSnapshot, {
-    allowEmpty: true,
-    emitChange: false,
-  });
-  return { hydrated: true, hadData: Boolean(snapshot && snapshotHasData(snapshot)) };
+  hydratedUserId = userId;
+  hydrationPromise = (async () => {
+    try {
+      await initDB();
+      const snapshot = await downloadSnapshotFromCloud(userId);
+      try {
+        lastKnownServerVersion = await fetchServerVersion(userId);
+      } catch (versionError) {
+        logError("cloudStorage.fetchServerVersion", versionError);
+        lastKnownServerVersion = null;
+      }
+
+      // Always replay the remote snapshot — even when it's empty — so
+      // DuckDB ends up matching the cloud exactly. If we skip this for
+      // first-time users, stale rows from a previous session (e.g., a
+      // different account signing in on the same browser) would leak
+      // into the next upload.
+      const effectiveSnapshot = snapshot ?? createEmptySnapshot();
+      await restoreDatabaseSnapshot(effectiveSnapshot, {
+        allowEmpty: true,
+        emitChange: false,
+      });
+      return {
+        hydrated: true,
+        hadData: Boolean(snapshot && snapshotHasData(snapshot)),
+      };
+    } catch (error) {
+      // Reset so a retry actually runs again.
+      hydratedUserId = null;
+      throw error;
+    } finally {
+      hydrationPromise = null;
+    }
+  })();
+
+  return hydrationPromise;
+}
+
+export function resetHydrationCache() {
+  hydrationPromise = null;
+  hydratedUserId = null;
 }
 
 function createEmptySnapshot() {
