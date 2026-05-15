@@ -6,8 +6,6 @@ export const DEFAULT_STORAGE_INFO = {
   isPersistent: false,
   label: "Armazenamento não inicializado",
   description: "O banco de dados ainda não foi carregado.",
-  path: "",
-  fileName: "",
 };
 
 let storageInfo = { ...DEFAULT_STORAGE_INFO };

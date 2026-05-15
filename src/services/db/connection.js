@@ -43,25 +43,17 @@ export async function flushAfterTransaction() {
   await onAfterTransaction();
 }
 
-function buildMemoryStorageInfo({ supportsFileSelection }) {
+function buildBootStorageInfo() {
+  // Transient state shown during the brief window between DuckDB
+  // initialization and `cloudStorage.notifyListeners()` overriding it
+  // with the real cloud-sync status. Kept generic so the boot flash
+  // doesn't reference the old file-storage model.
   return {
     mode: "memory",
     isPersistent: false,
-    label: "Armazenamento temporário da sessão",
-    description: supportsFileSelection
-      ? "Os dados atuais estão apenas nesta sessão. Para persistir, crie ou abra um arquivo de dados em Configurações."
-      : "Este navegador não disponibilizou a seleção de arquivo necessária. Os dados podem se perder ao fechar ou recarregar a aplicação.",
-    path: "",
-    fileName: "",
+    label: "Inicializando",
+    description: "Preparando o banco de dados local.",
   };
-}
-
-function supportsFileDatabaseSelection() {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.showOpenFilePicker === "function" &&
-    typeof window.showSaveFilePicker === "function"
-  );
 }
 
 async function openDatabase() {
@@ -70,11 +62,7 @@ async function openDatabase() {
   };
 
   await db.open(baseConfig);
-  updateStorageInfo(
-    buildMemoryStorageInfo({
-      supportsFileSelection: supportsFileDatabaseSelection(),
-    }),
-  );
+  updateStorageInfo(buildBootStorageInfo());
 }
 
 export async function initDB() {
@@ -218,5 +206,3 @@ export async function runStructuralReload() {
   await initDB();
   await runSchemaBootstrap(conn, { structural: false });
 }
-
-export { supportsFileDatabaseSelection };

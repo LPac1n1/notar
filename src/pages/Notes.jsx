@@ -269,14 +269,14 @@ export default function Notes() {
   }, [loadNotes]);
 
   // Notes only need to react to events that touch the `notes` table or to
-  // structural events (backup restore, file open). Donor/import/monthly
+  // structural events (backup restore, cloud hydration). Donor/import/monthly
   // mutations don't change the notes list, so we skip them here.
   useDatabaseChangeEffect(() => loadNotes(), {
     sources: [
       "notes",
       "restore",
       "backup-import",
-      "database-file-opened",
+      "cloud-hydrate",
     ],
   });
 

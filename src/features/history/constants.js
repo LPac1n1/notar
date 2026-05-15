@@ -23,7 +23,7 @@ export const ACTION_HISTORY_TYPE_OPTIONS = [
   { value: "export", label: "Exportação" },
   { value: "monthly_abatement_status_update", label: "Abatimento atualizado" },
   { value: "monthly_abatement_status_undo", label: "Abatimento desfeito" },
-  { value: "storage", label: "Arquivo de dados" },
+  { value: "storage", label: "Sincronização" },
   { value: "backup", label: "Backup" },
   { value: "error", label: "Erro registrado" },
 ];
@@ -52,6 +52,6 @@ export const ACTION_HISTORY_TYPE_LABELS = {
   monthly_abatement_status_update: "Abatimento atualizado",
   permanent_delete: "Exclusão definitiva",
   restore: "Restauração",
-  storage: "Arquivo de dados",
+  storage: "Sincronização",
   update: "Edição",
 };

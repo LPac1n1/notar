@@ -75,8 +75,6 @@ function buildCloudStorageInfo(snapshot) {
       label: "Sincronização não configurada",
       description:
         "Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env para sincronizar com a nuvem.",
-      path: "",
-      fileName: "",
     };
   }
   if (!activeUserId) {
@@ -86,8 +84,6 @@ function buildCloudStorageInfo(snapshot) {
       label: "Sessão não autenticada",
       description:
         "Os dados não são gravados até que você entre com sua conta.",
-      path: "",
-      fileName: "",
     };
   }
   return {
@@ -103,8 +99,6 @@ function buildCloudStorageInfo(snapshot) {
       snapshot.status === "error"
         ? "A última gravação não foi salva no servidor. Tentaremos novamente na próxima alteração."
         : "As alterações são salvas automaticamente no Supabase Storage.",
-    path: "",
-    fileName: "",
     lastSyncedAt: snapshot.lastSyncedAt,
     syncStatus: snapshot.status,
   };

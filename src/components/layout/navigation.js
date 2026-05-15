@@ -70,7 +70,7 @@ export const NAV_ITEMS = [
   {
     to: "/configuracoes",
     label: "Configurações",
-    description: "Arquivo de dados, backup e restauração",
+    description: "Sincronização, backup e conta",
     icon: SettingsIcon,
   },
 ];

@@ -1,86 +1,83 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  getDatabaseStorageInfo,
-  STORAGE_INFO_EVENT,
+  getCloudSyncStatus,
+  onCloudSyncStatusChange,
 } from "../../services/db";
+import { useAuth } from "../../hooks/useAuth";
 import {
-  ConnectedIcon,
-  DisconnectedIcon,
+  CloudIcon,
+  CloudOffIcon,
+  RefreshIcon,
 } from "../ui/icons";
 
+function formatLastSync(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function describeStatus(status, lastSyncedAt) {
+  if (status === "syncing") {
+    return {
+      className:
+        "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)]",
+      label: "Sincronizando…",
+      icon: RefreshIcon,
+      iconSpin: true,
+    };
+  }
+  if (status === "error") {
+    return {
+      className:
+        "border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--danger)]",
+      label: "Falha ao sincronizar",
+      icon: CloudOffIcon,
+      iconSpin: false,
+    };
+  }
+  return {
+    className:
+      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
+    label: lastSyncedAt
+      ? `Sincronizado às ${formatLastSync(lastSyncedAt)}`
+      : "Sincronizado",
+    icon: CloudIcon,
+    iconSpin: false,
+  };
+}
+
 export default function Header() {
-  const [storageInfo, setStorageInfo] = useState(null);
+  const { user } = useAuth();
+  const [sync, setSync] = useState(() => getCloudSyncStatus());
 
-  useEffect(() => {
-    let isMounted = true;
+  useEffect(() => onCloudSyncStatusChange(setSync), []);
 
-    const loadStorageInfo = async () => {
-      try {
-        const info = await getDatabaseStorageInfo();
-
-        if (isMounted) {
-          setStorageInfo(info);
-        }
-      } catch {
-        if (isMounted) {
-          setStorageInfo(null);
-        }
-      }
-    };
-
-    const handleStorageInfoChange = (event) => {
-      const nextStorageInfo = event.detail;
-
-      if (isMounted && nextStorageInfo) {
-        setStorageInfo(nextStorageInfo);
-      }
-    };
-
-    loadStorageInfo();
-    window.addEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
-    };
-  }, []);
-
-  const statusTone =
-    storageInfo && storageInfo.isPersistent && storageInfo.fileName
-      ? {
-          className:
-            "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
-          message: `Arquivo conectado: ${storageInfo.fileName}`,
-          label: "Dados salvos",
-          icon: ConnectedIcon,
-        }
-      : {
-          className:
-            "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)]",
-          message: "Nenhum arquivo de dados conectado",
-          label: "Sessão temporária",
-          icon: DisconnectedIcon,
-        };
-
-  const StatusIcon = statusTone.icon;
+  const { className, label, icon: StatusIcon, iconSpin } = describeStatus(
+    sync.status,
+    sync.lastSyncedAt,
+  );
 
   return (
     <header className="flex justify-end">
       <Link
         to="/configuracoes"
-        className={`inline-flex max-w-full items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-muted)] ${statusTone.className}`}
-        title={statusTone.message}
+        className={`inline-flex max-w-full items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-muted)] ${className}`}
+        title={user?.email || label}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-black/12">
-          <StatusIcon className="h-4 w-4" />
+          <StatusIcon
+            className={`h-4 w-4 ${iconSpin ? "animate-spin" : ""}`.trim()}
+          />
         </span>
         <span className="min-w-0">
-          <span className="block text-xs font-medium opacity-75">
-            {statusTone.label}
-          </span>
+          <span className="block text-xs font-medium opacity-75">{label}</span>
           <span className="block truncate font-medium">
-            {statusTone.message}
+            {user?.email || "—"}
           </span>
         </span>
       </Link>
