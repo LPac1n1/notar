@@ -127,9 +127,53 @@ Diagnóstico no commit 91 listou 7 quick wins + 6 estruturais. Quase tudo entreg
 
 **Estado atual:** 58/58 testes passando, lint 0 erros, build OK. Dashboard reduzido em -356 linhas; monthlyService 939→91 (barrel); useMutationAction adotado em 7 handlers entre Demands+People.
 
+### Fase 7 — Sincronização multi-dispositivo via Supabase ✅ CONCLUÍDA (commits 98-100)
+
+Usuário pediu poder usar o sistema em máquinas diferentes sem ter que ficar passando arquivo. Apresentei 3 opções (A: pasta sincronizada de nuvem, B: blob storage com sync no app, C: backend de verdade); ele escolheu B. Stack: **Supabase** (Storage + Magic Link auth).
+
+**Setup no painel do Supabase** (usuário fez):
+- Projeto criado, anon/publishable key copiada.
+- Bucket privado `notar`. Policies via template "Give users access to own folder" — USING expr é `(bucket_id = 'notar' AND (storage.foldername(name))[1] = auth.uid()::text)`, aplicado a authenticated em SELECT/INSERT/UPDATE/DELETE.
+- Auth → Email provider habilitado, Confirm email OFF, Site URL + Redirect URLs apontando pro dev local.
+
+**Commit 98 — Scaffold de auth**:
+- `@supabase/supabase-js` instalado. `.env` + `.env.example` com `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_STORAGE_BUCKET=notar`, `VITE_SUPABASE_STORAGE_OBJECT=dados.json`. `.env` já era gitignored.
+- `services/supabaseClient.js` exporta o singleton client + `getUserStorageObjectPath(userId)` (retorna `{userId}/dados.json`).
+- `contexts/AuthContext.jsx` provê session/user/status. `contexts/authContextValue.js` isola o `createContext` (Fast Refresh exige só componentes no .jsx). `hooks/useAuth.js` lê o contexto.
+- `components/auth/SignInPanel.jsx` — formulário de magic link, redireciona pra `window.location.origin`.
+- `App.jsx` é o gate: `loading` → LoadingScreen; `authenticated` → `<CloudSyncGate>`; senão `<SignInPanel>`.
+
+**Commit 99 — Camada de storage migrada pra Supabase**:
+- `services/db/cloudStorage.js` substitui o antigo `db/storage.js` (deletado). Responsabilidades:
+  - `hydrateFromCloud(userId)`: pré-roteamento, baixa `{userId}/dados.json` e replaya em DuckDB via `restoreDatabaseSnapshot`. 404 → primeiro uso, segue vazio.
+  - `scheduleCloudFlush()`: registrado via `setOnAfterTransaction`. Debounce de 2s — toda transaction reagenda; depois faz upload coalescido. Evita rajada de PUTs.
+  - `flushPendingCloudSync()`: imediato, usado por `beforeunload` e botão "Sincronizar agora".
+  - `setActiveCloudUser(userId)`: só passa a permitir uploads depois que a hidratação termina (evita upload acidental do estado vazio em pleno boot).
+  - `onCloudSyncStatusChange(handler)` + `getCloudSyncStatus()` → status `idle`/`syncing`/`error` + `lastSyncedAt`. Espelhado em `storageInfo` pra Settings UI.
+- `hooks/useCloudSync.js` — observa `useAuth`. Quando `authenticated`, chama `hydrateFromCloud` → `setActiveCloudUser`. Retorna `hydrationStatus` (`idle`/`hydrating`/`ready`/`error`) pro App.
+- `App.jsx` → `<CloudSyncGate>`: mostra LoadingScreen enquanto hidrata; ErrorPanel com "Tentar novamente" em falha; routes em sucesso. Garante que nenhuma página monta antes da hidratação.
+- `Settings.jsx` reescrito: seção "Armazenamento local" virou "Sincronização" com status + última sincronização + e-mail + botão "Sincronizar agora". Removidos handlers `createDatabaseFile`/`openDatabaseFile`/`disconnectDatabaseFile` (UI e barrel). Backup export/import continuam (rede de segurança offline). Nova seção "Conta" com "Sair desta conta".
+
+**Commit 100 — Detecção de conflito entre dispositivos**:
+- `cloudStorage.js` ganha `lastKnownServerVersion` (o `updated_at` do objeto que vimos por último). Atualizado depois de cada hydrate e de cada upload.
+- `checkForRemoteChanges()`: chama `storage.list(userId)` (barato), compara `updated_at` com o anchor. Se diferente → `remoteConflict = true` → `notifyConflictListeners`.
+- Disparado em `window.focus` e `document.visibilitychange === "visible"` (zero polling em background, só quando o usuário volta pra aba).
+- `components/sync/RemoteConflictBanner.jsx`: banner fixo no topo (z-50) com "Recarregar" (window.location.reload) ou "Ignorar" (`acknowledgeRemoteConflict()`). Montado dentro do `CloudSyncGate` autenticado.
+- `onRemoteConflict(handler)` + `acknowledgeRemoteConflict()` exportados via `services/db.js`.
+
+**Estado atual:** 58/58 testes (suíte de migrations não cobre o cloud layer ainda — é tudo browser-only via fetch). Lint 0 erros, build OK. Persistência local-only foi removida; tudo passa pelo Supabase. Backup/import JSON continuam como recurso offline. `.env` no gitignore, anon key segura no frontend (policies do bucket são o gate de verdade).
+
+### O que ficou para uma futura fase (re-revisado)
+
+- Migração para paginação server-side (infra pronta desde Fase 4, sem ROI até ~5k linhas).
+- Extração de `useNoteAutoSave` (precisa de testes E2E antes).
+- TypeScript incremental.
+- Testes automatizados do fluxo de cloud sync (envolve mockar Supabase ou usar a [local CLI](https://supabase.com/docs/guides/cli/local-development) — escopo separado).
+- Compressão do JSON antes do upload (se um dia o snapshot ficar grande; hoje é desprezível).
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 96**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 100**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
