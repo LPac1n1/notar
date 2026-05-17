@@ -83,7 +83,9 @@ export default function Demands() {
   const { dataSyncFeedback, showDataRefreshLoading } =
     useDataRefreshIndicator(isRefreshing);
 
-  useDatabaseChangeEffect(reloadDemands);
+  useDatabaseChangeEffect(reloadDemands, {
+    domains: ["demands"],
+  });
 
   // Two runners share the boilerplate: form mutations push errors into the
   // modal-scoped `formError`; page-level mutations (delete/restore) push to

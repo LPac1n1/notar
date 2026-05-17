@@ -102,13 +102,13 @@ export async function query(sql) {
   return result.toArray();
 }
 
-export async function execute(sql, { flush = true, source } = {}) {
+export async function execute(sql, { domains, flush = true, source } = {}) {
   const connection = await initDB();
   await connection.query(sql);
 
   if (flush && transactionDepth === 0) {
     await flushAfterTransaction();
-    notifyDatabaseChanged(source ? { source } : undefined);
+    notifyDatabaseChanged(source || domains ? { source, domains } : undefined);
   }
 }
 
@@ -138,7 +138,7 @@ export async function queryPrepared(sql, params = []) {
 export async function executePrepared(
   sql,
   params = [],
-  { flush = true, source } = {},
+  { domains, flush = true, source } = {},
 ) {
   const connection = await initDB();
   const stmt = await connection.prepare(sql);
@@ -150,7 +150,7 @@ export async function executePrepared(
 
   if (flush && transactionDepth === 0) {
     await flushAfterTransaction();
-    notifyDatabaseChanged(source ? { source } : undefined);
+    notifyDatabaseChanged(source || domains ? { source, domains } : undefined);
   }
 }
 
@@ -175,7 +175,7 @@ export async function flushDatabase() {
 
 export async function runInTransaction(
   callback,
-  { emitChange = true, changeSource = "transaction" } = {},
+  { changeDomains, emitChange = true, changeSource = "transaction" } = {},
 ) {
   await initDB();
 
@@ -191,7 +191,7 @@ export async function runInTransaction(
     await conn.query("COMMIT");
     await flushAfterTransaction();
     if (emitChange) {
-      notifyDatabaseChanged({ source: changeSource });
+      notifyDatabaseChanged({ source: changeSource, domains: changeDomains });
     }
     return result;
   } catch (error) {

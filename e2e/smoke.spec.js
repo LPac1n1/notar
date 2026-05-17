@@ -15,7 +15,12 @@ test("main flow smoke test", async ({ page }) => {
   );
 
   await page.goto("/");
-  await expect(page.getByText("Nenhum arquivo de dados conectado")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Ainda não há dados suficientes para o dashboard"),
+  ).toBeVisible();
 
   await page.getByRole("link", { name: "Demandas" }).click();
   await page.getByRole("button", { name: "Adicionar demanda" }).click();

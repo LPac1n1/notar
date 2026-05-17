@@ -81,6 +81,7 @@ export async function createDemand({
       VALUES (?, ?, ?, TRUE, CURRENT_TIMESTAMP)
     `,
     [id, trimmedName, normalizedColor],
+    { source: "demands", domains: ["demands"] },
   );
 
   await createActionHistoryEntry({
@@ -152,6 +153,7 @@ export async function updateDemand({
       WHERE id = ?
     `,
     [trimmedName, normalizedColor, id],
+    { source: "demands", domains: ["demands"] },
   );
 
   await executePrepared(
@@ -163,6 +165,7 @@ export async function updateDemand({
       WHERE lower(trim(demand)) = lower(trim(?))
     `,
     [trimmedName, currentName],
+    { source: "demands", domains: ["demands", "donors"] },
   );
 
   await reconcileAllImports();
@@ -223,10 +226,13 @@ export async function deleteDemand(id) {
     },
   });
 
-  await execute(`
-    DELETE FROM demands
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+  await execute(
+    `
+      DELETE FROM demands
+      WHERE id = '${escapeSqlString(id)}'
+    `,
+    { source: "demands", domains: ["demands", "trash"] },
+  );
 
   await createActionHistoryEntry({
     actionType: "delete",

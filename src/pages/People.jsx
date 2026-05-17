@@ -126,7 +126,9 @@ export default function People() {
     loadSupportingData();
   }, [loadSupportingData]);
 
-  useDatabaseChangeEffect(refreshPeople);
+  useDatabaseChangeEffect(refreshPeople, {
+    domains: ["donors", "people"],
+  });
 
   // Three runners share the boilerplate: form mutations route errors to the
   // modal-scoped `formError`, page-level deletes route to the page-level

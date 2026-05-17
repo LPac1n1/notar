@@ -11,6 +11,7 @@ import {
   findPersonById,
 } from "../personService";
 import { normalizePersonName } from "../../utils/normalize";
+import { UserFacingError } from "../../utils/error";
 
 export async function ensureDonationCpfIsAvailable(
   normalizedCpf,
@@ -43,7 +44,7 @@ export async function ensureDonationCpfIsAvailable(
   if (existingLink.length > 0) {
     const holderName =
       existingLink[0].donor_name || existingLink[0].name || "outro doador";
-    throw new Error(`Este CPF já está vinculado a ${holderName}.`);
+    throw new UserFacingError(`Este CPF já está vinculado a ${holderName}.`);
   }
 }
 

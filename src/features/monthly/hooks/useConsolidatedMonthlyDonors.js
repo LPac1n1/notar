@@ -59,6 +59,7 @@ export function useConsolidatedMonthlyDonors({
         holderIsActiveDonor: summary.holderIsActiveDonor,
         cpf: summary.cpf,
         demand: summary.demand,
+        donationStartDate: summary.donationStartDate ?? "",
         months: [],
         totalPending: 0,
         totalApplied: 0,

@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import {
   escapeSqlString,
-  execute,
+  executePrepared,
   normalizeCpf,
   query,
   queryPrepared,
@@ -270,22 +270,20 @@ export async function createPerson({
     throw new Error("Já existe uma pessoa cadastrada com esse CPF.");
   }
 
-  await execute(`
-    INSERT INTO people (
-      id,
-      name,
-      cpf,
-      is_active,
-      updated_at
-    )
-    VALUES (
-      '${escapeSqlString(id)}',
-      '${escapeSqlString(normalizedName)}',
-      '${escapeSqlString(normalizedCpf)}',
-      TRUE,
-      CURRENT_TIMESTAMP
-    )
-  `);
+  await executePrepared(
+    `
+      INSERT INTO people (
+        id,
+        name,
+        cpf,
+        is_active,
+        updated_at
+      )
+      VALUES (?, ?, ?, TRUE, CURRENT_TIMESTAMP)
+    `,
+    [id, normalizedName, normalizedCpf],
+    { source: "people", domains: ["people"] },
+  );
 
   if (recordHistory) {
     await createActionHistoryEntry({
@@ -339,14 +337,18 @@ export async function updatePerson({
     throw new Error("Já existe outra pessoa cadastrada com esse CPF.");
   }
 
-  await execute(`
-    UPDATE people
-    SET
-      name = '${escapeSqlString(normalizedName)}',
-      cpf = '${escapeSqlString(normalizedCpf)}',
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+  await executePrepared(
+    `
+      UPDATE people
+      SET
+        name = ?,
+        cpf = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [normalizedName, normalizedCpf, id],
+    { source: "people", domains: ["people"] },
+  );
 
   await createActionHistoryEntry({
     actionType: "update",
@@ -415,10 +417,14 @@ export async function deletePerson(id) {
     },
   });
 
-  await execute(`
-    DELETE FROM people
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+  await executePrepared(
+    `
+      DELETE FROM people
+      WHERE id = ?
+    `,
+    [id],
+    { source: "people", domains: ["people", "trash"] },
+  );
 
   await createActionHistoryEntry({
     actionType: "delete",

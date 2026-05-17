@@ -1,3 +1,10 @@
+export class UserFacingError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UserFacingError";
+  }
+}
+
 export function getErrorMessage(error, fallbackMessage) {
   try {
     if (error instanceof Error && error.message) {
@@ -20,4 +27,8 @@ export function getErrorMessage(error, fallbackMessage) {
   }
 
   return fallbackMessage;
+}
+
+export function isUserFacingError(error) {
+  return error instanceof UserFacingError || error?.name === "UserFacingError";
 }

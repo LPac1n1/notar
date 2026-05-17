@@ -9,6 +9,7 @@ import SectionCard from "../components/ui/SectionCard";
 import { SkeletonRows } from "../components/ui/Skeleton";
 import { INITIAL_MONTHLY_FILTERS } from "../features/monthly/constants";
 import BulkAbatementModal from "../features/monthly/components/BulkAbatementModal";
+import CatchUpAdjustmentModal from "../features/donors/components/CatchUpAdjustmentModal";
 import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
 import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
 import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
@@ -80,6 +81,7 @@ export default function Monthly() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingJpeg, setIsExportingJpeg] = useState(false);
   const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
+  const [catchUpDonor, setCatchUpDonor] = useState(null);
   const [isBulkAbating, setIsBulkAbating] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
@@ -151,7 +153,9 @@ export default function Monthly() {
   // Monthly cares about almost every database mutation (donor/import/abate
   // change can shift summary rows), but ignore notes — saving an annotation
   // doesn't move any number on this page.
-  useDatabaseChangeEffect(refreshAll, { ignoreSources: ["notes"] });
+  useDatabaseChangeEffect(refreshAll, {
+    domains: ["demands", "donors", "imports", "monthly"],
+  });
 
   const restoredScrollTopRef = useRef(location.state?.monthlyScrollTop ?? null);
   const monthlyOperation = useAsync({ reportGlobal: true });
@@ -232,6 +236,16 @@ export default function Monthly() {
     },
     [getMonthlyNavigationState, navigate],
   );
+
+  const handleOpenCatchUp = useCallback((donor) => {
+    setCatchUpDonor({
+      id: donor.donorId,
+      name: donor.donorName,
+      donationStartDateValue: donor.donationStartDate
+        ? donor.donationStartDate.slice(0, 7)
+        : "",
+    });
+  }, []);
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
@@ -856,6 +870,7 @@ export default function Monthly() {
           ) : (
             <ConsolidatedPendingDonors
               donors={filteredConsolidatedDonors}
+              onCatchUp={handleOpenCatchUp}
               onOpenDonor={handleOpenDonorProfile}
               onStatusChange={handleConsolidatedDonorStatusChange}
               updatingDonorId={updatingDonorId}
@@ -899,6 +914,17 @@ export default function Monthly() {
           onApply={handleBulkAbate}
           onClose={() => setShowBulkAbatementModal(false)}
           isApplying={isBulkAbating}
+        />
+      ) : null}
+
+      {catchUpDonor ? (
+        <CatchUpAdjustmentModal
+          donor={catchUpDonor}
+          onClose={() => setCatchUpDonor(null)}
+          onConfirmed={() => {
+            setCatchUpDonor(null);
+            reloadSummaries();
+          }}
         />
       ) : null}
     </div>

@@ -272,12 +272,7 @@ export default function Notes() {
   // structural events (backup restore, cloud hydration). Donor/import/monthly
   // mutations don't change the notes list, so we skip them here.
   useDatabaseChangeEffect(() => loadNotes(), {
-    sources: [
-      "notes",
-      "restore",
-      "backup-import",
-      "cloud-hydrate",
-    ],
+    domains: ["notes"],
   });
 
   useEffect(() => {

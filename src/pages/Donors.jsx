@@ -41,7 +41,7 @@ import { useDataResource } from "../hooks/useDataResource";
 import { logError } from "../services/logger";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
-import { getErrorMessage } from "../utils/error";
+import { getErrorMessage, isUserFacingError } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import {
   getFirstValidationError,
@@ -239,7 +239,9 @@ export default function Donors() {
     await Promise.all([loadSupportingData(), reloadDonors()]);
   }, [loadSupportingData, reloadDonors]);
 
-  useDatabaseChangeEffect(refreshDonors);
+  useDatabaseChangeEffect(refreshDonors, {
+    domains: ["demands", "donors", "imports", "monthly", "people"],
+  });
 
   const handleRestoreDeletedDonor = useCallback(
     async (trashItemId) => {
@@ -354,7 +356,9 @@ export default function Donors() {
       );
       await refreshDonors();
     } catch (err) {
-      logError("DonorsPage.create", err);
+      if (!isUserFacingError(err)) {
+        logError("DonorsPage.create", err);
+      }
       setFormError(getErrorMessage(err, "Não foi possível adicionar o doador."));
     } finally {
       setIsSubmitting(false);
@@ -419,7 +423,9 @@ export default function Donors() {
       );
       await refreshDonors();
     } catch (err) {
-      logError("DonorsPage.update", err);
+      if (!isUserFacingError(err)) {
+        logError("DonorsPage.update", err);
+      }
       setFormError(getErrorMessage(err, "Não foi possível atualizar o doador."));
     } finally {
       setIsSubmitting(false);

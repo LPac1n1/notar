@@ -66,7 +66,9 @@ export default function DonorProfile() {
   const { dataSyncFeedback, showDataRefreshLoading } =
     useDataRefreshIndicator(isRefreshing);
 
-  useDatabaseChangeEffect(loadProfile);
+  useDatabaseChangeEffect(loadProfile, {
+    domains: ["demands", "donors", "imports", "monthly", "people"],
+  });
 
   const backTarget = location.state?.from ?? {
     label: "Voltar para doadores",

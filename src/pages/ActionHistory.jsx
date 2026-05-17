@@ -93,7 +93,9 @@ export default function ActionHistory() {
     loadHistory(debouncedFilters);
   }, [debouncedFilters, loadHistory]);
 
-  useDatabaseChangeEffect(() => loadHistory(filters));
+  useDatabaseChangeEffect(() => loadHistory(filters), {
+    domains: ["history"],
+  });
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;

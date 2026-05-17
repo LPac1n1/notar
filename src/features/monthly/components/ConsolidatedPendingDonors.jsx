@@ -18,6 +18,7 @@ function getMonthButtonClassName(isApplied) {
 
 export default function ConsolidatedPendingDonors({
   donors,
+  onCatchUp,
   onOpenDonor,
   onStatusChange,
   updatingDonorId = "",
@@ -187,6 +188,17 @@ export default function ConsolidatedPendingDonors({
                         </p>
                       </div>
                     </div>
+
+                    {pendingMonths.length > 1 ? (
+                      <Button
+                        variant="subtle"
+                        className="w-full"
+                        disabled={isUpdating}
+                        onClick={() => onCatchUp?.(donor)}
+                      >
+                        Lançar acumulado
+                      </Button>
+                    ) : null}
 
                     {pendingMonths.length > 0 ? (
                       <Button

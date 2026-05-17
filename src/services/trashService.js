@@ -51,6 +51,26 @@ function parsePayload(payloadJson) {
   }
 }
 
+function getTrashEntityDomains(entityType) {
+  if (entityType === "demand") {
+    return ["demands", "trash", "history"];
+  }
+
+  if (entityType === "person") {
+    return ["people", "trash", "history"];
+  }
+
+  if (entityType === "donor") {
+    return ["donors", "people", "imports", "monthly", "trash", "history"];
+  }
+
+  if (entityType === "import") {
+    return ["imports", "monthly", "trash", "history"];
+  }
+
+  return ["trash", "history"];
+}
+
 export async function createTrashItem({
   id = nanoid(),
   entityType,
@@ -75,6 +95,7 @@ export async function createTrashItem({
       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `,
     [id, entityType, entityId, label, JSON.stringify(payload ?? {})],
+    { source: "trash", domains: ["trash"] },
   );
 
   return id;
@@ -368,33 +389,39 @@ export async function restoreTrashItem(id) {
     entityId: trashItem.entity_id,
   };
 
-  await runInTransaction(async () => {
-    if (trashItem.entity_type === "demand") {
-      await restoreDemand(payload);
-    } else if (trashItem.entity_type === "person") {
-      await restorePerson(payload);
-    } else if (trashItem.entity_type === "donor") {
-      await restoreDonor(payload);
-    } else if (trashItem.entity_type === "import") {
-      await restoreImport(payload);
-    } else {
-      throw new Error("Tipo de item da lixeira não suportado.");
-    }
+  await runInTransaction(
+    async () => {
+      if (trashItem.entity_type === "demand") {
+        await restoreDemand(payload);
+      } else if (trashItem.entity_type === "person") {
+        await restorePerson(payload);
+      } else if (trashItem.entity_type === "donor") {
+        await restoreDonor(payload);
+      } else if (trashItem.entity_type === "import") {
+        await restoreImport(payload);
+      } else {
+        throw new Error("Tipo de item da lixeira não suportado.");
+      }
 
-    await execute(`
-      DELETE FROM trash_items
-      WHERE id = '${escapeSqlString(id)}'
-    `);
+      await execute(`
+        DELETE FROM trash_items
+        WHERE id = '${escapeSqlString(id)}'
+      `);
 
-    await createActionHistoryEntry({
-      actionType: "restore",
-      entityType: trashItem.entity_type,
-      entityId: trashItem.entity_id,
-      label: trashItem.label,
-      description: `${trashItem.label} restaurado da lixeira.`,
-      payload: {
-        trashItemId: trashItem.id,
-      },
-    });
-  });
+      await createActionHistoryEntry({
+        actionType: "restore",
+        entityType: trashItem.entity_type,
+        entityId: trashItem.entity_id,
+        label: trashItem.label,
+        description: `${trashItem.label} restaurado da lixeira.`,
+        payload: {
+          trashItemId: trashItem.id,
+        },
+      });
+    },
+    {
+      changeDomains: getTrashEntityDomains(trashItem.entity_type),
+      changeSource: "trash-restore",
+    },
+  );
 }

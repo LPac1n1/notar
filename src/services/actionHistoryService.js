@@ -68,6 +68,7 @@ export async function createActionHistoryEntry({
       description,
       JSON.stringify(payload ?? {}),
     ],
+    { source: "history", domains: ["history"] },
   );
 
   return id;

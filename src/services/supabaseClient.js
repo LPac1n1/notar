@@ -11,13 +11,16 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const isLocalAuthMode =
+  import.meta.env.VITE_NOTAR_AUTH_MODE === "local";
 
 export const STORAGE_BUCKET =
   import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "notar";
 export const STORAGE_OBJECT_NAME =
   import.meta.env.VITE_SUPABASE_STORAGE_OBJECT || "dados.json";
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured =
+  !isLocalAuthMode && Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {

@@ -223,7 +223,9 @@ export default function Imports() {
     ]);
   }, [loadAvailableImports, reloadImportHistory, reloadCpfSummary]);
 
-  useDatabaseChangeEffect(refreshImports);
+  useDatabaseChangeEffect(refreshImports, {
+    domains: ["demands", "donors", "imports", "monthly"],
+  });
 
   const handleRestoreDeletedImport = useCallback(
     async (trashItemId) => {

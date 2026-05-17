@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
   const [state, setState] = useState(() =>
     isSupabaseConfigured
       ? { session: null, user: null, status: "loading" }
-      : { session: null, user: null, status: "unconfigured" },
+      : { session: null, user: null, status: "local" },
   );
 
   useEffect(() => {
