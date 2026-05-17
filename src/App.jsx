@@ -3,6 +3,7 @@ import GlobalAsyncFeedback from "./components/ui/GlobalAsyncFeedback";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import FeedbackMessage from "./components/ui/FeedbackMessage";
 import Button from "./components/ui/Button";
+import ErrorBoundary from "./components/ui/ErrorBoundary";
 import SignInPanel from "./components/auth/SignInPanel";
 import RemoteConflictBanner from "./components/sync/RemoteConflictBanner";
 import { useAuth } from "./hooks/useAuth";
@@ -14,11 +15,13 @@ function CloudSyncGate() {
 
   if (hydrationStatus === "ready") {
     return (
-      <>
-        <AppRoutes />
-        <GlobalAsyncFeedback />
-        <RemoteConflictBanner />
-      </>
+      <ErrorBoundary>
+        <>
+          <AppRoutes />
+          <GlobalAsyncFeedback />
+          <RemoteConflictBanner />
+        </>
+      </ErrorBoundary>
     );
   }
 
@@ -62,6 +65,17 @@ function CloudSyncGate() {
   );
 }
 
+function LocalAppShell() {
+  return (
+    <ErrorBoundary>
+      <>
+        <AppRoutes />
+        <GlobalAsyncFeedback />
+      </>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   const { status } = useAuth();
 
@@ -80,6 +94,10 @@ export default function App() {
 
   if (status === "authenticated") {
     return <CloudSyncGate />;
+  }
+
+  if (status === "local") {
+    return <LocalAppShell />;
   }
 
   return <SignInPanel />;

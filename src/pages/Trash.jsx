@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -14,127 +14,88 @@ import {
   listTrashItems,
   restoreTrashItem,
 } from "../services/trashService";
-import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
+import { useDataResource } from "../hooks/useDataResource";
+import { useMutationAction } from "../hooks/useMutationAction";
 
 export default function Trash() {
-  const [trashItems, setTrashItems] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [trashItemPendingPermanentDelete, setTrashItemPendingPermanentDelete] =
     useState(null);
   const [isClearTrashConfirmOpen, setIsClearTrashConfirmOpen] = useState(false);
-  const trashRequestIdRef = useRef(0);
-  const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshIndicator();
 
-  const refreshTrashItems = useCallback(async () => {
-    const requestId = trashRequestIdRef.current + 1;
-    trashRequestIdRef.current = requestId;
+  const {
+    data: trashItems,
+    isLoading,
+    isRefreshing,
+    error,
+    reload: reloadTrash,
+  } = useDataResource({
+    loader: () => listTrashItems(),
+    filters: {},
+    errorMessage: "Não foi possível carregar os itens da lixeira.",
+    scope: "TrashPage",
+  });
 
-    try {
-      setError("");
-      const trashRows = await listTrashItems();
+  const { dataSyncFeedback, showDataRefreshLoading } =
+    useDataRefreshIndicator(isRefreshing);
 
-      if (requestId !== trashRequestIdRef.current) {
-        return;
-      }
+  useDatabaseChangeEffect(reloadTrash, { domains: ["trash"] });
 
-      setTrashItems(trashRows);
-    } catch (trashError) {
-      if (requestId !== trashRequestIdRef.current) {
-        return;
-      }
+  const runMutation = useMutationAction({
+    setError: setFormError,
+    setSuccessMessage,
+    setBusy: setIsSubmitting,
+    reload: reloadTrash,
+  });
 
-      setError(
-        getErrorMessage(
-          trashError,
-          "Não foi possível carregar os itens da lixeira.",
-        ),
-      );
-    } finally {
-      if (requestId === trashRequestIdRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshTrashItems();
-  }, [refreshTrashItems]);
-
-  useDatabaseChangeEffect(refreshTrashItems);
-
-  const handleRestoreTrashItem = async (item) => {
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      await restoreTrashItem(item.id);
-      await refreshTrashItems();
-      setSuccessMessage(`${item.label} foi restaurado com sucesso.`);
-    } catch (trashError) {
-      setError(
-        getErrorMessage(trashError, "Não foi possível restaurar o item."),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleRestoreTrashItem = (item) => {
+    runMutation({
+      scope: "TrashPage.restore",
+      run: () => restoreTrashItem(item.id),
+      successMessage: `${item.label} foi restaurado com sucesso.`,
+      errorMessage: "Não foi possível restaurar o item.",
+    });
   };
 
-  const handlePermanentDeleteTrashItem = async () => {
-    if (!trashItemPendingPermanentDelete) {
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      await deleteTrashItemPermanently(trashItemPendingPermanentDelete.id);
-      await refreshTrashItems();
-      setTrashItemPendingPermanentDelete(null);
-      setSuccessMessage("Item removido permanentemente da lixeira.");
-    } catch (trashError) {
-      setError(
-        getErrorMessage(
-          trashError,
-          "Não foi possível excluir o item permanentemente.",
-        ),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handlePermanentDeleteTrashItem = () => {
+    if (!trashItemPendingPermanentDelete) return;
+    runMutation({
+      scope: "TrashPage.permanentDelete",
+      run: () => deleteTrashItemPermanently(trashItemPendingPermanentDelete.id),
+      successMessage: "Item removido permanentemente da lixeira.",
+      errorMessage: "Não foi possível excluir o item permanentemente.",
+      onSuccess: () => setTrashItemPendingPermanentDelete(null),
+    });
   };
 
-  const handleClearTrash = async () => {
-    try {
-      setIsSubmitting(true);
-      setError("");
-      setSuccessMessage("");
-      await deleteAllTrashItemsPermanently();
-      await refreshTrashItems();
-      setIsClearTrashConfirmOpen(false);
-      setSuccessMessage("A lixeira foi esvaziada com sucesso.");
-    } catch (trashError) {
-      setError(
-        getErrorMessage(
-          trashError,
-          "Não foi possível apagar todos os itens da lixeira.",
-        ),
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleClearTrash = () => {
+    runMutation({
+      scope: "TrashPage.clearAll",
+      run: () => deleteAllTrashItemsPermanently(),
+      successMessage: "A lixeira foi esvaziada com sucesso.",
+      errorMessage: "Não foi possível apagar todos os itens da lixeira.",
+      onSuccess: () => setIsClearTrashConfirmOpen(false),
+    });
   };
+
+  const displayError =
+    isClearTrashConfirmOpen || trashItemPendingPermanentDelete
+      ? ""
+      : formError || error;
 
   if (isLoading && !error) {
     return (
       <div>
-        <PageHeader title="Lixeira" subtitle="Itens removidos do sistema." className="mb-6" />
+        <PageHeader
+          title="Lixeira"
+          subtitle="Itens removidos do sistema."
+          className="mb-6"
+        />
         <LoadingScreen
           title="Abrindo a lixeira"
           description="Carregando itens removidos."
@@ -150,12 +111,7 @@ export default function Trash() {
         subtitle={`${formatInteger(trashItems.length)} item(ns) disponível(is) para restauração.`}
         className="mb-6"
       />
-      <FeedbackMessage
-        message={
-          isClearTrashConfirmOpen || trashItemPendingPermanentDelete ? "" : error
-        }
-        tone="error"
-      />
+      <FeedbackMessage message={displayError} tone="error" />
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard title="Itens removidos">
@@ -187,7 +143,9 @@ export default function Trash() {
                 className="flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div className="space-y-1">
-                  <p className="font-semibold text-[var(--text-main)]">{item.label}</p>
+                  <p className="font-semibold text-[var(--text-main)]">
+                    {item.label}
+                  </p>
                   <p className="text-sm text-[var(--muted)]">
                     {item.entityType} • Removido em {item.deletedAt}
                   </p>
@@ -221,7 +179,7 @@ export default function Trash() {
             title="Apagar tudo"
             description="Todos os itens da lixeira serão removidos permanentemente. Deseja continuar?"
             confirmLabel="Apagar tudo"
-            feedbackMessage={error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onCancel={() => setIsClearTrashConfirmOpen(false)}
             onConfirm={handleClearTrash}
@@ -236,7 +194,7 @@ export default function Trash() {
             title="Excluir permanentemente"
             description={`Esta ação remove ${trashItemPendingPermanentDelete.label} da lixeira e não poderá ser desfeita.`}
             confirmLabel="Excluir permanentemente"
-            feedbackMessage={error}
+            feedbackMessage={formError}
             isLoading={isSubmitting}
             onCancel={() => setTrashItemPendingPermanentDelete(null)}
             onConfirm={handlePermanentDeleteTrashItem}

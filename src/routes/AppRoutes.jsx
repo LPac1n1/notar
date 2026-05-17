@@ -13,6 +13,7 @@ import Notes from "../pages/Notes";
 import ActionHistory from "../pages/ActionHistory";
 import Settings from "../pages/Settings";
 import Trash from "../pages/Trash";
+import NotFound from "../pages/NotFound";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -32,6 +33,7 @@ function AnimatedRoutes() {
           <Route path="/lixeira" element={<Trash />} />
           <Route path="/historico" element={<ActionHistory />} />
           <Route path="/configuracoes" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </PageTransition>
     </Layout>

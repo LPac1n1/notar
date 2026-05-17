@@ -10,16 +10,7 @@ import {
   CloudOffIcon,
   RefreshIcon,
 } from "../ui/icons";
-
-function formatLastSync(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { formatSyncTime } from "../../utils/date";
 
 function describeStatus(status, lastSyncedAt) {
   if (status === "syncing") {
@@ -44,7 +35,7 @@ function describeStatus(status, lastSyncedAt) {
     className:
       "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
     label: lastSyncedAt
-      ? `Sincronizado às ${formatLastSync(lastSyncedAt)}`
+      ? `Sincronizado às ${formatSyncTime(lastSyncedAt)}`
       : "Sincronizado",
     icon: CloudIcon,
     iconSpin: false,
@@ -52,15 +43,21 @@ function describeStatus(status, lastSyncedAt) {
 }
 
 export default function Header() {
-  const { user } = useAuth();
+  const { status: authStatus, user } = useAuth();
   const [sync, setSync] = useState(() => getCloudSyncStatus());
 
   useEffect(() => onCloudSyncStatusChange(setSync), []);
 
-  const { className, label, icon: StatusIcon, iconSpin } = describeStatus(
-    sync.status,
-    sync.lastSyncedAt,
-  );
+  const isLocalMode = authStatus === "local";
+  const { className, label, icon: StatusIcon, iconSpin } = isLocalMode
+    ? {
+        className:
+          "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)]",
+        label: "Modo local",
+        icon: CloudOffIcon,
+        iconSpin: false,
+      }
+    : describeStatus(sync.status, sync.lastSyncedAt);
 
   return (
     <header className="flex justify-end">
@@ -77,7 +74,7 @@ export default function Header() {
         <span className="min-w-0">
           <span className="block text-xs font-medium opacity-75">{label}</span>
           <span className="block truncate font-medium">
-            {user?.email || "—"}
+            {user?.email || (isLocalMode ? "Arquivo local" : "—")}
           </span>
         </span>
       </Link>

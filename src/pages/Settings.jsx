@@ -31,7 +31,7 @@ import {
 } from "../services/dataSyncFeedback";
 import { reconcileAllImports } from "../services/importService";
 import { downloadFile } from "../utils/download";
-import { formatDatePtBR } from "../utils/date";
+import { formatDatePtBR, formatSyncTime } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 
@@ -52,12 +52,8 @@ function formatBackupStats(stats = {}) {
 
 function formatLastSyncedAt(value) {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  const time = date.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const time = formatSyncTime(value);
+  if (!time) return "—";
   return `${formatDatePtBR(value)} às ${time}`;
 }
 
@@ -84,7 +80,7 @@ function waitForDataSyncHandoff() {
 }
 
 export default function Settings() {
-  const { user, signOut } = useAuth();
+  const { status: authStatus, user, signOut } = useAuth();
   const [storageInfo, setStorageInfo] = useState(null);
   const [syncSnapshot, setSyncSnapshot] = useState(() => getCloudSyncStatus());
   const [error, setError] = useState("");
@@ -93,9 +89,11 @@ export default function Settings() {
   const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [backupInputKey, setBackupInputKey] = useState(0);
   const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [dataSyncMessage, setDataSyncMessage] = useState("");
   const isLoadingStorage = storageInfo === null && !error;
   const isApplyingData = Boolean(dataSyncMessage);
+  const isLocalMode = authStatus === "local";
 
   useEffect(() => {
     let isMounted = true;
@@ -273,6 +271,7 @@ export default function Settings() {
       await signOut();
     } catch (signOutError) {
       logError("Settings.signOut", signOutError);
+      setIsSignOutConfirmOpen(false);
       setError(
         getErrorMessage(signOutError, "Não foi possível encerrar a sessão."),
       );
@@ -304,6 +303,9 @@ export default function Settings() {
   };
 
   const syncStatusBadge = (() => {
+    if (isLocalMode) {
+      return { tone: "muted", label: "Modo local ativo" };
+    }
     if (syncSnapshot.status === "syncing") {
       return { tone: "info", label: "Sincronizando…" };
     }
@@ -320,7 +322,11 @@ export default function Settings() {
     <div>
       <PageHeader
         title="Configurações"
-        subtitle="Sincronização, backup e conta."
+        subtitle={
+          isLocalMode
+            ? "Armazenamento local, backup e diagnóstico."
+            : "Sincronização, backup e conta."
+        }
         className="mb-6"
       />
       <FeedbackMessage
@@ -330,8 +336,12 @@ export default function Settings() {
       <FeedbackMessage message={successMessage} tone="success" />
 
       <SectionCard
-        title="Sincronização"
-        description="Seus dados ficam salvos automaticamente no Supabase. Não precisa abrir nem salvar arquivo."
+        title={isLocalMode ? "Armazenamento local" : "Sincronização"}
+        description={
+          isLocalMode
+            ? "Seus dados ficam salvos neste dispositivo. Use backups para transportar ou restaurar informações."
+            : "Seus dados ficam salvos automaticamente no Supabase. Não precisa abrir nem salvar arquivo."
+        }
         className="mb-6"
       >
         {isLoadingStorage ? (
@@ -361,30 +371,40 @@ export default function Settings() {
               </p>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                <p className="text-sm text-[var(--muted)]">Última sincronização</p>
-                <p className="font-medium text-[var(--text-main)]">
-                  {formatLastSyncedAt(syncSnapshot.lastSyncedAt)}
-                </p>
-              </div>
-              <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                <p className="text-sm text-[var(--muted)]">Conta sincronizada</p>
-                <p className="font-medium text-[var(--text-main)] break-all">
-                  {user?.email || "—"}
-                </p>
-              </div>
-            </div>
+            {!isLocalMode ? (
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                    <p className="text-sm text-[var(--muted)]">
+                      Última sincronização
+                    </p>
+                    <p className="font-medium text-[var(--text-main)]">
+                      {formatLastSyncedAt(syncSnapshot.lastSyncedAt)}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+                    <p className="text-sm text-[var(--muted)]">
+                      Conta sincronizada
+                    </p>
+                    <p className="font-medium text-[var(--text-main)] break-all">
+                      {user?.email || "—"}
+                    </p>
+                  </div>
+                </div>
 
-            <div className="pt-1">
-              <Button
-                variant="subtle"
-                onClick={handleForceSync}
-                disabled={isSubmitting || syncSnapshot.status === "syncing"}
-              >
-                Sincronizar agora
-              </Button>
-            </div>
+                <div className="pt-1">
+                  <Button
+                    variant="subtle"
+                    onClick={handleForceSync}
+                    disabled={
+                      isSubmitting || syncSnapshot.status === "syncing"
+                    }
+                  >
+                    Sincronizar agora
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : (
           <p className="text-sm text-[var(--muted)]">
@@ -418,7 +438,10 @@ export default function Settings() {
                 Restaurar backup
               </p>
               <p className="text-sm text-[var(--muted)]">
-                Substitui os dados atuais do sistema pelos do arquivo escolhido. A nuvem é atualizada na sequência.
+                Substitui os dados atuais do sistema pelos do arquivo escolhido.
+                {isLocalMode
+                  ? ""
+                  : " A nuvem é atualizada na sequência."}
               </p>
             </div>
 
@@ -453,27 +476,29 @@ export default function Settings() {
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Conta"
-        description="Sessão atual deste dispositivo."
-        className="mb-6"
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-sm text-[var(--muted)]">E-mail</p>
-            <p className="font-medium text-[var(--text-main)] break-all">
-              {user?.email || "—"}
-            </p>
+      {!isLocalMode ? (
+        <SectionCard
+          title="Conta"
+          description="Sessão atual deste dispositivo."
+          className="mb-6"
+        >
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-[var(--muted)]">E-mail</p>
+              <p className="font-medium text-[var(--text-main)] break-all">
+                {user?.email || "—"}
+              </p>
+            </div>
+            <Button
+              variant="subtle"
+              onClick={() => setIsSignOutConfirmOpen(true)}
+              disabled={isSubmitting}
+            >
+              Sair desta conta
+            </Button>
           </div>
-          <Button
-            variant="subtle"
-            onClick={handleSignOut}
-            disabled={isSubmitting}
-          >
-            Sair desta conta
-          </Button>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         title="Diagnóstico"
@@ -505,6 +530,20 @@ export default function Settings() {
             isDisabled={isSubmitting}
             onCancel={() => setIsImportBackupConfirmOpen(false)}
             onConfirm={handleImportBackup}
+            tone="danger"
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSignOutConfirmOpen ? (
+          <ConfirmModal
+            title="Sair desta conta"
+            description="Você será desconectado desta sessão. Para entrar novamente será necessário usar o link mágico enviado por e-mail."
+            confirmLabel="Sair"
+            isLoading={isSubmitting}
+            onCancel={() => setIsSignOutConfirmOpen(false)}
+            onConfirm={handleSignOut}
             tone="danger"
           />
         ) : null}

@@ -11,6 +11,44 @@ export const DEFAULT_STORAGE_INFO = {
 let storageInfo = { ...DEFAULT_STORAGE_INFO };
 let dataChangeVersion = 0;
 
+const SOURCE_DOMAIN_MAP = {
+  "backup-import": ["database"],
+  "cloud-hydrate": ["database"],
+  "cpf-reconcile": ["imports", "monthly"],
+  "database-file-opened": ["database"],
+  history: ["history"],
+  import: ["imports", "monthly", "history"],
+  "monthly-action-history": ["monthly", "history"],
+  notes: ["notes", "history"],
+  "reconcile-all-imports": ["imports", "monthly"],
+  "reconcile-import": ["imports", "monthly"],
+  restore: ["database"],
+};
+
+function normalizeDomains(detail = {}) {
+  const explicitDomains = Array.isArray(detail.domains)
+    ? detail.domains
+    : typeof detail.domain === "string"
+      ? [detail.domain]
+      : [];
+
+  const domains = explicitDomains.length
+    ? explicitDomains
+    : SOURCE_DOMAIN_MAP[detail.source] ?? [];
+
+  return Array.from(
+    new Set(
+      domains
+        .map((domain) => String(domain ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+export function getDataChangeDomains(detail = {}) {
+  return normalizeDomains(detail);
+}
+
 export function getStorageInfoSnapshot() {
   return { ...storageInfo };
 }
@@ -29,6 +67,7 @@ export function updateStorageInfo(nextStorageInfo) {
 
 export function notifyDatabaseChanged(detail = {}) {
   dataChangeVersion += 1;
+  const domains = normalizeDomains(detail);
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -36,6 +75,7 @@ export function notifyDatabaseChanged(detail = {}) {
         detail: {
           version: dataChangeVersion,
           source: detail.source ?? "database",
+          domains,
         },
       }),
     );

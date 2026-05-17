@@ -200,6 +200,54 @@ function cancelPendingTimer() {
   }
 }
 
+// Compress a JSON string with gzip. Falls back to uncompressed if
+// CompressionStream is not available (older Safari / non-standard envs).
+async function compressPayload(jsonString) {
+  if (typeof CompressionStream === "undefined") {
+    return {
+      blob: new Blob([jsonString], { type: "application/json" }),
+      contentType: "application/json",
+    };
+  }
+  try {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(jsonString));
+        controller.close();
+      },
+    });
+    const compressed = stream.pipeThrough(new CompressionStream("gzip"));
+    const blob = await new Response(compressed).blob();
+    return { blob, contentType: "application/gzip" };
+  } catch {
+    return {
+      blob: new Blob([jsonString], { type: "application/json" }),
+      contentType: "application/json",
+    };
+  }
+}
+
+// Read a Blob that may be gzip-compressed (detected by magic bytes 1f 8b).
+// Backward-compatible: uncompressed JSON blobs are returned as-is.
+async function readSnapshotBlob(blob) {
+  try {
+    const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+    if (
+      header[0] === 0x1f &&
+      header[1] === 0x8b &&
+      typeof DecompressionStream !== "undefined"
+    ) {
+      const decompressed = blob
+        .stream()
+        .pipeThrough(new DecompressionStream("gzip"));
+      return new Response(decompressed).text();
+    }
+  } catch {
+    // Fall through to plain text if decompression fails unexpectedly.
+  }
+  return blob.text();
+}
+
 export async function downloadSnapshotFromCloud(userId) {
   if (!isSupabaseConfigured) return null;
   if (!userId) return null;
@@ -225,7 +273,7 @@ export async function downloadSnapshotFromCloud(userId) {
   }
 
   if (!data) return null;
-  const text = await data.text();
+  const text = await readSnapshotBlob(data);
   if (!text.trim()) return null;
 
   let parsed;
@@ -260,14 +308,14 @@ async function uploadSnapshotImmediate(userId) {
       const snapshot = await exportDatabaseSnapshot();
       const payload = createSnapshotPayload(snapshot);
       const path = getUserStorageObjectPath(userId);
-      const body = new Blob([JSON.stringify(payload)], {
-        type: "application/json",
-      });
+      const { blob: body, contentType } = await compressPayload(
+        JSON.stringify(payload),
+      );
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(path, body, {
           upsert: true,
-          contentType: "application/json",
+          contentType,
           cacheControl: "0",
         });
       if (error) throw error;
@@ -319,6 +367,21 @@ export async function flushPendingCloudSync() {
   await uploadSnapshotImmediate(activeUserId);
 }
 
+function localizeHydrationError(error) {
+  // Messages from our own code already contain Portuguese (accent chars / ç/ã)
+  if (/[àáâãéêíóôõúüç]/i.test(error?.message ?? "")) {
+    return error;
+  }
+  const lower = String(error?.message ?? "").toLowerCase();
+  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("err_network")) {
+    return new Error("Não foi possível conectar ao servidor. Verifique sua conexão.", { cause: error });
+  }
+  if (lower.includes("unauthorized") || lower.includes("invalid jwt") || lower.includes("jwt expired") || lower.includes("401") || lower.includes("403")) {
+    return new Error("Sessão expirada. Recarregue a página para entrar novamente.", { cause: error });
+  }
+  return new Error("Não foi possível baixar os dados da nuvem. Verifique sua conexão e tente novamente.", { cause: error });
+}
+
 export async function hydrateFromCloud(userId) {
   if (!isSupabaseConfigured) {
     return { hydrated: false, hadData: false };
@@ -368,7 +431,7 @@ export async function hydrateFromCloud(userId) {
     } catch (error) {
       // Reset so a retry actually runs again.
       hydratedUserId = null;
-      throw error;
+      throw localizeHydrationError(error);
     } finally {
       hydrationPromise = null;
     }
