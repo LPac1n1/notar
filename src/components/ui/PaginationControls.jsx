@@ -32,7 +32,7 @@ export default function PaginationControls({
         <span className="font-medium text-[var(--text-main)]">
           {totalItems}
         </span>{" "}
-        registro(s)
+        {totalItems === 1 ? "registro" : "registros"}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

@@ -40,11 +40,11 @@ const TONE_STYLES = {
   },
   warning: {
     container:
-      "border-[color:var(--warning-line)] bg-[color:var(--accent-soft)] text-[color:var(--text-main)] shadow-[var(--shadow-toast)]",
+      "border-[color:var(--warning-line)] bg-[color:var(--warning-soft)] text-[color:var(--text-main)] shadow-[var(--shadow-toast)]",
     bar: "bg-[color:var(--warning)]",
     button: "text-[color:var(--warning)] hover:bg-black/10",
     icon: DisconnectedIcon,
-    iconWrap: "bg-[rgba(255,210,77,0.12)] text-[var(--warning)]",
+    iconWrap: "bg-[rgba(245,158,11,0.12)] text-[var(--warning)]",
   },
 };
 
@@ -109,7 +109,6 @@ function ToastMessage({
   const didExpireRef = useRef(false);
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
   const ToneIcon = toneStyles.icon;
-  const remainingSeconds = Math.ceil(remainingMs / 1000);
 
   useEffect(() => {
     if (!isVisible || isPaused) {
@@ -201,12 +200,6 @@ function ToastMessage({
                 {actionLabel}
               </button>
             ) : null}
-            <span
-              aria-label={`Tempo restante: ${remainingSeconds} segundo(s)`}
-              className="rounded-md bg-black/5 px-2 py-1 text-xs font-semibold text-[var(--muted-strong)]"
-            >
-              {remainingSeconds}s
-            </span>
             <button
               type="button"
               aria-label="Fechar toast"

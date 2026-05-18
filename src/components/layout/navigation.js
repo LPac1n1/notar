@@ -11,7 +11,7 @@ import {
   UserIcon,
 } from "../ui/icons";
 
-export const NAV_ITEMS = [
+export const MAIN_NAV_ITEMS = [
   {
     to: "/",
     label: "Dashboard",
@@ -55,6 +55,9 @@ export const NAV_ITEMS = [
     description: "Registros internos rápidos",
     icon: NotesIcon,
   },
+];
+
+export const FOOTER_NAV_ITEMS = [
   {
     to: "/lixeira",
     label: "Lixeira",
@@ -74,6 +77,9 @@ export const NAV_ITEMS = [
     icon: SettingsIcon,
   },
 ];
+
+// Kept for backwards-compatibility with getNavigationItem
+export const NAV_ITEMS = [...MAIN_NAV_ITEMS, ...FOOTER_NAV_ITEMS];
 
 export function getNavigationItem(pathname) {
   if (pathname === "/") {

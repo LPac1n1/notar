@@ -22,8 +22,9 @@
   --danger-soft: rgba(255, 91, 91, 0.14);
   --success: #1ae680;
   --success-line: rgba(26, 230, 128, 0.45);
-  --warning: #ffd24d;
-  --warning-line: rgba(255, 210, 77, 0.45);
+  --warning: #f59e0b;
+  --warning-line: rgba(245, 158, 11, 0.45);
+  --warning-soft: rgba(245, 158, 11, 0.13);
   /* Standard elevations. Use these instead of inline shadow-[...] arbitrary
    * values so spacing stays consistent across modals, popovers and toasts. */
   --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.72);

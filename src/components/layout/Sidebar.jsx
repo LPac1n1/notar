@@ -1,5 +1,95 @@
 import { NavLink } from "react-router-dom";
-import { NAV_ITEMS } from "./navigation";
+import { FOOTER_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
+
+function NavItem({ item, compact = false }) {
+  const Icon = item.icon;
+
+  if (compact) {
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.end}
+        className={({ isActive }) =>
+          `flex min-w-max items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+            isActive
+              ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
+              : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
+          }`
+        }
+      >
+        {({ isActive }) => (
+          <>
+            <Icon
+              className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--accent)]" : ""}`}
+            />
+            {item.label}
+          </>
+        )}
+      </NavLink>
+    );
+  }
+
+  return (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        `group relative overflow-hidden rounded-md border px-3 py-3 text-sm transition-colors duration-150 ${
+          isActive
+            ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
+            : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
+              isActive
+                ? "bg-[var(--accent)] text-[#12151c]"
+                : "bg-[var(--surface-elevated)] text-[var(--muted)] group-hover:bg-[var(--surface-muted)] group-hover:text-[var(--text-main)]"
+            }`}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold">{item.label}</p>
+          </div>
+        </div>
+      )}
+    </NavLink>
+  );
+}
+
+function FooterNavItem({ item }) {
+  const Icon = item.icon;
+
+  return (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        `group flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 ${
+          isActive
+            ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
+            : "border-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon
+            className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--accent)]" : "group-hover:text-[var(--text-main)]"}`}
+          />
+          <span className="font-medium">{item.label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
 
 export default function Sidebar() {
   return (
@@ -20,27 +110,9 @@ export default function Sidebar() {
           </div>
 
           <nav className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `flex min-w-max items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                      isActive
-                        ? "border-[var(--accent)] bg-[var(--accent)] text-[#12151c]"
-                        : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)]"
-                    }`
-                  }
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </NavLink>
-              );
-            })}
+            {[...MAIN_NAV_ITEMS, ...FOOTER_NAV_ITEMS].map((item) => (
+              <NavItem key={item.to} item={item} compact />
+            ))}
           </nav>
         </div>
       </div>
@@ -62,43 +134,17 @@ export default function Sidebar() {
             </div>
           </div>
 
-          <div className="relative mt-5 flex-1">
-            <nav className="flex flex-col gap-2">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
+          <nav className="mt-5 flex flex-1 flex-col gap-2 overflow-y-auto">
+            {MAIN_NAV_ITEMS.map((item) => (
+              <NavItem key={item.to} item={item} />
+            ))}
+          </nav>
 
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      `group relative overflow-hidden rounded-md border px-3 py-3 text-sm transition-colors duration-150 ${
-                        isActive
-                          ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
-                          : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
-                            isActive
-                              ? "bg-[var(--accent)] text-[#12151c]"
-                              : "bg-[var(--surface-elevated)] text-[var(--muted)] group-hover:bg-[var(--surface-muted)] group-hover:text-[var(--text-main)]"
-                          }`}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold">{item.label}</p>
-                        </div>
-                      </div>
-                    )}
-                  </NavLink>
-                );
-              })}
+          <div className="mt-4 border-t border-[var(--line)] pt-4">
+            <nav className="flex flex-col gap-1">
+              {FOOTER_NAV_ITEMS.map((item) => (
+                <FooterNavItem key={item.to} item={item} />
+              ))}
             </nav>
           </div>
         </div>
