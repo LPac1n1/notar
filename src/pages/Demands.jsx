@@ -328,6 +328,14 @@ export default function Demands() {
         <EmptyState
           title="Nenhuma demanda cadastrada"
           description="Cadastre uma demanda para poder vinculá-la aos doadores."
+          action={
+            <Button
+              leftIcon={<PlusIcon className="h-4 w-4" />}
+              onClick={createModal.open}
+            >
+              Cadastrar demanda
+            </Button>
+          }
         />
       ) : !isLoading ? (
         <ul className="space-y-2">

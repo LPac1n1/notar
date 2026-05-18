@@ -32,7 +32,7 @@ export default function ConvertPersonToDonorModal({
     >
       <div className="space-y-4">
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+          <p className="text-sm font-medium text-[var(--muted)]">
             Pessoa selecionada
           </p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">

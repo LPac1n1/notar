@@ -23,7 +23,7 @@ export default function DemandColorField({
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+      <label className="block text-sm font-medium text-[var(--muted)]">
         {label}
       </label>
 

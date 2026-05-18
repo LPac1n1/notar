@@ -1,7 +1,7 @@
 import { motion as Motion, useReducedMotion } from "framer-motion";
 import { EmptyIcon } from "./icons";
 
-export default function EmptyState({ title, description }) {
+export default function EmptyState({ title, description, action }) {
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -20,6 +20,7 @@ export default function EmptyState({ title, description }) {
       <p className="mx-auto max-w-xl text-sm leading-6 text-[var(--muted)]">
         {description}
       </p>
+      {action ? <div className="mt-4">{action}</div> : null}
     </Motion.div>
   );
 }

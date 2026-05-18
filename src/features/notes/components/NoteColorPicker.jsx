@@ -12,7 +12,7 @@ export default function NoteColorPicker({ value, onChange }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+      <p className="text-sm font-medium text-[var(--muted)]">
         Cor
       </p>
 

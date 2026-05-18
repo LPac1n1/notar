@@ -248,7 +248,7 @@ export default function CatchUpAdjustmentModal({
       ) : null}
 
       <div className="mt-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3">
-        <p className="text-xs uppercase tracking-[0.08em] text-[var(--muted)]">
+        <p className="text-sm font-medium text-[var(--muted)]">
           Prévia do acumulado
         </p>
 

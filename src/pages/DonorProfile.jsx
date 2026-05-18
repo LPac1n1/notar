@@ -6,6 +6,7 @@ import CopyableValue from "../components/ui/CopyableValue";
 import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import Breadcrumbs from "../components/ui/Breadcrumbs";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import StatusBadge from "../components/ui/StatusBadge";
@@ -169,6 +170,13 @@ export default function DonorProfile() {
 
   return (
     <div>
+      <Breadcrumbs
+        className="mb-3"
+        items={[
+          { label: "Doadores", to: "/doadores" },
+          { label: donor.name },
+        ]}
+      />
       <PageHeader
         title={
           <CopyableValue

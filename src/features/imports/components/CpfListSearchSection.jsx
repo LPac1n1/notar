@@ -295,7 +295,7 @@ export default function CpfListSearchSection({ onOpenDonorProfile }) {
       <div className="space-y-1.5">
         <label
           htmlFor="cpf-list-input"
-          className="block text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]"
+          className="block text-sm font-medium text-[var(--muted)]"
         >
           Lista de CPFs
         </label>

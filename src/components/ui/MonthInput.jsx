@@ -90,7 +90,7 @@ export default function MonthInput({
           className={
             hideLabel
               ? "sr-only"
-              : "block text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]"
+              : "block text-sm font-medium text-[var(--muted)]"
           }
         >
           {label}

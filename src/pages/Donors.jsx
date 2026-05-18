@@ -668,6 +668,14 @@ export default function Donors() {
         <EmptyState
           title="Nenhum doador cadastrado"
           description="Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."
+          action={
+            <Button
+              leftIcon={<PlusIcon className="h-4 w-4" />}
+              onClick={() => setIsCreateModalOpen(true)}
+            >
+              Cadastrar doador
+            </Button>
+          }
         />
       ) : !isLoading ? (
         <ul className="space-y-2">

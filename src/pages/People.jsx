@@ -515,6 +515,14 @@ export default function People() {
         <EmptyState
           title="Nenhuma pessoa sem papel de doador"
           description="Cadastre pessoas que possam ser usadas como referência em vínculos de auxiliares."
+          action={
+            <Button
+              leftIcon={<PlusIcon className="h-4 w-4" />}
+              onClick={createModal.open}
+            >
+              Cadastrar pessoa
+            </Button>
+          }
         />
       ) : !isLoading ? (
         <ul className="space-y-2">
