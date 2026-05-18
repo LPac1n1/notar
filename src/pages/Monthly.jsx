@@ -7,6 +7,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { SkeletonRows } from "../components/ui/Skeleton";
+import { ChevronDownIcon } from "../components/ui/icons";
 import { INITIAL_MONTHLY_FILTERS } from "../features/monthly/constants";
 import BulkAbatementModal from "../features/monthly/components/BulkAbatementModal";
 import CatchUpAdjustmentModal from "../features/donors/components/CatchUpAdjustmentModal";
@@ -76,6 +77,7 @@ export default function Monthly() {
   const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
   const [catchUpDonor, setCatchUpDonor] = useState(null);
   const [isBulkAbating, setIsBulkAbating] = useState(false);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(true);
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
@@ -159,6 +161,16 @@ export default function Monthly() {
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
   const isNotDonatedFilterActive =
     hasSelectedReferenceMonth && filters.donationActivity === "not-donated";
+  const activeFilterCount = [
+    filters.donorId !== "",
+    filters.donorType !== "all",
+    filters.cpf !== "",
+    filters.demand !== "",
+    filters.donationActivity !== "all",
+    filters.abatementStatus !== "all",
+    filters.abatementSort !== "",
+    filters.donationStartDate !== "all",
+  ].filter(Boolean).length;
 
   const donorOptions = useMemo(
     () =>
@@ -560,15 +572,35 @@ export default function Monthly() {
           </p>
         ) : null}
 
-        <MonthlyFiltersBar
-          filters={filters}
-          donorOptions={donorOptions}
-          cpfOptions={cpfOptions}
-          demandOptions={demandOptions}
-          hasSelectedReferenceMonth={hasSelectedReferenceMonth}
-          isNotDonatedFilterActive={isNotDonatedFilterActive}
-          onChange={handleFilterChange}
-        />
+        <div className="mb-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setIsFiltersExpanded((v) => !v)}
+            className="flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-sm font-medium text-[var(--muted-strong)] transition hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
+          >
+            <ChevronDownIcon
+              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isFiltersExpanded ? "rotate-180" : ""}`}
+            />
+            Filtros
+            {activeFilterCount > 0 ? (
+              <span className="rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-[#12151c]">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </button>
+        </div>
+
+        {isFiltersExpanded ? (
+          <MonthlyFiltersBar
+            filters={filters}
+            donorOptions={donorOptions}
+            cpfOptions={cpfOptions}
+            demandOptions={demandOptions}
+            hasSelectedReferenceMonth={hasSelectedReferenceMonth}
+            isNotDonatedFilterActive={isNotDonatedFilterActive}
+            onChange={handleFilterChange}
+          />
+        ) : null}
 
         {!hasSelectedReferenceMonth ? (
           isDataSyncRefreshLoading ? (

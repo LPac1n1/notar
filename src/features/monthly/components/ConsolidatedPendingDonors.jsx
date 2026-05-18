@@ -13,7 +13,7 @@ function getMonthButtonClassName(isApplied) {
     return "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]";
   }
 
-  return "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)] hover:border-[var(--line-strong)]";
+  return "border-[var(--warning-line)] bg-[color:var(--warning-soft)] text-[var(--warning)] hover:border-[var(--line-strong)]";
 }
 
 export default function ConsolidatedPendingDonors({
@@ -84,7 +84,7 @@ export default function ConsolidatedPendingDonors({
                         <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--success)]">
                           Realizado
                         </span>
-                        <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-2 py-1 text-[var(--warning)]">
+                        <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-[var(--warning)]">
                           Pendente
                         </span>
                       </div>

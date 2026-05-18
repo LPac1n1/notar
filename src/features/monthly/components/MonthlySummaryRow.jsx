@@ -61,7 +61,7 @@ export default function MonthlySummaryRow({
             />
             {summary.hasAdjustment && summary.adjustment ? (
               <span
-                className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--warning)]"
+                className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-xs font-semibold text-[var(--warning)]"
                 title={summary.adjustment.description || ""}
               >
                 Acumulado

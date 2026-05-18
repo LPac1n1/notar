@@ -5,7 +5,7 @@ const TONE_CLASS_NAMES = {
   info: "border-[color:var(--line-strong)] bg-[color:var(--surface-muted)] text-[color:var(--text-soft)]",
   neutral: "border-[color:var(--line)] bg-[color:var(--surface-muted)] text-[color:var(--muted-strong)]",
   success: "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
-  warning: "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[color:var(--warning)]",
+  warning: "border-[var(--warning-line)] bg-[color:var(--warning-soft)] text-[color:var(--warning)]",
 };
 
 export default function StatusBadge({

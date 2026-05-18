@@ -90,7 +90,7 @@ export default function DashboardRankingsSection({
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-                  <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--accent-soft)] px-2 py-1 text-[var(--warning)]">
+                  <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-[var(--warning)]">
                     {formatInteger(item.pendingCount)} pendente(s)
                   </span>
                   <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--success)]">

@@ -21,7 +21,7 @@ export const ICON_TONE_CLASS_NAMES = {
   success:
     "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
   warning:
-    "border-[var(--warning-line)] bg-[color:var(--accent-soft)] text-[var(--warning)]",
+    "border-[var(--warning-line)] bg-[color:var(--warning-soft)] text-[var(--warning)]",
 };
 
 export const ABATEMENT_STATUS_OPTIONS = [

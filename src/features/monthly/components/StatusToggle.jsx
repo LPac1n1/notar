@@ -10,7 +10,7 @@ export default function StatusToggle({
       value: "pending",
       label: "Pendente",
       className:
-        "border-[var(--warning-line)] bg-[var(--accent-soft)] text-[var(--warning)]",
+        "border-[var(--warning-line)] bg-[var(--warning-soft)] text-[var(--warning)]",
     },
     {
       value: "applied",
