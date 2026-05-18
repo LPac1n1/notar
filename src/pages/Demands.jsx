@@ -32,6 +32,7 @@ import {
 import { formatInteger } from "../utils/format";
 import { buildSelectOptions } from "../utils/select";
 import { useDataResource } from "../hooks/useDataResource";
+import { useModalState } from "../hooks/useModalState";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
@@ -48,10 +49,12 @@ const EMPTY_DEMAND_FORM = {
 
 export default function Demands() {
   const [createForm, setCreateForm] = useState({ ...EMPTY_DEMAND_FORM });
+  const [createFormErrors, setCreateFormErrors] = useState({});
   const [editForm, setEditForm] = useState({ ...EMPTY_DEMAND_FORM });
-  const [editingDemand, setEditingDemand] = useState(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [demandPendingRemoval, setDemandPendingRemoval] = useState(null);
+  const [editFormErrors, setEditFormErrors] = useState({});
+  const createModal = useModalState(false);
+  const editModal = useModalState(null);
+  const removeModal = useModalState(null);
   const [filters, setFilters] = useState({
     ...INITIAL_DEMAND_FILTERS,
   });
@@ -116,10 +119,11 @@ export default function Demands() {
     [runPageMutation],
   );
 
-  const handleFormChange = (setter) => (event) => {
+  const handleFormChange = (setter, setErrors) => (event) => {
     const { name: fieldName, value } = event.target;
 
     setFormError("");
+    setErrors?.((current) => ({ ...current, [fieldName]: "" }));
     setter((current) => ({
       ...current,
       [fieldName]: value,
@@ -128,6 +132,7 @@ export default function Demands() {
 
   const handleAdd = async () => {
     if (!createForm.name.trim()) {
+      setCreateFormErrors({ name: "Nome da demanda é obrigatório." });
       setFormError("Nome da demanda é obrigatório.");
       return;
     }
@@ -139,7 +144,8 @@ export default function Demands() {
       errorMessage: "Não foi possível adicionar a demanda.",
       onSuccess: () => {
         setCreateForm({ ...EMPTY_DEMAND_FORM });
-        setIsCreateModalOpen(false);
+        setCreateFormErrors({});
+        createModal.close();
       },
     });
   };
@@ -149,7 +155,7 @@ export default function Demands() {
     setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
-    setEditingDemand(demand);
+    editModal.open(demand);
     setEditForm({
       name: demand.name,
       color: demand.color || DEFAULT_DEMAND_COLOR,
@@ -157,17 +163,19 @@ export default function Demands() {
   };
 
   const handleCloseEditModal = () => {
-    setEditingDemand(null);
+    editModal.close();
     setEditForm({ ...EMPTY_DEMAND_FORM });
+    setEditFormErrors({});
     setFormError("");
   };
 
   const handleSaveEdit = async () => {
-    if (!editingDemand) {
+    if (!editModal.value) {
       return;
     }
 
     if (!editForm.name.trim()) {
+      setEditFormErrors({ name: "Nome da demanda é obrigatório." });
       setFormError("Nome da demanda é obrigatório.");
       return;
     }
@@ -176,30 +184,33 @@ export default function Demands() {
       scope: "DemandsPage.update",
       run: () =>
         updateDemand({
-          id: editingDemand.id,
+          id: editModal.value.id,
           ...editForm,
         }),
       successMessage: "Demanda atualizada com sucesso.",
       errorMessage: "Não foi possível atualizar a demanda.",
-      onSuccess: handleCloseEditModal,
+      onSuccess: () => {
+        setEditFormErrors({});
+        handleCloseEditModal();
+      },
     });
   };
 
   const handleConfirmRemove = async () => {
-    if (!demandPendingRemoval) {
+    if (!removeModal.value) {
       return;
     }
 
     await runPageMutation({
       scope: "DemandsPage.delete",
-      run: () => deleteDemand(demandPendingRemoval.id),
+      run: () => deleteDemand(removeModal.value.id),
       successMessage: "Demanda enviada para a lixeira com sucesso.",
       errorMessage: "Não foi possível remover a demanda.",
       onSuccess: () => {
-        if (editingDemand?.id === demandPendingRemoval.id) {
+        if (editModal.value?.id === removeModal.value.id) {
           handleCloseEditModal();
         }
-        setDemandPendingRemoval(null);
+        removeModal.close();
       },
       // `deleteDemand` returns the trashItemId; the factory form lets the
       // Desfazer action capture it after the mutation resolves.
@@ -261,7 +272,7 @@ export default function Demands() {
             setSuccessMessage("");
             setSuccessAction(null);
             setCreateForm({ ...EMPTY_DEMAND_FORM });
-            setIsCreateModalOpen(true);
+            createModal.open();
           }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
@@ -298,7 +309,7 @@ export default function Demands() {
       </SectionCard>
 
       <FeedbackMessage
-        message={isCreateModalOpen || editingDemand || demandPendingRemoval ? "" : error}
+        message={createModal.isOpen || editModal.isOpen || removeModal.isOpen ? "" : error}
         tone="error"
       />
       <FeedbackMessage
@@ -364,7 +375,7 @@ export default function Demands() {
                 </Button>
                 <Button
                   variant="danger"
-                  onClick={() => setDemandPendingRemoval(demand)}
+                  onClick={() => removeModal.open(demand)}
                   leftIcon={<TrashIcon className="h-4 w-4" />}
                 >
                   Remover
@@ -388,7 +399,7 @@ export default function Demands() {
       ) : null}
 
       <AnimatePresence>
-        {isCreateModalOpen ? (
+        {createModal.isOpen ? (
           <FormModal
             title="Adicionar demanda"
             description="Cadastre o nome da demanda."
@@ -397,8 +408,9 @@ export default function Demands() {
             isLoading={isSubmitting}
             onClose={() => {
               setCreateForm({ ...EMPTY_DEMAND_FORM });
+              setCreateFormErrors({});
               setFormError("");
-              setIsCreateModalOpen(false);
+              createModal.close();
             }}
             onSubmit={handleAdd}
             size="md"
@@ -409,7 +421,8 @@ export default function Demands() {
                 name="name"
                 placeholder="Nome da demanda"
                 value={createForm.name}
-                onChange={handleFormChange(setCreateForm)}
+                error={createFormErrors.name}
+                onChange={handleFormChange(setCreateForm, setCreateFormErrors)}
               />
               <DemandColorField
                 value={createForm.color}
@@ -421,7 +434,7 @@ export default function Demands() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {editingDemand ? (
+        {editModal.isOpen ? (
           <FormModal
             title="Editar demanda"
             description="Atualize o nome da demanda."
@@ -438,7 +451,8 @@ export default function Demands() {
                 name="name"
                 placeholder="Nome da demanda"
                 value={editForm.name}
-                onChange={handleFormChange(setEditForm)}
+                error={editFormErrors.name}
+                onChange={handleFormChange(setEditForm, setEditFormErrors)}
               />
               <DemandColorField
                 value={editForm.color}
@@ -450,14 +464,14 @@ export default function Demands() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {demandPendingRemoval ? (
+        {removeModal.isOpen ? (
           <ConfirmModal
             title="Remover demanda"
-            description={`Tem certeza de que deseja remover ${demandPendingRemoval.name}? Ela ficará disponível na lixeira para restauração.`}
+            description={`Tem certeza de que deseja remover ${removeModal.value.name}? Ela ficará disponível na lixeira para restauração.`}
             confirmLabel="Remover demanda"
             feedbackMessage={error}
             isLoading={isDeleting}
-            onCancel={() => setDemandPendingRemoval(null)}
+            onCancel={() => removeModal.close()}
             onConfirm={handleConfirmRemove}
           />
         ) : null}

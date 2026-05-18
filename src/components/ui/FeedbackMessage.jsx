@@ -73,7 +73,8 @@ function AlertBox({ message, tone, className }) {
 
   return (
     <Motion.div
-      role="alert"
+      role={tone === "error" || tone === "warning" ? "alert" : "status"}
+      aria-live={tone === "error" || tone === "warning" ? "assertive" : "polite"}
       initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
       animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
@@ -159,7 +160,8 @@ function ToastMessage({
     <AnimatePresence>
       {isVisible ? (
         <Motion.div
-          role="alert"
+          role={tone === "error" || tone === "warning" ? "alert" : "status"}
+          aria-live={tone === "error" || tone === "warning" ? "assertive" : "polite"}
           initial={
             shouldReduceMotion
               ? { opacity: 0 }

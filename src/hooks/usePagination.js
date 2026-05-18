@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 
 export const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100];
 
-export function usePagination(items, { initialPageSize = 25 } = {}) {
-  const [page, setPage] = useState(1);
+export function usePagination(items, { initialPage = 1, initialPageSize = 25 } = {}) {
+  const [page, setPage] = useState(initialPage);
   const [pageSize, setPageSize] = useState(initialPageSize);
   const totalItems = items.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));

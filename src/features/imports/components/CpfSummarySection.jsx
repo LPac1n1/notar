@@ -84,6 +84,8 @@ export default function CpfSummarySection({
           onChange={onFilterChange}
           options={registrationFilterOptions}
           placeholder="Todos"
+          searchable
+          searchPlaceholder="Buscar situação..."
         />
       </div>
 

@@ -17,20 +17,13 @@ import MonthlySummaryList from "../features/monthly/components/MonthlySummaryLis
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
 import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
-import { useStatusChangeAction } from "../features/monthly/hooks/useStatusChangeAction";
-import { buildAbatementHistoryEntry } from "../features/monthly/utils/abatementHistory";
-import { groupChangesByStatus } from "../features/monthly/utils/statusChanges";
+import { useMonthlyStatusHandlers } from "../features/monthly/hooks/useMonthlyStatusHandlers";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { exportMonthlySummariesCsv } from "../services/exportService";
 import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
 import { exportDonationReportJpeg } from "../features/reports/services/donationJpegReportService";
 import { listImports } from "../services/importService";
-import {
-  listMonthlySummaries,
-  updateAbatementStatusWithHistory,
-  updateAbatementStatuses,
-  updateAbatementStatusesWithHistory,
-} from "../services/monthlyService";
+import { listMonthlySummaries } from "../services/monthlyService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
 import { formatCurrency, formatInteger } from "../utils/format";
@@ -125,17 +118,20 @@ export default function Monthly() {
     });
   }, [rawSummaries, optimisticStatusOverrides]);
 
-  // Shared runner for status-change mutations. Each handler below feeds it a
-  // mutation function plus a success/undo blueprint and the hook handles the
-  // surrounding boilerplate (clear flags, run, reload, message, error).
-  const runStatusChangeAction = useStatusChangeAction({
-    setError,
-    setSuccessMessage,
-    setSuccessAction,
-    setUpdatingDonorId,
-    setUpdatingSummaryId,
-    reload: reloadSummaries,
-  });
+  const { handleBulkAbate, handleConsolidatedDonorStatusChange, handleStatusChange } =
+    useMonthlyStatusHandlers({
+      setError,
+      setSuccessMessage,
+      setSuccessAction,
+      setUpdatingDonorId,
+      setUpdatingSummaryId,
+      reload: reloadSummaries,
+      summaries,
+      rawSummaries,
+      setOptimisticStatusOverrides,
+      setIsBulkAbating,
+      onBulkAbateSuccess: () => setShowBulkAbatementModal(false),
+    });
 
   const loadAvailableImports = useCallback(async () => {
     const rows = await listImports({ status: "processed" });
@@ -273,210 +269,6 @@ export default function Monthly() {
     }));
   };
 
-  const applyStatusChanges = useCallback(async (changes = [], history = null) => {
-    const changesByStatus = groupChangesByStatus(changes);
-    let didRecordHistory = false;
-
-    for (const [status, { summaryIds, adjustmentIds }] of changesByStatus.entries()) {
-      if (history && !didRecordHistory) {
-        await updateAbatementStatusesWithHistory({
-          history,
-          status,
-          summaryIds,
-          adjustmentIds,
-        });
-        didRecordHistory = true;
-      } else {
-        await updateAbatementStatuses({ summaryIds, adjustmentIds, status });
-      }
-    }
-  }, []);
-
-  const handleUndoStatusChanges = useCallback(
-    async ({
-      changes = [],
-      donorId = "",
-      history = null,
-      summaryId = "",
-      message = "Alteracao desfeita.",
-    } = {}) =>
-      runStatusChangeAction({
-        scope: "MonthlyPage.undoStatus",
-        donorId,
-        summaryId,
-        run: () => applyStatusChanges(changes, history),
-        successMessage: message,
-        errorMessage: "Não foi possível desfazer a alteração.",
-      }),
-    [applyStatusChanges, runStatusChangeAction],
-  );
-
-  const handleStatusChange = async (summaryId, status) => {
-    const currentSummary = summaries.find((summary) => summary.id === summaryId);
-
-    if (!currentSummary || currentSummary.abatementStatus === status) {
-      return;
-    }
-
-    const adjustmentId = currentSummary.adjustment?.id ?? "";
-    const previousStatus = currentSummary.abatementStatus;
-    const history = buildAbatementHistoryEntry({
-      donor: currentSummary,
-      months: [currentSummary],
-      status,
-    });
-
-    await runStatusChangeAction({
-      scope: "MonthlyPage.updateStatus",
-      summaryId,
-      onStart: () => {
-        // Optimistic update: paint the new status before awaiting the
-        // round-trip so the toggle feels instant. The override is cleared once
-        // the useDataResource reload below replaces `rawSummaries`.
-        setOptimisticStatusOverrides((current) => ({
-          ...current,
-          [summaryId]: {
-            abatementStatus: status,
-            abatementMarkedAt:
-              status === "applied" ? new Date().toISOString() : "",
-          },
-        }));
-      },
-      run: () =>
-        updateAbatementStatusWithHistory({
-          history,
-          summaryId,
-          adjustmentId,
-          status,
-        }),
-      successMessage: "Status do abatimento atualizado.",
-      errorMessage: "Não foi possível atualizar o status do abatimento.",
-      onError: () => {
-        // Roll back to the previous status so the UI matches the server. The
-        // override stays in place until the next reload replaces
-        // `rawSummaries`.
-        setOptimisticStatusOverrides((current) => ({
-          ...current,
-          [summaryId]: { abatementStatus: previousStatus },
-        }));
-      },
-      undo: () =>
-        handleUndoStatusChanges({
-          changes: [
-            {
-              summaryId,
-              adjustmentId,
-              status: currentSummary.abatementStatus,
-            },
-          ],
-          history: buildAbatementHistoryEntry({
-            actionType: "monthly_abatement_status_undo",
-            donor: currentSummary,
-            months: [currentSummary],
-            operation: "undo",
-            status: currentSummary.abatementStatus,
-          }),
-          summaryId,
-          message: "Status anterior restaurado.",
-        }),
-    });
-  };
-
-  const handleConsolidatedDonorStatusChange = async (
-    donor,
-    status,
-    { monthLimit = "", operation = "manual", summaryIds = [] } = {},
-  ) => {
-    if (!donor || (status !== "applied" && status !== "pending")) {
-      return;
-    }
-
-    const summaryIdSet = new Set(summaryIds);
-    const changedMonths = donor.months.filter(
-      (month) =>
-        month.abatementStatus !== status &&
-        (summaryIdSet.size === 0 || summaryIdSet.has(month.id)),
-    );
-
-    if (changedMonths.length === 0) {
-      return;
-    }
-
-    const statusLabel = status === "applied" ? "realizado" : "pendente";
-    const previousStatusLabel =
-      status === "applied" ? "pendente(s)" : "realizado(s)";
-    const previousStatusByMonthId = new Map(
-      changedMonths.map((month) => [month.id, month.abatementStatus]),
-    );
-    const optimisticMarker = new Date().toISOString();
-
-    await runStatusChangeAction({
-      scope: "MonthlyPage.updateDonorAbatement",
-      donorId: donor.donorId,
-      onStart: () => {
-        setOptimisticStatusOverrides((current) => {
-          const next = { ...current };
-          for (const month of changedMonths) {
-            next[month.id] = {
-              abatementStatus: status,
-              abatementMarkedAt:
-                status === "applied" ? optimisticMarker : "",
-            };
-          }
-          return next;
-        });
-      },
-      run: () =>
-        updateAbatementStatusesWithHistory({
-          history: buildAbatementHistoryEntry({
-            donor,
-            monthLimit,
-            months: changedMonths,
-            operation,
-            status,
-          }),
-          summaryIds: changedMonths.map((month) => month.id),
-          adjustmentIds: changedMonths
-            .map((month) => month.adjustmentId)
-            .filter(Boolean),
-          status,
-        }),
-      successMessage: `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como ${statusLabel}.`,
-      errorMessage: "Não foi possível atualizar os abatimentos do doador.",
-      onError: () => {
-        // Restore each touched month's previous status so the UI matches the
-        // server until the next reload sweeps the overrides.
-        setOptimisticStatusOverrides((current) => {
-          const next = { ...current };
-          for (const month of changedMonths) {
-            next[month.id] = {
-              abatementStatus:
-                previousStatusByMonthId.get(month.id) ?? "pending",
-            };
-          }
-          return next;
-        });
-      },
-      undo: () =>
-        handleUndoStatusChanges({
-          changes: changedMonths.map((month) => ({
-            summaryId: month.id,
-            adjustmentId: month.adjustmentId,
-            status: month.abatementStatus,
-          })),
-          donorId: donor.donorId,
-          history: buildAbatementHistoryEntry({
-            actionType: "monthly_abatement_status_undo",
-            donor,
-            months: changedMonths,
-            operation: "undo",
-            status: status === "applied" ? "pending" : "applied",
-          }),
-          message: `Abatimentos do doador restaurados como ${previousStatusLabel}.`,
-        }),
-    });
-  };
-
   const handleExport = async () => {
     setError("");
     setSuccessAction(null);
@@ -601,88 +393,6 @@ export default function Monthly() {
       );
     } finally {
       setIsExportingJpeg(false);
-    }
-  };
-
-  const handleBulkAbate = async (summaryIds) => {
-    if (summaryIds.length === 0) {
-      return;
-    }
-
-    // Compute affected metadata against `rawSummaries` so the totalAmount
-    // reflects what the server actually has, not the optimistic overlay.
-    const affectedSummaries = rawSummaries.filter((s) =>
-      summaryIds.includes(s.id),
-    );
-    const totalAmount = affectedSummaries.reduce(
-      (sum, s) => sum + Number(s.abatementAmount ?? 0),
-      0,
-    );
-    const affectedAdjustmentIds = affectedSummaries
-      .map((s) => s.adjustment?.id ?? "")
-      .filter(Boolean);
-    const previousStatusBySummaryId = new Map(
-      affectedSummaries.map((s) => [s.id, s.abatementStatus]),
-    );
-    const optimisticMarker =
-      new Date().toISOString();
-
-    const success = await runStatusChangeAction({
-      scope: "MonthlyPage.bulkAbate",
-      setBusy: setIsBulkAbating,
-      onStart: () => {
-        // Optimistic overlay so the bulk action feels instant. The cleanup
-        // useEffect on `rawSummaries` clears these once the reload lands.
-        setOptimisticStatusOverrides((current) => {
-          const next = { ...current };
-          for (const id of summaryIds) {
-            next[id] = {
-              abatementStatus: "applied",
-              abatementMarkedAt: optimisticMarker,
-            };
-          }
-          return next;
-        });
-      },
-      run: () =>
-        updateAbatementStatusesWithHistory({
-          history: {
-            actionType: "monthly_abatement_status_update",
-            entityType: "monthly_abatement",
-            entityId: "bulk",
-            label: "Abatimento em massa",
-            description: `${formatInteger(summaryIds.length)} abatimento(s) marcado(s) como realizado.`,
-            payload: {
-              summaryIds,
-              adjustmentIds: affectedAdjustmentIds,
-              donorCount: new Set(affectedSummaries.map((s) => s.donorId)).size,
-              totalAmount,
-              operation: "bulk",
-            },
-          },
-          status: "applied",
-          summaryIds,
-          adjustmentIds: affectedAdjustmentIds,
-        }),
-      successMessage: `${formatInteger(summaryIds.length)} abatimento(s) realizado(s) — ${formatCurrency(totalAmount)} total.`,
-      errorMessage: "Não foi possível realizar o abatimento em massa.",
-      onError: () => {
-        // Roll back every overlaid id to its previous status.
-        setOptimisticStatusOverrides((current) => {
-          const next = { ...current };
-          for (const id of summaryIds) {
-            next[id] = {
-              abatementStatus:
-                previousStatusBySummaryId.get(id) ?? "pending",
-            };
-          }
-          return next;
-        });
-      },
-    });
-
-    if (success) {
-      setShowBulkAbatementModal(false);
     }
   };
 

@@ -27,6 +27,7 @@ import ReactivateDonorModal from "../features/donors/components/ReactivateDonorM
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { listDemands } from "../services/demandService";
 import {
+  countDonors,
   createDonor,
   deactivateDonor,
   deleteDonor,
@@ -37,7 +38,7 @@ import {
 import { exportDonorsCsv } from "../services/exportService";
 import { listPeople } from "../services/personService";
 import { restoreTrashItem } from "../services/trashService";
-import { useDataResource } from "../hooks/useDataResource";
+import { usePaginatedResource } from "../hooks/usePaginatedResource";
 import { logError } from "../services/logger";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
@@ -49,7 +50,6 @@ import {
   validateDonorForm,
 } from "../utils/preventiveValidation";
 import { buildSelectOptions } from "../utils/select";
-import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 
@@ -106,15 +106,17 @@ export default function Donors() {
     error,
     setError,
     reload: reloadDonors,
-  } = useDataResource({
+    pagination: donorsPagination,
+  } = usePaginatedResource({
     loader: listDonors,
+    countLoader: countDonors,
     filters,
+    initialPage: location.state?.donorPage ?? 1,
+    initialPageSize: location.state?.donorPageSize ?? 25,
     errorMessage: "Não foi possível carregar os doadores.",
     scope: "DonorsPage",
     neutralizedKeys: ["donorId", "cpf", "demand"],
   });
-
-  const donorsPagination = usePagination(donors, { initialPageSize: 25 });
   const { dataSyncFeedback, showDataRefreshLoading } =
     useDataRefreshIndicator(isRefreshing);
   const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
@@ -129,12 +131,14 @@ export default function Donors() {
             state: {
               donorFilters: filters,
               donorScrollTop: getAppScrollTop(),
+              donorPage: donorsPagination.page,
+              donorPageSize: donorsPagination.pageSize,
             },
           },
         },
       });
     },
-    [filters, navigate],
+    [filters, donorsPagination.page, donorsPagination.pageSize, navigate],
   );
 
   const donorFormDemandOptions = useMemo(
@@ -679,7 +683,7 @@ export default function Donors() {
             />
           </li>
 
-          {donorsPagination.visibleItems.map((donor) => (
+          {donors.map((donor) => (
             <DonorListItem
               key={donor.id}
               donor={donor}

@@ -47,6 +47,7 @@ import {
   hasValidationErrors,
   validateImportUpload,
 } from "../utils/preventiveValidation";
+import { useModalState } from "../hooks/useModalState";
 import { usePagination } from "../hooks/usePagination";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
@@ -91,12 +92,12 @@ export default function Imports() {
   const [successAction, setSuccessAction] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const importModal = useModalState(false);
+  const removeModal = useModalState(null);
+  const detailsModal = useModalState(null);
   const [isExportingImports, setIsExportingImports] = useState(false);
   const [isExportingCpfSummary, setIsExportingCpfSummary] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState("");
-  const [importPendingRemoval, setImportPendingRemoval] = useState(null);
-  const [selectedCpfSummaryDetails, setSelectedCpfSummaryDetails] = useState(null);
   const navigate = useNavigate();
 
   const {
@@ -370,7 +371,7 @@ export default function Imports() {
       cpfColumn: "",
     });
     setUploadFormErrors({});
-    setIsImportModalOpen(false);
+    importModal.close();
   };
 
   const handleProcessImport = async () => {
@@ -413,7 +414,7 @@ export default function Imports() {
         cpfColumn: "",
       });
       setUploadFormErrors({});
-      setIsImportModalOpen(false);
+      importModal.close();
       setSuccessMessage("Importação processada com sucesso.");
     } catch (err) {
       logError("ImportsPage.process", err);
@@ -424,7 +425,7 @@ export default function Imports() {
   };
 
   const handleDeleteImport = async () => {
-    if (!importPendingRemoval) {
+    if (!removeModal.value) {
       return;
     }
 
@@ -432,15 +433,15 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setSuccessAction(null);
-      setDeletingImportId(importPendingRemoval.id);
+      setDeletingImportId(removeModal.value.id);
       const trashItemId = await importOperation.run(
-        () => deleteImport(importPendingRemoval.id),
+        () => deleteImport(removeModal.value.id),
         {
           loadingMessage: "Enviando importação para a lixeira...",
         },
       );
       await refreshImports();
-      setImportPendingRemoval(null);
+      removeModal.close();
       setSuccessMessage("Importação enviada para a lixeira com sucesso.");
       if (trashItemId) {
         setSuccessAction({
@@ -556,7 +557,7 @@ export default function Imports() {
         className="mb-6"
       />
       <FeedbackMessage
-        message={isImportModalOpen || importPendingRemoval ? "" : error}
+        message={importModal.isOpen || removeModal.isOpen ? "" : error}
         tone="error"
       />
       <FeedbackMessage
@@ -573,7 +574,7 @@ export default function Imports() {
             setSuccessMessage("");
             setSuccessAction(null);
             setUploadFormErrors({});
-            setIsImportModalOpen(true);
+            importModal.open();
           }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
@@ -582,7 +583,7 @@ export default function Imports() {
       </div>
 
       <AnimatePresence>
-        {isImportModalOpen ? (
+        {importModal.isOpen ? (
           <ImportUploadModal
             errorMessage={error}
             fileInputKey={fileInputKey}
@@ -608,7 +609,7 @@ export default function Imports() {
         isRefreshing={isImportHistoryRefreshing || showDataRefreshLoading}
         showRefreshSkeleton={showDataRefreshLoading}
         onClearFilters={handleClearImportFilters}
-        onDelete={setImportPendingRemoval}
+        onDelete={removeModal.open}
         onExport={handleExportImports}
         onFilterChange={handleImportFilterChange}
         options={importHistoryOptions}
@@ -629,7 +630,7 @@ export default function Imports() {
         onClearFilters={handleClearCpfFilters}
         onExport={handleExportCpfSummary}
         onFilterChange={handleCpfFilterChange}
-        onOpenDetails={setSelectedCpfSummaryDetails}
+        onOpenDetails={detailsModal.open}
         onOpenDonorProfile={openDonorProfile}
         pagination={cpfSummaryPagination}
         registrationFilterOptions={CPF_REGISTRATION_FILTER_OPTIONS}
@@ -638,24 +639,24 @@ export default function Imports() {
       <CpfListSearchSection onOpenDonorProfile={openDonorProfile} />
 
       <AnimatePresence>
-        {selectedCpfSummaryDetails ? (
+        {detailsModal.isOpen ? (
           <CpfSummaryDetailsModal
-            details={selectedCpfSummaryDetails}
-            onClose={() => setSelectedCpfSummaryDetails(null)}
+            details={detailsModal.value}
+            onClose={detailsModal.close}
             onOpenDonorProfile={openDonorProfile}
           />
         ) : null}
       </AnimatePresence>
 
       <AnimatePresence>
-        {importPendingRemoval ? (
+        {removeModal.isOpen ? (
           <ConfirmModal
             title="Excluir importação"
-            description={`Tem certeza de que deseja excluir a importação ${importPendingRemoval.fileName}? Ela ficará disponível na lixeira para restauração.`}
+            description={`Tem certeza de que deseja excluir a importação ${removeModal.value.fileName}? Ela ficará disponível na lixeira para restauração.`}
             confirmLabel="Excluir importação"
             feedbackMessage={error}
-            isLoading={deletingImportId === importPendingRemoval.id}
-            onCancel={() => setImportPendingRemoval(null)}
+            isLoading={deletingImportId === removeModal.value.id}
+            onCancel={removeModal.close}
             onConfirm={handleDeleteImport}
           />
         ) : null}

@@ -16,6 +16,7 @@ import {
   setOnAfterTransaction,
 } from "./connection.js";
 import { updateStorageInfo } from "./events.js";
+import { localizeHydrationError } from "./cloudSyncUtils.js";
 import { logError } from "../logger.js";
 
 /**
@@ -365,21 +366,6 @@ export async function flushPendingCloudSync() {
     await pendingPromise;
   }
   await uploadSnapshotImmediate(activeUserId);
-}
-
-function localizeHydrationError(error) {
-  // Messages from our own code already contain Portuguese (accent chars / ç/ã)
-  if (/[àáâãéêíóôõúüç]/i.test(error?.message ?? "")) {
-    return error;
-  }
-  const lower = String(error?.message ?? "").toLowerCase();
-  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("err_network")) {
-    return new Error("Não foi possível conectar ao servidor. Verifique sua conexão.", { cause: error });
-  }
-  if (lower.includes("unauthorized") || lower.includes("invalid jwt") || lower.includes("jwt expired") || lower.includes("401") || lower.includes("403")) {
-    return new Error("Sessão expirada. Recarregue a página para entrar novamente.", { cause: error });
-  }
-  return new Error("Não foi possível baixar os dados da nuvem. Verifique sua conexão e tente novamente.", { cause: error });
 }
 
 export async function hydrateFromCloud(userId) {

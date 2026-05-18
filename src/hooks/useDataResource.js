@@ -59,6 +59,7 @@ const EMPTY_NEUTRALIZED_KEYS = Object.freeze([]);
  */
 export function useDataResource({
   loader,
+  countLoader,
   filters,
   errorMessage = "Não foi possível carregar os dados.",
   scope = "useDataResource",
@@ -76,6 +77,7 @@ export function useDataResource({
   );
   const [data, setData] = useState(fallbackValue);
   const [optionSource, setOptionSource] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +105,9 @@ export function useDataResource({
       for (const key of neutralizedKeysSignature.split("|")) {
         next[key] = "";
       }
+      // Strip pagination params so optionSource always loads all rows.
+      delete next.limit;
+      delete next.offset;
       return next;
     },
     [neutralizedKeysSignature],
@@ -121,11 +126,14 @@ export function useDataResource({
         }
 
         const optionFilters = buildOptionFilters(currentFilters);
-        const [primary, options] = await Promise.all([
+        // countLoader receives filters without pagination params.
+        const { limit: _l, offset: _o, ...countFilters } = currentFilters;
+        const [primary, options, count] = await Promise.all([
           loader(currentFilters),
           optionFilters
             ? (optionLoader ?? loader)(optionFilters)
             : Promise.resolve(null),
+          countLoader ? countLoader(countFilters) : Promise.resolve(null),
         ]);
 
         if (requestId !== requestIdRef.current) {
@@ -135,6 +143,9 @@ export function useDataResource({
         setData(primary ?? fallbackValue);
         if (optionFilters) {
           setOptionSource(options ?? []);
+        }
+        if (countLoader) {
+          setTotalCount(count ?? 0);
         }
         setError("");
       } catch (loaderError) {
@@ -151,7 +162,7 @@ export function useDataResource({
         }
       }
     },
-    [loader, optionLoader, scope, errorMessage, buildOptionFilters, fallbackValue],
+    [loader, countLoader, optionLoader, scope, errorMessage, buildOptionFilters, fallbackValue],
   );
 
   const reload = useCallback(async () => {
@@ -190,6 +201,7 @@ export function useDataResource({
   return {
     data,
     optionSource,
+    totalCount,
     isLoading,
     isRefreshing,
     error,

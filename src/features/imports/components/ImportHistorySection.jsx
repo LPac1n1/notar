@@ -81,6 +81,8 @@ export default function ImportHistorySection({
           onChange={onFilterChange}
           options={statusOptions}
           placeholder="Todos os status"
+          searchable
+          searchPlaceholder="Buscar status..."
         />
       </div>
 

@@ -20,13 +20,14 @@ import PersonListItem from "../features/people/components/PersonListItem";
 import { listDemands } from "../services/demandService";
 import { createDonor } from "../services/donorService";
 import {
+  countPeople,
   createPerson,
   deletePerson,
   listPeople,
   updatePerson,
 } from "../services/personService";
 import { restoreTrashItem } from "../services/trashService";
-import { useDataResource } from "../hooks/useDataResource";
+import { usePaginatedResource } from "../hooks/usePaginatedResource";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
 import {
@@ -35,7 +36,7 @@ import {
   validateDonorForm,
   validatePersonForm,
 } from "../utils/preventiveValidation";
-import { usePagination } from "../hooks/usePagination";
+import { useModalState } from "../hooks/useModalState";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useMutationAction } from "../hooks/useMutationAction";
@@ -73,10 +74,10 @@ export default function People() {
   const [editFormErrors, setEditFormErrors] = useState({});
   const [convertForm, setConvertForm] = useState({ ...EMPTY_CONVERT_FORM });
   const [convertFormErrors, setConvertFormErrors] = useState({});
-  const [editingPerson, setEditingPerson] = useState(null);
-  const [convertingPerson, setConvertingPerson] = useState(null);
-  const [personPendingRemoval, setPersonPendingRemoval] = useState(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const createModal = useModalState(false);
+  const editModal = useModalState(null);
+  const convertModal = useModalState(null);
+  const removeModal = useModalState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -92,15 +93,16 @@ export default function People() {
     error,
     setError,
     reload: reloadPeople,
-  } = useDataResource({
+    pagination: peoplePagination,
+  } = usePaginatedResource({
     loader: loadReferencePeople,
+    countLoader: countPeople,
     filters,
+    initialPageSize: 25,
     errorMessage: "Não foi possível carregar as pessoas.",
     scope: "PeoplePage",
     neutralizedKeys: ["personId", "cpf"],
   });
-
-  const peoplePagination = usePagination(people, { initialPageSize: 25 });
   const { dataSyncFeedback, showDataRefreshLoading } =
     useDataRefreshIndicator(isRefreshing);
 
@@ -235,7 +237,7 @@ export default function People() {
       buildSelectOptions(
         allPeople.filter(
           (person) =>
-            person.id !== convertingPerson?.id &&
+            person.id !== convertModal.value?.id &&
             (!person.donorId || person.donorType === "holder"),
         ),
         {
@@ -247,7 +249,7 @@ export default function People() {
           emptyLabel: "Selecione titular ou pessoa",
         },
       ),
-    [allPeople, convertingPerson?.id],
+    [allPeople, convertModal.value?.id],
   );
 
   const selectedConversionHolder = useMemo(
@@ -259,10 +261,10 @@ export default function People() {
 
   const conversionTypeOptions = useMemo(
     () =>
-      convertingPerson?.referencedByAuxiliaries > 0
+      convertModal.value?.referencedByAuxiliaries > 0
         ? DONOR_FORM_TYPE_OPTIONS.filter((option) => option.value === "holder")
         : DONOR_FORM_TYPE_OPTIONS,
-    [convertingPerson?.referencedByAuxiliaries],
+    [convertModal.value?.referencedByAuxiliaries],
   );
 
   const handleClearFilters = () => {
@@ -274,7 +276,7 @@ export default function People() {
     setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
-    setConvertingPerson(person);
+    convertModal.open(person);
     setConvertFormErrors({});
     setConvertForm({
       ...EMPTY_CONVERT_FORM,
@@ -288,7 +290,7 @@ export default function People() {
     setFormError("");
     setSuccessMessage("");
     setSuccessAction(null);
-    setEditingPerson(person);
+    editModal.open(person);
     setEditFormErrors({});
     setEditForm({
       name: person.name,
@@ -297,7 +299,7 @@ export default function People() {
   };
 
   const handleCloseConvertModal = () => {
-    setConvertingPerson(null);
+    convertModal.close();
     setConvertForm({ ...EMPTY_CONVERT_FORM });
     setConvertFormErrors({});
     setFormError("");
@@ -323,7 +325,7 @@ export default function People() {
       successMessage: "Pessoa cadastrada com sucesso.",
       errorMessage: "Não foi possível cadastrar a pessoa.",
       onSuccess: () => {
-        setIsCreateModalOpen(false);
+        createModal.close();
         setCreateForm({ ...EMPTY_PERSON_FORM });
         setCreateFormErrors({});
       },
@@ -331,7 +333,7 @@ export default function People() {
   };
 
   const handleConvertToDonor = async () => {
-    if (!convertingPerson) {
+    if (!convertModal.value) {
       return;
     }
 
@@ -348,9 +350,9 @@ export default function People() {
       run: () =>
         createDonor({
           id: nanoid(),
-          personId: convertingPerson.id,
-          name: convertingPerson.name,
-          cpf: convertingPerson.cpf,
+          personId: convertModal.value.id,
+          name: convertModal.value.name,
+          cpf: convertModal.value.cpf,
           demand: convertForm.demand,
           donationStartDate: convertForm.donationStartDate,
           donorType: convertForm.donorType,
@@ -364,7 +366,7 @@ export default function People() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingPerson) {
+    if (!editModal.value) {
       return;
     }
 
@@ -380,14 +382,14 @@ export default function People() {
       scope: "PeoplePage.update",
       run: () =>
         updatePerson({
-          id: editingPerson.id,
+          id: editModal.value.id,
           name: editForm.name,
           cpf: editForm.cpf,
         }),
       successMessage: "Pessoa atualizada com sucesso.",
       errorMessage: "Não foi possível atualizar a pessoa.",
       onSuccess: () => {
-        setEditingPerson(null);
+        editModal.close();
         setEditForm({ ...EMPTY_PERSON_FORM });
         setEditFormErrors({});
       },
@@ -395,16 +397,16 @@ export default function People() {
   };
 
   const handleDelete = async () => {
-    if (!personPendingRemoval) {
+    if (!removeModal.value) {
       return;
     }
 
     await runDeleteMutation({
       scope: "PeoplePage.delete",
-      run: () => deletePerson(personPendingRemoval.id),
+      run: () => deletePerson(removeModal.value.id),
       successMessage: "Pessoa enviada para a lixeira com sucesso.",
       errorMessage: "Não foi possível remover a pessoa.",
-      onSuccess: () => setPersonPendingRemoval(null),
+      onSuccess: () => removeModal.close(),
       buildUndo: (trashItemId) =>
         trashItemId ? () => handleRestoreDeletedPerson(trashItemId) : null,
     });
@@ -443,7 +445,7 @@ export default function People() {
             setSuccessAction(null);
             setCreateForm({ ...EMPTY_PERSON_FORM });
             setCreateFormErrors({});
-            setIsCreateModalOpen(true);
+            createModal.open();
           }}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
@@ -491,7 +493,7 @@ export default function People() {
 
       <FeedbackMessage
         message={
-          isCreateModalOpen || editingPerson || convertingPerson || personPendingRemoval
+          createModal.isOpen || editModal.isOpen || convertModal.isOpen || removeModal.isOpen
             ? ""
             : error
         }
@@ -528,12 +530,12 @@ export default function People() {
             />
           </li>
 
-          {peoplePagination.visibleItems.map((person) => (
+          {people.map((person) => (
             <PersonListItem
               key={person.id}
               onConvert={handleOpenConvertModal}
               onEdit={handleOpenEditModal}
-              onRemove={setPersonPendingRemoval}
+              onRemove={removeModal.open}
               person={person}
             />
           ))}
@@ -553,7 +555,7 @@ export default function People() {
       ) : null}
 
       <AnimatePresence>
-        {isCreateModalOpen ? (
+        {createModal.isOpen ? (
           <FormModal
             title="Adicionar pessoa"
             description="Cadastre uma pessoa para uso como referência de um auxiliar."
@@ -561,7 +563,7 @@ export default function People() {
             feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={() => {
-              setIsCreateModalOpen(false);
+              createModal.close();
               setCreateForm({ ...EMPTY_PERSON_FORM });
               setCreateFormErrors({});
               setFormError("");
@@ -591,7 +593,7 @@ export default function People() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {editingPerson ? (
+        {editModal.isOpen ? (
           <FormModal
             title="Editar pessoa"
             description="Atualize os dados da pessoa de referência."
@@ -599,7 +601,7 @@ export default function People() {
             feedbackMessage={formError}
             isLoading={isSubmitting}
             onClose={() => {
-              setEditingPerson(null);
+              editModal.close();
               setEditForm({ ...EMPTY_PERSON_FORM });
               setEditFormErrors({});
               setFormError("");
@@ -629,7 +631,7 @@ export default function People() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {convertingPerson ? (
+        {convertModal.isOpen ? (
           <ConvertPersonToDonorModal
             demandOptions={donorFormDemandOptions}
             errors={convertFormErrors}
@@ -640,7 +642,7 @@ export default function People() {
             onClose={handleCloseConvertModal}
             onSubmit={handleConvertToDonor}
             onChange={handleFormChange(setConvertForm, setConvertFormErrors)}
-            person={convertingPerson}
+            person={convertModal.value}
             selectedHolder={selectedConversionHolder}
             typeOptions={conversionTypeOptions}
           />
@@ -648,14 +650,14 @@ export default function People() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {personPendingRemoval ? (
+        {removeModal.isOpen ? (
           <ConfirmModal
             title="Remover pessoa"
-            description={`Tem certeza de que deseja remover ${personPendingRemoval.name}?`}
+            description={`Tem certeza de que deseja remover ${removeModal.value.name}?`}
             confirmLabel="Remover pessoa"
             feedbackMessage={error}
             isLoading={isDeleting}
-            onCancel={() => setPersonPendingRemoval(null)}
+            onCancel={() => removeModal.close()}
             onConfirm={handleDelete}
           />
         ) : null}

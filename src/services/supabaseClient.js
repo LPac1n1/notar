@@ -9,15 +9,16 @@ import { createClient } from "@supabase/supabase-js";
  * Security and the Storage bucket policies are what actually gate access.
  */
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-export const isLocalAuthMode =
-  import.meta.env.VITE_NOTAR_AUTH_MODE === "local";
+// `import.meta.env` is injected by Vite and is undefined in Node.js test
+// environments. Optional chaining lets the module load cleanly in both
+// contexts; functions that depend on these values guard with isSupabaseConfigured.
+const env = import.meta.env ?? {};
+const supabaseUrl = env.VITE_SUPABASE_URL;
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
+export const isLocalAuthMode = env.VITE_NOTAR_AUTH_MODE === "local";
 
-export const STORAGE_BUCKET =
-  import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "notar";
-export const STORAGE_OBJECT_NAME =
-  import.meta.env.VITE_SUPABASE_STORAGE_OBJECT || "dados.json";
+export const STORAGE_BUCKET = env.VITE_SUPABASE_STORAGE_BUCKET || "notar";
+export const STORAGE_OBJECT_NAME = env.VITE_SUPABASE_STORAGE_OBJECT || "dados.json";
 
 export const isSupabaseConfigured =
   !isLocalAuthMode && Boolean(supabaseUrl && supabaseAnonKey);
