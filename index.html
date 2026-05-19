@@ -11,6 +11,20 @@
       href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script>
+      (function () {
+        var t = localStorage.getItem("notar-theme") || "system";
+        var html = document.documentElement;
+        if (t === "light") {
+          html.classList.add("light");
+        } else if (t === "system") {
+          if (window.matchMedia("(prefers-color-scheme: light)").matches) {
+            html.classList.add("light");
+          }
+        }
+        // "dark" → no class needed, dark is the CSS default
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -246,53 +246,55 @@ textarea {
   height: 0;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --app-bg: #f0f1f4;
-    --surface: #ffffff;
-    --surface-strong: #f4f5f8;
-    --surface-muted: #e8eaef;
-    --surface-elevated: #f8f9fb;
-    --line: rgba(0, 0, 0, 0.08);
-    --line-strong: rgba(0, 0, 0, 0.16);
-    --text-main: #111214;
-    --text-soft: #3d4148;
-    --muted: #7a7e88;
-    --muted-strong: #555a64;
-    --accent: #d97706;
-    --accent-strong: #b45309;
-    --accent-soft: rgba(217, 119, 6, 0.12);
-    --accent-2: #059669;
-    --accent-2-soft: rgba(5, 150, 105, 0.1);
-    --danger: #dc2626;
-    --danger-line: rgba(220, 38, 38, 0.35);
-    --danger-soft: rgba(220, 38, 38, 0.08);
-    --success: #059669;
-    --success-line: rgba(5, 150, 105, 0.35);
-    --warning: #d97706;
-    --warning-line: rgba(217, 119, 6, 0.35);
-    --warning-soft: rgba(217, 119, 6, 0.1);
-    --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.16);
-    --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.12);
-    --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.1);
-  }
+/* ── Light-mode tokens ────────────────────────────────────────────────────── */
+/* The theme hook always sets .light or .dark on <html>.                      */
+/* Dark is the default (no class). Light overrides it via the .light class.   */
 
-  ::selection {
-    background: rgba(217, 119, 6, 0.18);
-    color: var(--text-main);
-  }
+.light {
+  --app-bg: #f0f1f4;
+  --surface: #ffffff;
+  --surface-strong: #f4f5f8;
+  --surface-muted: #e8eaef;
+  --surface-elevated: #f8f9fb;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --text-main: #111214;
+  --text-soft: #3d4148;
+  --muted: #7a7e88;
+  --muted-strong: #555a64;
+  --accent: #d97706;
+  --accent-strong: #b45309;
+  --accent-soft: rgba(217, 119, 6, 0.12);
+  --accent-2: #059669;
+  --accent-2-soft: rgba(5, 150, 105, 0.1);
+  --danger: #dc2626;
+  --danger-line: rgba(220, 38, 38, 0.35);
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --success: #059669;
+  --success-line: rgba(5, 150, 105, 0.35);
+  --warning: #d97706;
+  --warning-line: rgba(217, 119, 6, 0.35);
+  --warning-soft: rgba(217, 119, 6, 0.1);
+  --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.16);
+  --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.12);
+  --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.1);
+}
 
-  * {
-    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-  }
+.light ::selection {
+  background: rgba(217, 119, 6, 0.18);
+  color: var(--text-main);
+}
 
-  *::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.2);
-  }
+.light * {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
 
-  *::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.32);
-  }
+.light *::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.light *::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
 }
 
 @media (prefers-reduced-motion: reduce) {

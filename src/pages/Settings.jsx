@@ -24,6 +24,7 @@ import {
 } from "../services/db";
 import { exportLogBuffer, getLogBufferSnapshot, logError } from "../services/logger";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   finishDataSyncFeedback,
@@ -81,6 +82,7 @@ function waitForDataSyncHandoff() {
 
 export default function Settings() {
   const { status: authStatus, user, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [storageInfo, setStorageInfo] = useState(null);
   const [syncSnapshot, setSyncSnapshot] = useState(() => getCloudSyncStatus());
   const [error, setError] = useState("");
@@ -334,6 +336,33 @@ export default function Settings() {
         tone="error"
       />
       <FeedbackMessage message={successMessage} tone="success" />
+
+      <SectionCard
+        title="Aparência"
+        description="Escolha entre o tema escuro, claro ou o padrão do sistema operacional."
+        className="mb-6"
+      >
+        <div className="flex flex-wrap gap-2">
+          {[
+            { value: "system", label: "Sistema" },
+            { value: "dark", label: "Escuro" },
+            { value: "light", label: "Claro" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setTheme(option.value)}
+              className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                theme === option.value
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-[#12151c]"
+                  : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard
         title={isLocalMode ? "Armazenamento local" : "Sincronização"}
