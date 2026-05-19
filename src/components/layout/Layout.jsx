@@ -1,8 +1,24 @@
 import { APP_SCROLL_CONTAINER_ID } from "../../utils/appScroll";
-import Sidebar from "./Sidebar";
+import { useKeyboardNavigation } from "../../hooks/useKeyboardNavigation";
 import Header from "./Header";
+import MobileBottomNav from "./MobileBottomNav";
+import Sidebar from "./Sidebar";
+
+function KeyboardNavigationHint({ isPendingG }) {
+  if (!isPendingG) return null;
+  return (
+    <div className="pointer-events-none fixed bottom-20 left-1/2 z-[200] -translate-x-1/2 lg:bottom-4">
+      <div className="rounded-lg border border-[var(--line-strong)] bg-[var(--surface-muted)] px-3 py-2 text-sm font-medium text-[var(--text-main)] shadow-[var(--shadow-popover)]">
+        <kbd className="font-mono font-bold text-[var(--accent)]">g</kbd>
+        <span className="ml-2 text-[var(--muted)]">→ pressione uma letra para navegar</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Layout({ children }) {
+  const { isPendingG } = useKeyboardNavigation();
+
   return (
     <div className="h-dvh overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-3 p-3 lg:flex-row lg:gap-4 lg:p-4">
@@ -14,13 +30,16 @@ export default function Layout({ children }) {
           <main className="min-h-0 flex-1 overflow-hidden">
             <div
               id={APP_SCROLL_CONTAINER_ID}
-              className="h-full overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-4 md:p-5 lg:p-6"
+              className="h-full overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-4 pb-20 md:p-5 lg:p-6 lg:pb-6"
             >
               {children}
             </div>
           </main>
         </div>
       </div>
+
+      <MobileBottomNav />
+      <KeyboardNavigationHint isPendingG={isPendingG} />
     </div>
   );
 }

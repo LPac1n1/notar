@@ -94,27 +94,15 @@ function FooterNavItem({ item }) {
 export default function Sidebar() {
   return (
     <>
-      <div className="lg:hidden">
-        <div className="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
-              <span className="font-[var(--font-display)] text-xl font-semibold">
-                N
-              </span>
-            </div>
-            <div>
-              <p className="font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
-                Notar
-              </p>
-            </div>
-          </div>
-
-          <nav className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {[...MAIN_NAV_ITEMS, ...FOOTER_NAV_ITEMS].map((item) => (
-              <NavItem key={item.to} item={item} compact />
-            ))}
-          </nav>
+      <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 lg:hidden">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
+          <span className="font-[var(--font-display)] text-lg font-semibold">
+            N
+          </span>
         </div>
+        <p className="font-[var(--font-display)] text-xl font-semibold text-[var(--text-main)]">
+          Notar
+        </p>
       </div>
 
       <aside className="hidden h-full w-72 shrink-0 lg:block">
