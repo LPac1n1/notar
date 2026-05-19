@@ -7,6 +7,7 @@ import TextInput from "../../../components/ui/TextInput";
 import { MonthlyIcon } from "../../../components/ui/icons";
 import {
   createAbatementAdjustment,
+  listAdjustmentsForDonor,
   previewCatchUpRange,
 } from "../../../services/abatementAdjustmentService";
 import { logError } from "../../../services/logger";
@@ -62,6 +63,7 @@ export default function CatchUpAdjustmentModal({
     return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
   });
   const [description, setDescription] = useState("");
+  const [existingAdjustments, setExistingAdjustments] = useState([]);
   const [preview, setPreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
@@ -76,6 +78,39 @@ export default function CatchUpAdjustmentModal({
   const rangeWithinReference =
     fieldsValid && rangeEndMonth <= referenceMonth;
   const allValid = rangeOrderValid && rangeWithinReference;
+
+  useEffect(() => {
+    if (!donor?.id) return;
+    listAdjustmentsForDonor(donor.id)
+      .then(setExistingAdjustments)
+      .catch(() => {});
+  }, [donor?.id]);
+
+  // Detect conflicts with existing adjustments:
+  //   1. Duplicate: another adjustment already uses the same referenceMonth.
+  //   2. Overlap: the selected range intersects an existing adjustment's range.
+  const conflictWarning = useMemo(() => {
+    if (!referenceMonth || !rangeStartMonth || !rangeEndMonth) return "";
+
+    const duplicate = existingAdjustments.find(
+      (adj) => adj.referenceMonth.slice(0, 7) === referenceMonth,
+    );
+    if (duplicate) {
+      return `Já existe um acumulado lançado em ${formatMonthYear(`${referenceMonth}-01`)}. Escolha um mês diferente.`;
+    }
+
+    const newStart = `${rangeStartMonth}-01`;
+    const newEnd = `${rangeEndMonth}-01`;
+    const overlap = existingAdjustments.find(
+      (adj) =>
+        adj.rangeStartMonth <= newEnd && adj.rangeEndMonth >= newStart,
+    );
+    if (overlap) {
+      return `O período selecionado já está coberto pelo acumulado de ${formatMonthYear(overlap.referenceMonth)}. Ajuste o intervalo.`;
+    }
+
+    return "";
+  }, [referenceMonth, rangeStartMonth, rangeEndMonth, existingAdjustments]);
 
   // Recompute the preview whenever the user adjusts the range.
   useEffect(() => {
@@ -245,6 +280,8 @@ export default function CatchUpAdjustmentModal({
 
       {validationMessage ? (
         <p className="mt-4 text-xs text-[var(--warning)]">{validationMessage}</p>
+      ) : conflictWarning ? (
+        <p className="mt-4 text-xs text-[var(--danger)]">{conflictWarning}</p>
       ) : null}
 
       <div className="mt-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3">
@@ -318,6 +355,7 @@ export default function CatchUpAdjustmentModal({
           onClick={handleConfirm}
           disabled={
             !allValid ||
+            Boolean(conflictWarning) ||
             isSubmitting ||
             !preview ||
             preview.totalNotes === 0

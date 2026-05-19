@@ -39,7 +39,7 @@ export default function ConsolidatedPendingDonors({
           {donors.map((donor) => {
             const isUpdating = updatingDonorId === donor.donorId;
             const pendingMonths = donor.months.filter(
-              (month) => month.abatementStatus !== "applied",
+              (month) => month.abatementStatus !== "applied" && !month.isSubsumed,
             );
 
             return (
@@ -87,6 +87,9 @@ export default function ConsolidatedPendingDonors({
                         <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-[var(--warning)]">
                           Pendente
                         </span>
+                        <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-[var(--muted)]">
+                          Via acumulado
+                        </span>
                       </div>
                     </div>
 
@@ -123,6 +126,21 @@ export default function ConsolidatedPendingDonors({
 
                       <div className="flex flex-wrap gap-1.5">
                         {donor.months.map((month) => {
+                          if (month.isSubsumed) {
+                            const subsumedLabel = month.subsumedByReferenceMonth
+                              ? `Incluído no acumulado de ${formatMonthYear(month.subsumedByReferenceMonth)}`
+                              : "Incluído em um acumulado";
+                            return (
+                              <span
+                                key={month.id}
+                                title={`${formatMonthYear(month.referenceMonth)} • ${formatCurrency(month.abatementAmount)} • ${subsumedLabel}`}
+                                className="cursor-default rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--muted)]"
+                              >
+                                {formatMonthYear(month.referenceMonth)}
+                              </span>
+                            );
+                          }
+
                           const isApplied = month.abatementStatus === "applied";
                           const tooltip = `${formatMonthYear(month.referenceMonth)} • ${formatCurrency(month.abatementAmount)} • Clique para ${
                             isApplied ? "desmarcar" : "realizar"

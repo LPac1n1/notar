@@ -6,6 +6,7 @@ import {
   MONTHLY_SOURCE_SUBSELECTS,
   applySummaryFilters,
   mapSummaryRow,
+  markSubsumedRows,
   mergeAdjustmentsByMonth,
   sortSummariesByAbatement,
 } from "./sharedFragments";
@@ -124,9 +125,10 @@ export async function listHistoricalMonthlySummaries({
   const adjustments = await listAllAdjustments();
   const baseRows = rows.map(mapSummaryRow);
   const mergedRows = mergeAdjustmentsByMonth(baseRows, adjustments);
+  const taggedRows = markSubsumedRows(mergedRows, adjustments);
 
   return sortSummariesByAbatement(
-    applySummaryFilters(mergedRows, {
+    applySummaryFilters(taggedRows, {
       abatementStatus,
       donationActivity,
     }),

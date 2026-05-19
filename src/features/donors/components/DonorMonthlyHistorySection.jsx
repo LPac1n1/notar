@@ -42,7 +42,20 @@ export default function DonorMonthlyHistorySection({ monthlyHistory }) {
               </div>
               <div>
                 <p className="mb-1 text-sm text-[var(--muted)]">Status</p>
-                <StatusBadge status={item.abatementStatus} />
+                {item.isSubsumed ? (
+                  <span
+                    title={
+                      item.subsumedByReferenceMonth
+                        ? `Incluído no acumulado de ${formatMonthYear(item.subsumedByReferenceMonth)}`
+                        : "Incluído em um acumulado"
+                    }
+                    className="inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-xs font-medium text-[var(--muted)]"
+                  >
+                    Via acumulado
+                  </span>
+                ) : (
+                  <StatusBadge status={item.abatementStatus} />
+                )}
               </div>
             </div>
           ))}

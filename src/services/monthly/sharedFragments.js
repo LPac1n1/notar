@@ -254,6 +254,33 @@ export function mergeAdjustmentIntoRow(row, adjustment) {
   };
 }
 
+/**
+ * Marks rows whose referenceMonth falls within another adjustment's range (but
+ * is NOT that adjustment's own referenceMonth). These months are "subsumed" by
+ * a catch-up: their individual amounts are already included in the catch-up
+ * total, so they must be excluded from totals to avoid double-counting.
+ */
+export function markSubsumedRows(rows, adjustments) {
+  if (!adjustments || adjustments.length === 0) return rows;
+
+  return rows.map((row) => {
+    const covering = adjustments.find(
+      (adj) =>
+        adj.donorId === row.donorId &&
+        adj.referenceMonth !== row.referenceMonth &&
+        adj.rangeStartMonth <= row.referenceMonth &&
+        adj.rangeEndMonth >= row.referenceMonth,
+    );
+    if (!covering) return row;
+    return {
+      ...row,
+      isSubsumed: true,
+      subsumedByAdjustmentId: covering.id,
+      subsumedByReferenceMonth: covering.referenceMonth,
+    };
+  });
+}
+
 export function mergeAdjustmentsByMonth(rows, adjustments) {
   if (!adjustments || adjustments.length === 0) {
     return rows;
@@ -279,6 +306,13 @@ export function applySummaryFilters(
   { abatementStatus = "all", donationActivity = "all" } = {},
 ) {
   let filteredRows = rows;
+
+  // Subsumed rows belong to a catch-up in a different reference month. When
+  // any filter narrows the result set they must be excluded so they don't
+  // appear as independent pending/donated entries.
+  if (abatementStatus !== "all" || donationActivity !== "all") {
+    filteredRows = filteredRows.filter((row) => !row.isSubsumed);
+  }
 
   if (donationActivity === "donated") {
     filteredRows = filteredRows.filter((row) => row.hasDonationsInMonth);

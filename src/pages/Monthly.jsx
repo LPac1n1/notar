@@ -27,7 +27,7 @@ import { listImports } from "../services/importService";
 import { listMonthlySummaries } from "../services/monthlyService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
-import { formatCurrency, formatInteger } from "../utils/format";
+import { formatInteger } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
@@ -665,6 +665,7 @@ export default function Monthly() {
           onClose={() => setCatchUpDonor(null)}
           onConfirmed={() => {
             setCatchUpDonor(null);
+            setSuccessMessage("Acumulado lançado com sucesso.");
             reloadSummaries();
           }}
         />

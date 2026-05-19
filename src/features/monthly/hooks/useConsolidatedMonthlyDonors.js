@@ -4,26 +4,33 @@ export function useConsolidatedMonthlyDonors({
   abatementStatus = "all",
   summaries = [],
 } = {}) {
-  const totalAbatement = useMemo(
-    () =>
-      summaries.reduce(
-        (accumulator, item) => accumulator + Number(item.abatementAmount ?? 0),
-        0,
-      ),
-    [summaries],
-  );
-
   const donationSummaries = useMemo(
     () => summaries.filter((summary) => summary.hasDonationsInMonth),
     [summaries],
   );
 
+  // Subsumed rows belong to a catch-up in a different reference month — exclude
+  // them from amount totals to avoid double-counting.
+  const activeDonationSummaries = useMemo(
+    () => donationSummaries.filter((summary) => !summary.isSubsumed),
+    [donationSummaries],
+  );
+
+  const totalAbatement = useMemo(
+    () =>
+      activeDonationSummaries.reduce(
+        (accumulator, item) => accumulator + Number(item.abatementAmount ?? 0),
+        0,
+      ),
+    [activeDonationSummaries],
+  );
+
   const pendingSummaries = useMemo(
     () =>
-      donationSummaries.filter(
+      activeDonationSummaries.filter(
         (summary) => summary.abatementStatus !== "applied",
       ),
-    [donationSummaries],
+    [activeDonationSummaries],
   );
 
   const totalPendingAbatement = useMemo(
@@ -37,19 +44,21 @@ export function useConsolidatedMonthlyDonors({
 
   const totalAppliedAbatement = useMemo(
     () =>
-      donationSummaries.reduce(
+      activeDonationSummaries.reduce(
         (accumulator, item) =>
           item.abatementStatus === "applied"
             ? accumulator + Number(item.abatementAmount ?? 0)
             : accumulator,
         0,
       ),
-    [donationSummaries],
+    [activeDonationSummaries],
   );
 
   const consolidatedDonors = useMemo(() => {
     const donorsById = new Map();
 
+    // Include ALL donation months (including subsumed) in the months display,
+    // but skip subsumed amounts when accumulating per-donor totals.
     for (const summary of donationSummaries) {
       const current = donorsById.get(summary.donorId) ?? {
         donorId: summary.donorId,
@@ -72,12 +81,16 @@ export function useConsolidatedMonthlyDonors({
         abatementAmount: summary.abatementAmount,
         abatementStatus: summary.abatementStatus,
         adjustmentId: summary.adjustment?.id ?? "",
+        isSubsumed: summary.isSubsumed ?? false,
+        subsumedByReferenceMonth: summary.subsumedByReferenceMonth ?? "",
       });
       current.invalidNotesCount += Number(summary.invalidNotesCount ?? 0);
-      if (summary.abatementStatus === "applied") {
-        current.totalApplied += Number(summary.abatementAmount ?? 0);
-      } else {
-        current.totalPending += Number(summary.abatementAmount ?? 0);
+      if (!summary.isSubsumed) {
+        if (summary.abatementStatus === "applied") {
+          current.totalApplied += Number(summary.abatementAmount ?? 0);
+        } else {
+          current.totalPending += Number(summary.abatementAmount ?? 0);
+        }
       }
       donorsById.set(summary.donorId, current);
     }
