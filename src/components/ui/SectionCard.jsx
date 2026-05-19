@@ -1,6 +1,7 @@
 export default function SectionCard({
   title,
   description,
+  icon: Icon,
   children,
   className = "",
 }) {
@@ -11,12 +12,19 @@ export default function SectionCard({
       {(title || description) ? (
         <div className="mb-5">
           {title ? (
-            <h3 className="font-[var(--font-display)] text-xl font-bold text-[var(--text-main)]">
-              {title}
-            </h3>
+            <div className="flex items-center gap-2.5">
+              {Icon ? (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--muted-strong)]">
+                  <Icon className="h-4 w-4" />
+                </div>
+              ) : null}
+              <h3 className="font-[var(--font-display)] text-xl font-bold text-[var(--text-main)]">
+                {title}
+              </h3>
+            </div>
           ) : null}
           {description ? (
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            <p className={`max-w-3xl text-sm leading-6 text-[var(--muted)] ${Icon ? "mt-2 pl-[2.625rem]" : "mt-2"}`.trim()}>
               {description}
             </p>
           ) : null}

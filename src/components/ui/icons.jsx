@@ -1,6 +1,11 @@
 export {
   ArrowLeft as BackIcon,
   Bold as BoldIcon,
+  Bug as BugIcon,
+  Keyboard as KeyboardIcon,
+  Monitor as MonitorIcon,
+  Moon as MoonIcon,
+  Sun as SunIcon,
   CalendarDays as MonthlyIcon,
   Check as CheckIcon,
   CheckSquare as ChecklistIcon,

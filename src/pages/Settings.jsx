@@ -1,16 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import CopyableValue from "../components/ui/CopyableValue";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
-import TextInput from "../components/ui/TextInput";
+import StatusBadge from "../components/ui/StatusBadge";
 import {
   BackupExportIcon,
   BackupImportIcon,
+  BugIcon,
+  CloudIcon,
   DownloadIcon,
+  KeyboardIcon,
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
+  UploadIcon,
 } from "../components/ui/icons";
 import {
   exportDatabaseBackup,
@@ -25,6 +33,7 @@ import {
 import { exportLogBuffer, getLogBufferSnapshot, logError } from "../services/logger";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
+import { KEYBOARD_SHORTCUTS } from "../hooks/useKeyboardNavigation";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   finishDataSyncFeedback,
@@ -35,19 +44,34 @@ import { downloadFile } from "../utils/download";
 import { formatDatePtBR, formatSyncTime } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
+import { NAV_ITEMS } from "../components/layout/navigation";
 
 const DATA_SYNC_HANDOFF_DELAY_MS = 650;
 
+const THEME_OPTIONS = [
+  { value: "system", label: "Sistema", icon: MonitorIcon },
+  { value: "dark",   label: "Escuro",  icon: MoonIcon },
+  { value: "light",  label: "Claro",   icon: SunIcon },
+];
+
+const SHORTCUT_LABELS = Object.fromEntries(
+  NAV_ITEMS.map((item) => [item.to, item.label]),
+);
+
+function plural(n, singular, pluralForm) {
+  return `${formatInteger(n)} ${n === 1 ? singular : pluralForm}`;
+}
+
 function formatBackupStats(stats = {}) {
   return [
-    `${formatInteger(stats.demands ?? 0)} demanda(s)`,
-    `${formatInteger(stats.donors ?? 0)} doador(es)`,
-    `${formatInteger(stats.donorCpfLinks ?? 0)} CPF(s) vinculado(s)`,
-    `${formatInteger(stats.imports ?? 0)} importação(ões)`,
-    `${formatInteger(stats.importCpfSummary ?? 0)} CPF(s) consolidados`,
-    `${formatInteger(stats.monthlyDonorSummary ?? 0)} resumo(s) mensal(is)`,
-    `${formatInteger(stats.actionHistory ?? 0)} ação(ões) no histórico`,
-    `${formatInteger(stats.trashItems ?? 0)} item(ns) na lixeira`,
+    plural(stats.demands ?? 0, "demanda", "demandas"),
+    plural(stats.donors ?? 0, "doador", "doadores"),
+    plural(stats.donorCpfLinks ?? 0, "CPF vinculado", "CPFs vinculados"),
+    plural(stats.imports ?? 0, "importação", "importações"),
+    plural(stats.importCpfSummary ?? 0, "CPF consolidado", "CPFs consolidados"),
+    plural(stats.monthlyDonorSummary ?? 0, "resumo mensal", "resumos mensais"),
+    plural(stats.actionHistory ?? 0, "ação no histórico", "ações no histórico"),
+    plural(stats.trashItems ?? 0, "item na lixeira", "itens na lixeira"),
   ].join(", ");
 }
 
@@ -58,12 +82,7 @@ function formatLastSyncedAt(value) {
   return `${formatDatePtBR(value)} às ${time}`;
 }
 
-async function recordSettingsAction({
-  actionType,
-  description,
-  label,
-  payload = {},
-}) {
+async function recordSettingsAction({ actionType, description, label, payload = {} }) {
   await createActionHistoryEntry({
     actionType,
     entityType: "settings",
@@ -75,9 +94,20 @@ async function recordSettingsAction({
 }
 
 function waitForDataSyncHandoff() {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, DATA_SYNC_HANDOFF_DELAY_MS);
-  });
+  return new Promise((resolve) => window.setTimeout(resolve, DATA_SYNC_HANDOFF_DELAY_MS));
+}
+
+function InfoRow({ label, children }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <span className="shrink-0 text-sm text-[var(--muted)]">{label}</span>
+      <span className="text-right text-sm font-medium text-[var(--text-main)]">{children}</span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="my-1 border-t border-[var(--line)]" />;
 }
 
 export default function Settings() {
@@ -93,6 +123,8 @@ export default function Settings() {
   const [isImportBackupConfirmOpen, setIsImportBackupConfirmOpen] = useState(false);
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [dataSyncMessage, setDataSyncMessage] = useState("");
+  const fileInputRef = useRef(null);
+
   const isLoadingStorage = storageInfo === null && !error;
   const isApplyingData = Boolean(dataSyncMessage);
   const isLocalMode = authStatus === "local";
@@ -104,33 +136,23 @@ export default function Settings() {
       try {
         setError("");
         const info = await getDatabaseStorageInfo();
-
-        if (isMounted) {
-          setStorageInfo(info);
-        }
+        if (isMounted) setStorageInfo(info);
       } catch (storageError) {
         logError("Settings.loadStorageInfo", storageError);
-
-        if (isMounted) {
-          setError(
-            "Não foi possível verificar o modo de armazenamento do sistema.",
-          );
-        }
+        if (isMounted)
+          setError("Não foi possível verificar o modo de armazenamento do sistema.");
       }
     };
 
     loadSettings();
+
     const handleStorageInfoChange = (event) => {
-      if (isMounted && event.detail) {
-        setStorageInfo(event.detail);
-      }
+      if (isMounted && event.detail) setStorageInfo(event.detail);
     };
 
     window.addEventListener(STORAGE_INFO_EVENT, handleStorageInfoChange);
-    const unsubscribeSync = onCloudSyncStatusChange((nextSnapshot) => {
-      if (isMounted) {
-        setSyncSnapshot(nextSnapshot);
-      }
+    const unsubscribeSync = onCloudSyncStatusChange((next) => {
+      if (isMounted) setSyncSnapshot(next);
     });
 
     return () => {
@@ -149,12 +171,7 @@ export default function Settings() {
       setSuccessMessage("Sincronização concluída.");
     } catch (syncError) {
       logError("Settings.forceSync", syncError);
-      setError(
-        getErrorMessage(
-          syncError,
-          "Não foi possível sincronizar com a nuvem agora.",
-        ),
-      );
+      setError(getErrorMessage(syncError, "Não foi possível sincronizar com a nuvem agora."));
     } finally {
       setIsSubmitting(false);
     }
@@ -165,35 +182,18 @@ export default function Settings() {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
-
       const backup = await exportDatabaseBackup();
-      downloadFile({
-        fileName: backup.fileName,
-        content: backup.text,
-        mimeType: "application/json",
-      });
+      downloadFile({ fileName: backup.fileName, content: backup.text, mimeType: "application/json" });
       await recordSettingsAction({
         actionType: "backup",
         label: backup.fileName,
         description: "Backup exportado.",
-        payload: {
-          exportedAt: backup.exportedAt,
-          fileName: backup.fileName,
-          stats: backup.stats,
-        },
+        payload: { exportedAt: backup.exportedAt, fileName: backup.fileName, stats: backup.stats },
       });
-
-      setSuccessMessage(
-        `Backup exportado com sucesso: ${formatBackupStats(backup.stats)}.`,
-      );
+      setSuccessMessage(`Backup exportado: ${formatBackupStats(backup.stats)}.`);
     } catch (backupError) {
       logError("Settings.exportBackup", backupError);
-      setError(
-        getErrorMessage(
-          backupError,
-          "Não foi possível exportar o backup do sistema.",
-        ),
-      );
+      setError(getErrorMessage(backupError, "Não foi possível exportar o backup do sistema."));
     } finally {
       setIsSubmitting(false);
     }
@@ -206,7 +206,7 @@ export default function Settings() {
 
   const resetBackupFileSelection = () => {
     setSelectedBackupFile(null);
-    setBackupInputKey((current) => current + 1);
+    setBackupInputKey((c) => c + 1);
   };
 
   const handleImportBackup = async () => {
@@ -214,50 +214,30 @@ export default function Settings() {
       setError("Selecione um arquivo de backup antes de importar.");
       return;
     }
-
     let dataSyncOperationId = "";
-
     try {
       setIsSubmitting(true);
       setError("");
       setSuccessMessage("");
       const nextMessage = "Carregando dados";
-      dataSyncOperationId = startDataSyncFeedback({
-        label: nextMessage,
-        source: "backup-import",
-      });
+      dataSyncOperationId = startDataSyncFeedback({ label: nextMessage, source: "backup-import" });
       setDataSyncMessage(nextMessage);
-
-      const result = await importDatabaseBackup(selectedBackupFile, {
-        emitChange: false,
-      });
+      const result = await importDatabaseBackup(selectedBackupFile, { emitChange: false });
       await reconcileAllImports({ emitChange: false });
       await recordSettingsAction({
         actionType: "backup",
         label: selectedBackupFile.name,
         description: "Backup importado e restaurado.",
-        payload: {
-          fileName: selectedBackupFile.name,
-          stats: result.stats,
-        },
+        payload: { fileName: selectedBackupFile.name, stats: result.stats },
       });
       notifyDatabaseChanged({ source: "backup-import" });
       await waitForDataSyncHandoff();
       resetBackupFileSelection();
       setIsImportBackupConfirmOpen(false);
-      setSuccessMessage(
-        `Backup importado com sucesso: ${formatBackupStats(result.stats)}.`,
-      );
+      setSuccessMessage(`Backup importado: ${formatBackupStats(result.stats)}.`);
     } catch (backupError) {
-      logError("Settings.importBackup", backupError, {
-        fileName: selectedBackupFile?.name ?? "",
-      });
-      setError(
-        getErrorMessage(
-          backupError,
-          "Não foi possível importar o backup selecionado.",
-        ),
-      );
+      logError("Settings.importBackup", backupError, { fileName: selectedBackupFile?.name ?? "" });
+      setError(getErrorMessage(backupError, "Não foi possível importar o backup selecionado."));
     } finally {
       finishDataSyncFeedback(dataSyncOperationId);
       setDataSyncMessage("");
@@ -274,181 +254,154 @@ export default function Settings() {
     } catch (signOutError) {
       logError("Settings.signOut", signOutError);
       setIsSignOutConfirmOpen(false);
-      setError(
-        getErrorMessage(signOutError, "Não foi possível encerrar a sessão."),
-      );
+      setError(getErrorMessage(signOutError, "Não foi possível encerrar a sessão."));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDownloadLogBuffer = () => {
-    // Snapshot before exporting so the file size matches what the user sees
-    // in the success message. The log buffer keeps growing in memory while
-    // the session is open, so we capture the count once.
     const snapshot = getLogBufferSnapshot();
     const json = exportLogBuffer();
     const fileName = `notar-log-${new Date().toISOString().slice(0, 10)}.json`;
-
-    downloadFile({
-      fileName,
-      content: json,
-      mimeType: "application/json",
-    });
-
+    downloadFile({ fileName, content: json, mimeType: "application/json" });
     setError("");
     setSuccessMessage(
       snapshot.length === 0
         ? "Log salvo. Nenhum erro foi capturado nesta sessão."
-        : `Log salvo com ${formatInteger(snapshot.length)} entrada(s) recente(s).`,
+        : `Log salvo com ${plural(snapshot.length, "entrada", "entradas")}.`,
     );
   };
 
-  const syncStatusBadge = (() => {
-    if (isLocalMode) {
-      return { tone: "muted", label: "Modo local ativo" };
-    }
-    if (syncSnapshot.status === "syncing") {
-      return { tone: "info", label: "Sincronizando…" };
-    }
-    if (syncSnapshot.status === "error") {
-      return {
-        tone: "warning",
-        label: "Falha ao sincronizar — tentaremos novamente na próxima alteração.",
-      };
-    }
-    return { tone: "muted", label: "Tudo sincronizado" };
+  const syncStatus = (() => {
+    if (isLocalMode) return { tone: "neutral", label: "Modo local" };
+    if (syncSnapshot.status === "syncing") return { tone: "info", label: "Sincronizando…" };
+    if (syncSnapshot.status === "error") return { tone: "warning", label: "Falha ao sincronizar" };
+    return { tone: "success", label: "Sincronizado" };
   })();
 
   return (
     <div>
       <PageHeader
         title="Configurações"
-        subtitle={
-          isLocalMode
-            ? "Armazenamento local, backup e diagnóstico."
-            : "Sincronização, backup e conta."
-        }
+        subtitle="Aparência, conta, backup e diagnóstico."
         className="mb-6"
       />
       <FeedbackMessage
-        message={isImportBackupConfirmOpen ? "" : error}
+        message={isImportBackupConfirmOpen || isSignOutConfirmOpen ? "" : error}
         tone="error"
       />
       <FeedbackMessage message={successMessage} tone="success" />
 
+      {/* ── Aparência ─────────────────────────────────────────────────── */}
       <SectionCard
         title="Aparência"
-        description="Escolha entre o tema escuro, claro ou o padrão do sistema operacional."
+        icon={SunIcon}
+        description="Tema da interface. A escolha é salva no navegador."
         className="mb-6"
       >
-        <div className="flex flex-wrap gap-2">
-          {[
-            { value: "system", label: "Sistema" },
-            { value: "dark", label: "Escuro" },
-            { value: "light", label: "Claro" },
-          ].map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setTheme(option.value)}
-              className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-                theme === option.value
-                  ? "border-[var(--accent)] bg-[var(--accent)] text-[#12151c]"
-                  : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div
+          role="group"
+          aria-label="Tema"
+          className="inline-flex rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-1"
+        >
+          {THEME_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            const isActive = theme === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setTheme(option.value)}
+                aria-pressed={isActive}
+                className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-[var(--accent)] text-[#12151c] shadow-sm"
+                    : "text-[var(--muted-strong)] hover:text-[var(--text-main)]"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {option.label}
+              </button>
+            );
+          })}
         </div>
       </SectionCard>
 
-      <SectionCard
-        title={isLocalMode ? "Armazenamento local" : "Sincronização"}
-        description={
-          isLocalMode
-            ? "Seus dados ficam salvos neste dispositivo. Use backups para transportar ou restaurar informações."
-            : "Seus dados ficam salvos automaticamente no Supabase. Não precisa abrir nem salvar arquivo."
-        }
-        className="mb-6"
-      >
-        {isLoadingStorage ? (
-          <LoadingScreen
-            compact
-            title="Verificando o armazenamento"
-            description="Carregando informações de sincronização."
-          />
-        ) : storageInfo ? (
-          <div className="space-y-3">
-            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-              <p className="text-sm text-[var(--muted)]">Status</p>
-              <p className="font-medium text-[var(--text-main)]">
-                {isApplyingData ? dataSyncMessage : storageInfo.label}
-              </p>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                {storageInfo.description}
-              </p>
-              <p
-                className={`mt-2 text-sm ${
-                  syncStatusBadge.tone === "warning"
-                    ? "text-[var(--warning)]"
-                    : "text-[var(--muted)]"
-                }`}
-              >
-                {syncStatusBadge.label}
-              </p>
+      {/* ── Conta e sincronização ─────────────────────────────────────── */}
+      {!isLocalMode ? (
+        <SectionCard
+          title="Conta"
+          icon={CloudIcon}
+          description="Sessão ativa e estado da sincronização com o Supabase."
+          className="mb-6"
+        >
+          {isLoadingStorage ? (
+            <LoadingScreen compact title="Verificando o armazenamento" description="" />
+          ) : (
+            <div>
+              <InfoRow label="E-mail">
+                <CopyableValue value={user?.email || ""} copyLabel="Copiar e-mail">
+                  <span className="break-all">{user?.email || "—"}</span>
+                </CopyableValue>
+              </InfoRow>
+              <Divider />
+              <InfoRow label="Status">
+                <StatusBadge tone={syncStatus.tone} label={
+                  isApplyingData ? dataSyncMessage : syncStatus.label
+                } />
+              </InfoRow>
+              {syncSnapshot.status === "error" ? (
+                <p className="mt-1 pb-2 text-xs text-[var(--warning)]">
+                  Tentaremos novamente na próxima alteração.
+                </p>
+              ) : null}
+              <InfoRow label="Última sincronização">
+                {formatLastSyncedAt(syncSnapshot.lastSyncedAt)}
+              </InfoRow>
+              <Divider />
+              <div className="pt-3">
+                <Button
+                  variant="subtle"
+                  onClick={handleForceSync}
+                  disabled={isSubmitting || syncSnapshot.status === "syncing"}
+                  isLoading={syncSnapshot.status === "syncing"}
+                  loadingLabel="Sincronizando…"
+                  leftIcon={<CloudIcon className="h-4 w-4" />}
+                >
+                  Sincronizar agora
+                </Button>
+              </div>
+
+              <div className="mt-6 rounded-md border border-[var(--danger-line)] bg-[color:var(--danger-soft)] p-4">
+                <p className="mb-3 text-sm font-medium text-[var(--text-main)]">
+                  Encerrar sessão
+                </p>
+                <p className="mb-4 text-sm text-[var(--muted)]">
+                  Você será desconectado deste dispositivo. Para entrar novamente será necessário um link mágico enviado por e-mail.
+                </p>
+                <Button
+                  variant="danger"
+                  onClick={() => setIsSignOutConfirmOpen(true)}
+                  disabled={isSubmitting}
+                >
+                  Sair desta conta
+                </Button>
+              </div>
             </div>
+          )}
+        </SectionCard>
+      ) : null}
 
-            {!isLocalMode ? (
-              <>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                    <p className="text-sm text-[var(--muted)]">
-                      Última sincronização
-                    </p>
-                    <p className="font-medium text-[var(--text-main)]">
-                      {formatLastSyncedAt(syncSnapshot.lastSyncedAt)}
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-                    <p className="text-sm text-[var(--muted)]">
-                      Conta sincronizada
-                    </p>
-                    <p className="font-medium text-[var(--text-main)] break-all">
-                      {user?.email || "—"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-1">
-                  <Button
-                    variant="subtle"
-                    onClick={handleForceSync}
-                    disabled={
-                      isSubmitting || syncSnapshot.status === "syncing"
-                    }
-                  >
-                    Sincronizar agora
-                  </Button>
-                </div>
-              </>
-            ) : null}
-          </div>
-        ) : (
-          <p className="text-sm text-[var(--muted)]">
-            Verificando o modo de armazenamento do sistema...
-          </p>
-        )}
-      </SectionCard>
-
+      {/* ── Cópia de segurança ────────────────────────────────────────── */}
       <SectionCard
         title="Cópia de segurança"
-        description="Exportação e restauração em JSON. Útil como rede de segurança offline."
+        icon={BackupExportIcon}
+        description="Arquivo JSON com todos os dados. Use para transferir entre contas ou recuperar dados."
         className="mb-6"
       >
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             <Button
               onClick={handleExportBackup}
               disabled={isSubmitting}
@@ -456,85 +409,90 @@ export default function Settings() {
             >
               Salvar backup
             </Button>
-            <p className="text-sm text-[var(--muted)]">
-              Cria um arquivo JSON com uma cópia completa dos dados atuais.
+            <p className="text-sm leading-6 text-[var(--muted)]">
+              Baixa um arquivo <code className="rounded bg-[var(--surface-muted)] px-1 py-0.5 text-xs font-mono">.json</code> com uma cópia completa dos dados atuais.
             </p>
           </div>
 
-          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-            <div className="mb-3">
-              <p className="text-sm font-medium text-[var(--text-main)]">
-                Restaurar backup
-              </p>
-              <p className="text-sm text-[var(--muted)]">
-                Substitui os dados atuais do sistema pelos do arquivo escolhido.
-                {isLocalMode
-                  ? ""
-                  : " A nuvem é atualizada na sequência."}
-              </p>
-            </div>
+          <Divider />
 
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <TextInput
+          <div>
+            <p className="mb-1 text-sm font-medium text-[var(--text-main)]">Restaurar backup</p>
+            <p className="mb-3 text-sm text-[var(--muted)]">
+              Substitui os dados atuais pelos do arquivo escolhido.
+              {!isLocalMode ? " A nuvem é atualizada na sequência." : ""}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
                 key={backupInputKey}
+                ref={fileInputRef}
                 type="file"
                 accept=".json,application/json"
                 onChange={handleBackupFileChange}
-                className="md:flex-1"
+                className="sr-only"
+                id="backup-file-input"
               />
-
+              <Button
+                variant="subtle"
+                leftIcon={<UploadIcon className="h-4 w-4" />}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+              >
+                {selectedBackupFile ? "Trocar arquivo" : "Escolher arquivo"}
+              </Button>
+              {selectedBackupFile ? (
+                <span className="flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-3 py-1.5 text-sm text-[var(--text-soft)]">
+                  <BackupImportIcon className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                  <span className="max-w-48 truncate font-medium">{selectedBackupFile.name}</span>
+                </span>
+              ) : null}
               <Button
                 variant="subtle"
                 onClick={() => setIsImportBackupConfirmOpen(true)}
                 disabled={isSubmitting || !selectedBackupFile}
                 leftIcon={<BackupImportIcon className="h-4 w-4" />}
               >
-                Importar backup
+                Importar
               </Button>
             </div>
-
-            {selectedBackupFile ? (
-              <p className="mt-3 break-all text-sm text-[var(--muted)]">
-                Arquivo selecionado:{" "}
-                <span className="font-medium text-[var(--text-main)]">
-                  {selectedBackupFile.name}
-                </span>
-              </p>
-            ) : null}
           </div>
         </div>
       </SectionCard>
 
-      {!isLocalMode ? (
-        <SectionCard
-          title="Conta"
-          description="Sessão atual deste dispositivo."
-          className="mb-6"
-        >
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm text-[var(--muted)]">E-mail</p>
-              <p className="font-medium text-[var(--text-main)] break-all">
-                {user?.email || "—"}
-              </p>
-            </div>
-            <Button
-              variant="subtle"
-              onClick={() => setIsSignOutConfirmOpen(true)}
-              disabled={isSubmitting}
-            >
-              Sair desta conta
-            </Button>
-          </div>
-        </SectionCard>
-      ) : null}
-
+      {/* ── Atalhos de teclado ────────────────────────────────────────── */}
       <SectionCard
-        title="Diagnóstico"
-        description="Ferramentas para investigar problemas que apareçam durante o uso."
+        title="Atalhos de teclado"
+        icon={KeyboardIcon}
+        description="Pressione g seguido de uma letra para navegar rapidamente entre páginas."
         className="mb-6"
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 md:grid-cols-4">
+          {KEYBOARD_SHORTCUTS.map(({ key, to }) => (
+            <div key={key} className="flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded border border-[var(--line-strong)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-xs font-semibold text-[var(--text-soft)]">
+                  g
+                </kbd>
+                <kbd className="rounded border border-[var(--line-strong)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-xs font-semibold text-[var(--accent)]">
+                  {key}
+                </kbd>
+              </span>
+              <span className="truncate text-[var(--muted)]">
+                {SHORTCUT_LABELS[to] ?? to}
+              </span>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* ── Diagnóstico ───────────────────────────────────────────────── */}
+      <SectionCard
+        title="Diagnóstico"
+        icon={BugIcon}
+        description="Ferramentas para investigar problemas durante o uso."
+        className="mb-6"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Button
             variant="subtle"
             onClick={handleDownloadLogBuffer}
@@ -543,8 +501,7 @@ export default function Settings() {
             Baixar log de erros
           </Button>
           <p className="text-sm text-[var(--muted)]">
-            Gera um JSON com os erros capturados nesta sessão (até 200
-            entradas). Anexe a esse arquivo ao reportar um problema.
+            JSON com até 200 erros capturados nesta sessão. Inclua ao reportar um problema.
           </p>
         </div>
       </SectionCard>
@@ -553,7 +510,7 @@ export default function Settings() {
         {isImportBackupConfirmOpen ? (
           <ConfirmModal
             title="Restaurar backup"
-            description="Importar um backup vai substituir os dados atuais do sistema. Deseja continuar?"
+            description="Importar um backup vai substituir os dados atuais do sistema. Essa ação não pode ser desfeita."
             confirmLabel="Restaurar backup"
             feedbackMessage={error}
             isDisabled={isSubmitting}
