@@ -603,10 +603,10 @@ export default function Monthly() {
         ) : null}
 
         {!hasSelectedReferenceMonth ? (
-          isDataSyncRefreshLoading ? (
+          isDataSyncRefreshLoading || isLoading ? (
             <DataSyncSectionLoading
               className="mb-5"
-              message={dataSyncFeedback.label}
+              message={isDataSyncRefreshLoading ? dataSyncFeedback.label : "Carregando abatimentos por doador..."}
               rows={4}
             />
           ) : (

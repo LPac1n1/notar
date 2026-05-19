@@ -31,12 +31,13 @@ export default function ActionHistory() {
   const [actions, setActions] = useState([]);
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
   const debouncedFilters = useDebouncedValue(filters, 180);
   const historyRequestIdRef = useRef(0);
   const hasInitializedRef = useRef(false);
   const historyPagination = usePagination(actions, { initialPageSize: 25 });
-  const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshIndicator();
+  const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshIndicator(isRefreshing);
 
   const loadHistory = useCallback(async (
     currentFilters = INITIAL_FILTERS,
@@ -48,6 +49,8 @@ export default function ActionHistory() {
     try {
       if (showLoading) {
         setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
       }
 
       setError("");
@@ -75,6 +78,7 @@ export default function ActionHistory() {
     } finally {
       if (requestId === historyRequestIdRef.current) {
         setIsLoading(false);
+        setIsRefreshing(false);
       }
     }
   }, []);
@@ -173,12 +177,12 @@ export default function ActionHistory() {
       </SectionCard>
 
       <SectionCard title="Ações registradas">
-        {showDataRefreshLoading ? (
-        <DataSyncSectionLoading
-          message={dataSyncFeedback.label}
-          rows={4}
-        />
-      ) : (
+        {showDataRefreshLoading || isRefreshing ? (
+          <DataSyncSectionLoading
+            message={showDataRefreshLoading ? dataSyncFeedback.label : "Atualizando histórico..."}
+            rows={4}
+          />
+        ) : (
           <div className="space-y-4">
             <PaginationControls
               endItem={historyPagination.endItem}
@@ -202,7 +206,7 @@ export default function ActionHistory() {
               totalPages={historyPagination.totalPages}
             />
           </div>
-      )}
+        )}
       </SectionCard>
     </div>
   );
