@@ -277,6 +277,7 @@ export function markSubsumedRows(rows, adjustments) {
       isSubsumed: true,
       subsumedByAdjustmentId: covering.id,
       subsumedByReferenceMonth: covering.referenceMonth,
+      canUpdateAbatement: false,
     };
   });
 }

@@ -59,7 +59,18 @@ export default function MonthlySummaryRow({
               }
               tone={summary.hasDonationsInMonth ? "success" : "neutral"}
             />
-            {summary.hasAdjustment && summary.adjustment ? (
+            {summary.isSubsumed ? (
+              <span
+                className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1 text-xs font-semibold text-[var(--muted)]"
+                title={
+                  summary.subsumedByReferenceMonth
+                    ? `Incluído no acumulado de ${formatMonthYear(summary.subsumedByReferenceMonth)}`
+                    : "Incluído em um abatimento acumulado"
+                }
+              >
+                Via acumulado
+              </span>
+            ) : summary.hasAdjustment && summary.adjustment ? (
               <span
                 className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-xs font-semibold text-[var(--warning)]"
                 title={summary.adjustment.description || ""}
@@ -205,6 +216,13 @@ export default function MonthlySummaryRow({
                 onStatusChange?.(summary.id, nextStatus)
               }
             />
+          ) : summary.isSubsumed ? (
+            <div
+              className="flex min-h-10 w-full items-center rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-3 text-sm font-medium text-[var(--muted)] xl:w-[220px]"
+              title="Este mês faz parte de um abatimento acumulado e não pode ser alterado individualmente"
+            >
+              Via acumulado
+            </div>
           ) : (
             <div className="flex min-h-10 w-full items-center rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-3 text-sm font-medium text-[var(--muted)] xl:w-[220px]">
               Sem doações no mês
@@ -214,9 +232,13 @@ export default function MonthlySummaryRow({
           <p className="text-xs text-[var(--muted)] xl:text-right">
             {summary.abatementMarkedAt
               ? `Marcado em ${summary.abatementMarkedAt}`
-              : summary.canUpdateAbatement
-                ? "Ainda não marcado"
-                : "Nenhum abatimento gerado"}
+              : summary.isSubsumed
+                ? summary.subsumedByReferenceMonth
+                  ? `Incluído no acumulado de ${formatMonthYear(summary.subsumedByReferenceMonth)}`
+                  : "Incluído em um acumulado"
+                : summary.canUpdateAbatement
+                  ? "Ainda não marcado"
+                  : "Nenhum abatimento gerado"}
           </p>
         </div>
       </div>

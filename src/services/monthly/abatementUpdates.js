@@ -1,4 +1,4 @@
-import { escapeSqlString, execute, runInTransaction } from "../db";
+import { escapeSqlString, execute, query, runInTransaction } from "../db";
 import { createActionHistoryEntry } from "../actionHistoryService";
 import { updateAbatementAdjustmentStatus } from "../abatementAdjustmentService";
 import { isSyntheticSummaryId } from "./sharedFragments";
@@ -21,6 +21,36 @@ import { isSyntheticSummaryId } from "./sharedFragments";
  * shows exactly one record per user-visible action.
  */
 
+/**
+ * Returns the subset of summaryIds that are NOT subsumed by a catch-up
+ * adjustment from a different reference month. Subsumed rows must not be
+ * individually toggled — their status is owned by the catch-up's reference
+ * month row.
+ */
+async function filterOutSubsumedIds(summaryIds) {
+  if (summaryIds.length === 0) return summaryIds;
+
+  const idList = summaryIds
+    .map((id) => `'${escapeSqlString(id)}'`)
+    .join(", ");
+
+  const subsumedRows = await query(`
+    SELECT mds.id
+    FROM monthly_donor_summary mds
+    INNER JOIN abatement_adjustments adj
+      ON adj.donor_id = mds.donor_id
+      AND adj.reference_month != mds.reference_month
+      AND adj.range_start_month <= mds.reference_month
+      AND adj.range_end_month >= mds.reference_month
+    WHERE mds.id IN (${idList})
+  `);
+
+  if (subsumedRows.length === 0) return summaryIds;
+
+  const subsumedSet = new Set(subsumedRows.map((r) => String(r.id)));
+  return summaryIds.filter((id) => !subsumedSet.has(id));
+}
+
 export async function updateAbatementStatus({
   summaryId,
   status,
@@ -30,6 +60,8 @@ export async function updateAbatementStatus({
   const summaryIdIsReal = summaryId && !isSyntheticSummaryId(summaryId);
 
   if (summaryIdIsReal) {
+    const [safe] = await filterOutSubsumedIds([summaryId]);
+    if (!safe) return;
     await execute(`
       UPDATE monthly_donor_summary
       SET
@@ -122,10 +154,16 @@ export async function updateAbatementStatuses({
     return;
   }
 
+  const activeSummaryIds = await filterOutSubsumedIds(normalizedSummaryIds);
+
+  if (activeSummaryIds.length === 0 && normalizedAdjustmentIds.length === 0) {
+    return;
+  }
+
   const normalizedStatus = status === "applied" ? "applied" : "pending";
 
-  if (normalizedSummaryIds.length > 0) {
-    const summaryIdList = normalizedSummaryIds
+  if (activeSummaryIds.length > 0) {
+    const summaryIdList = activeSummaryIds
       .map((summaryId) => `'${escapeSqlString(summaryId)}'`)
       .join(", ");
 

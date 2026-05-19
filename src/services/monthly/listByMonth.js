@@ -1,5 +1,8 @@
 import { normalizeCpf, queryPrepared, startOfMonth } from "../db";
-import { listAdjustmentsForMonth } from "../abatementAdjustmentService";
+import {
+  listAdjustmentsForMonth,
+  listAllAdjustments,
+} from "../abatementAdjustmentService";
 import {
   MONTHLY_DONOR_PROJECTION,
   MONTHLY_HOLDER_JOINS,
@@ -8,6 +11,7 @@ import {
   buildDonorConditions,
   mapDonorWithoutDonation,
   mapSummaryRow,
+  markSubsumedRows,
   mergeAdjustmentsByMonth,
   sortSummariesByAbatement,
 } from "./sharedFragments";
@@ -230,11 +234,17 @@ export async function listMonthlySummariesByMonth({
       ? inactiveSummaries
       : [...activeMerged, ...inactiveSummaries];
 
-  const adjustments = await listAdjustmentsForMonth(normalizedReferenceMonth);
+  // Fetch both the same-month adjustments (for merging) and all adjustments
+  // (for subsumed detection) in parallel — they share no data dependency.
+  const [adjustments, allAdjustments] = await Promise.all([
+    listAdjustmentsForMonth(normalizedReferenceMonth),
+    listAllAdjustments(),
+  ]);
   const mergedRows = mergeAdjustmentsByMonth(baseRows, adjustments);
+  const taggedRows = markSubsumedRows(mergedRows, allAdjustments);
 
   return sortSummariesByAbatement(
-    applySummaryFilters(mergedRows, {
+    applySummaryFilters(taggedRows, {
       abatementStatus,
       donationActivity,
     }),
