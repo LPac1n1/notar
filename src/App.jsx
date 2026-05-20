@@ -9,8 +9,14 @@ import RemoteConflictBanner from "./components/sync/RemoteConflictBanner";
 import { useAuth } from "./hooks/useAuth";
 import { useCloudSync } from "./hooks/useCloudSync";
 
+const HYDRATION_STEP_LABELS = {
+  db: "Inicializando banco de dados…",
+  download: "Baixando seus dados da nuvem…",
+  restore: "Carregando dados no banco…",
+};
+
 function CloudSyncGate() {
-  const { hydrationStatus, hydrationError } = useCloudSync();
+  const { hydrationStatus, hydrationStep, hydrationError } = useCloudSync();
   const { signOut } = useAuth();
 
   if (hydrationStatus === "ready") {
@@ -58,7 +64,7 @@ function CloudSyncGate() {
       <div className="w-full max-w-md">
         <LoadingScreen
           title="Carregando seus dados"
-          description="Baixando o snapshot mais recente da nuvem."
+          description={HYDRATION_STEP_LABELS[hydrationStep] ?? "Preparando o Notar…"}
         />
       </div>
     </div>

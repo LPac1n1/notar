@@ -368,7 +368,7 @@ export async function flushPendingCloudSync() {
   await uploadSnapshotImmediate(activeUserId);
 }
 
-export async function hydrateFromCloud(userId) {
+export async function hydrateFromCloud(userId, { onProgress } = {}) {
   if (!isSupabaseConfigured) {
     return { hydrated: false, hadData: false };
   }
@@ -391,7 +391,9 @@ export async function hydrateFromCloud(userId) {
   hydratedUserId = userId;
   hydrationPromise = (async () => {
     try {
+      onProgress?.("db");
       await initDB();
+      onProgress?.("download");
       const snapshot = await downloadSnapshotFromCloud(userId);
       try {
         lastKnownServerVersion = await fetchServerVersion(userId);
@@ -405,6 +407,7 @@ export async function hydrateFromCloud(userId) {
       // first-time users, stale rows from a previous session (e.g., a
       // different account signing in on the same browser) would leak
       // into the next upload.
+      onProgress?.("restore");
       const effectiveSnapshot = snapshot ?? createEmptySnapshot();
       await restoreDatabaseSnapshot(effectiveSnapshot, {
         allowEmpty: true,

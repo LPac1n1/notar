@@ -21,6 +21,7 @@ export function useCloudSync() {
   const [hydrationStatus, setHydrationStatus] = useState(() =>
     authStatus === "authenticated" && user?.id ? "hydrating" : "idle",
   );
+  const [hydrationStep, setHydrationStep] = useState(null);
   const [hydrationError, setHydrationError] = useState(null);
 
   useEffect(() => {
@@ -36,7 +37,11 @@ export function useCloudSync() {
 
     (async () => {
       try {
-        await hydrateFromCloud(user.id);
+        await hydrateFromCloud(user.id, {
+          onProgress: (step) => {
+            if (!cancelled) setHydrationStep(step);
+          },
+        });
         if (cancelled) return;
         setActiveCloudUser(user.id);
         setHydrationStatus("ready");
@@ -55,5 +60,5 @@ export function useCloudSync() {
     };
   }, [authStatus, user?.id]);
 
-  return { hydrationStatus, hydrationError };
+  return { hydrationStatus, hydrationStep, hydrationError };
 }
