@@ -5,11 +5,51 @@ import {
   MONTHLY_HOLDER_JOINS,
   MONTHLY_SOURCE_SUBSELECTS,
   applySummaryFilters,
+  findOrphanAdjustments,
   mapSummaryRow,
   markSubsumedRows,
   mergeAdjustmentsByMonth,
   sortSummariesByAbatement,
+  synthesizeAdjustmentOnlyRow,
 } from "./sharedFragments";
+
+/**
+ * Fetches donor metadata for a set of donor ids. Used to synthesize orphan-
+ * adjustment rows: when a catch-up references a month with no monthly_donor_summary
+ * row, we still need donor name/CPF/holder context to render and total it.
+ */
+async function fetchDonorContextById(donorIds) {
+  if (!donorIds || donorIds.length === 0) return new Map();
+  const placeholders = donorIds.map(() => "?").join(", ");
+  const rows = await queryPrepared(
+    `
+      SELECT
+        donors.id,
+        donors.name AS donor_name,
+        donors.cpf,
+        donors.demand,
+        donors.donor_type,
+        donors.holder_donor_id,
+        donors.holder_person_id,
+        donors.is_active,
+        donors.donation_start_date,
+        strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date_iso,
+        holder_people.name AS holder_name,
+        holder_people.cpf AS holder_cpf,
+        holder_active_donors.id AS active_holder_donor_id
+      FROM donors
+      LEFT JOIN people AS holder_people
+        ON holder_people.id = donors.holder_person_id
+      LEFT JOIN donors AS holder_active_donors
+        ON holder_active_donors.person_id = donors.holder_person_id
+        AND holder_active_donors.donor_type = 'holder'
+        AND holder_active_donors.is_active = TRUE
+      WHERE donors.id IN (${placeholders})
+    `,
+    donorIds,
+  );
+  return new Map(rows.map((row) => [row.id, row]));
+}
 
 /**
  * Lists every monthly summary across history (no required reference month).
@@ -127,8 +167,89 @@ export async function listHistoricalMonthlySummaries({
   const mergedRows = mergeAdjustmentsByMonth(baseRows, adjustments);
   const taggedRows = markSubsumedRows(mergedRows, adjustments);
 
+  // Synthesize rows for catch-ups whose reference month has no underlying
+  // monthly_donor_summary entry. Without this the catch-up amount silently
+  // disappears from totals, which causes the gestão mensal numbers to look
+  // wrong after a catch-up is created on a month the donor didn't import.
+  const orphanAdjustments = findOrphanAdjustments(taggedRows, adjustments);
+  let orphanRows = [];
+  if (orphanAdjustments.length > 0) {
+    const orphanDonorIds = Array.from(
+      new Set(orphanAdjustments.map((adj) => adj.donorId).filter(Boolean)),
+    );
+    const donorContextById = await fetchDonorContextById(orphanDonorIds);
+    const normalizedReferenceMonth = referenceMonth
+      ? startOfMonth(referenceMonth)
+      : "";
+    const normalizedCpf = cpf.trim() ? normalizeCpf(cpf) : "";
+    const normalizedDemand = demand.trim() ? demand.trim().toLowerCase() : "";
+
+    orphanRows = orphanAdjustments
+      .map((adjustment) => {
+        const donor = donorContextById.get(adjustment.donorId);
+        if (!donor) return null;
+
+        // Apply the same donor-side filters used in the SQL WHERE so orphan
+        // rows respect filters like donorActiveStatus, donorType, demand etc.
+        const donorActive = donor.is_active !== false;
+        if (donorActiveStatus === "active" && !donorActive) return null;
+        if (donorActiveStatus === "inactive" && donorActive) return null;
+        if (donorId.trim() && donor.id !== donorId.trim()) return null;
+        if (donorType !== "all" && donor.donor_type !== donorType) return null;
+        if (
+          normalizedReferenceMonth &&
+          adjustment.referenceMonth !== normalizedReferenceMonth
+        )
+          return null;
+        if (normalizedCpf && donor.cpf !== normalizedCpf) return null;
+        if (
+          normalizedDemand &&
+          String(donor.demand ?? "").toLowerCase() !== normalizedDemand
+        )
+          return null;
+        if (
+          donationStartDate === "with-date" &&
+          !donor.donation_start_date_iso
+        )
+          return null;
+        if (
+          donationStartDate === "without-date" &&
+          donor.donation_start_date_iso
+        )
+          return null;
+
+        return synthesizeAdjustmentOnlyRow(adjustment, {
+          cpf: donor.cpf ?? "",
+          donorName: donor.donor_name ?? "",
+          demand: donor.demand ?? "",
+          donorType: donor.donor_type === "auxiliary" ? "auxiliary" : "holder",
+          donorTypeLabel:
+            donor.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+          holderDonorId:
+            donor.active_holder_donor_id ?? donor.holder_donor_id ?? "",
+          holderPersonId: donor.holder_person_id ?? "",
+          holderName: donor.holder_name ?? "",
+          holderCpf: donor.holder_cpf ?? "",
+          holderIsActiveDonor: Boolean(donor.active_holder_donor_id),
+          donationStartDate: donor.donation_start_date_iso ?? "",
+        });
+      })
+      .filter(Boolean);
+  }
+
+  const combinedRows = [...taggedRows, ...orphanRows].sort((left, right) => {
+    const monthDiff = String(right.referenceMonth ?? "").localeCompare(
+      String(left.referenceMonth ?? ""),
+    );
+    if (monthDiff !== 0) return monthDiff;
+    return String(left.donorName ?? "").localeCompare(
+      String(right.donorName ?? ""),
+      "pt-BR",
+    );
+  });
+
   return sortSummariesByAbatement(
-    applySummaryFilters(taggedRows, {
+    applySummaryFilters(combinedRows, {
       abatementStatus,
       donationActivity,
     }),

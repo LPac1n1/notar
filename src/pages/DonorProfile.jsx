@@ -306,10 +306,18 @@ export default function DonorProfile() {
           </p>
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-          <p className="text-sm text-[var(--muted)]">Total abatido</p>
+          <p className="text-sm text-[var(--muted)]">Total acumulado</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
             {formatCurrency(profile.totals.totalAbatement)}
           </p>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            <span className="text-[var(--warning)]">
+              Pendente: {formatCurrency(profile.totals.totalPending)}
+            </span>
+            <span className="text-[var(--success)]">
+              Realizado: {formatCurrency(profile.totals.totalApplied)}
+            </span>
+          </div>
         </div>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Meses com abatimento</p>

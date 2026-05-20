@@ -423,6 +423,72 @@ export function buildDonorConditions({
 // row in the database, so any UPDATE keyed by id is a no-op for them.
 export function isSyntheticSummaryId(summaryId) {
   return (
-    typeof summaryId === "string" && summaryId.endsWith("-without-donation")
+    typeof summaryId === "string" &&
+    (summaryId.endsWith("-without-donation") ||
+      summaryId.endsWith("-adjustment-only"))
   );
+}
+
+/**
+ * Returns adjustments that didn't get merged into any monthly summary row.
+ * Happens when a catch-up references a month for which the donor has no
+ * `monthly_donor_summary` entry (e.g., donor registered after the import).
+ */
+export function findOrphanAdjustments(rows, adjustments) {
+  if (!adjustments || adjustments.length === 0) return [];
+  const usedKeys = new Set(
+    rows
+      .filter((r) => r.hasAdjustment)
+      .map((r) => `${r.donorId}|${r.referenceMonth}`),
+  );
+  return adjustments.filter(
+    (adj) => !usedKeys.has(`${adj.donorId}|${adj.referenceMonth}`),
+  );
+}
+
+/**
+ * Builds a summary-row-like object from a catch-up adjustment that has no
+ * underlying `monthly_donor_summary` row. The catch-up becomes the row itself
+ * so totals and lists can surface it instead of silently losing the amount.
+ */
+export function synthesizeAdjustmentOnlyRow(adjustment, donorContext = {}) {
+  const adjustmentNotes = Number(adjustment.notesCount ?? 0);
+  const adjustmentAmount = Number(adjustment.abatementAmount ?? 0);
+
+  return {
+    id: `${adjustment.id}-adjustment-only`,
+    importId: "",
+    donorId: adjustment.donorId,
+    referenceMonth: adjustment.referenceMonth,
+    cpf: donorContext.cpf ?? "",
+    donorName: donorContext.donorName ?? "",
+    demand: donorContext.demand ?? "",
+    notesCount: adjustmentNotes,
+    invalidNotesCount: 0,
+    valuePerNote: 0,
+    abatementAmount: adjustmentAmount,
+    abatementStatus: adjustment.abatementStatus,
+    abatementMarkedAt: adjustment.abatementMarkedAt ?? "",
+    donorType: donorContext.donorType ?? "holder",
+    donorTypeLabel: donorContext.donorTypeLabel ?? "Titular",
+    holderDonorId: donorContext.holderDonorId ?? "",
+    holderPersonId: donorContext.holderPersonId ?? "",
+    holderName: donorContext.holderName ?? "",
+    holderCpf: donorContext.holderCpf ?? "",
+    holderIsActiveDonor: Boolean(donorContext.holderIsActiveDonor),
+    donationStartDate: donorContext.donationStartDate ?? "",
+    sourceCpfs: [],
+    sources: [],
+    sourceCpfCount: 0,
+    sourceStartConflictCount: 0,
+    hasDonationsInMonth: adjustmentNotes > 0,
+    canUpdateAbatement: adjustmentNotes > 0,
+    monthNotesCount: 0,
+    monthAbatementAmount: 0,
+    adjustment,
+    hasAdjustment: true,
+    adjustmentSubsumesMonth: true,
+    isAdjustmentOnly: true,
+    isSubsumed: false,
+  };
 }

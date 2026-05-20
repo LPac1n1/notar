@@ -7,7 +7,10 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
 
 function buildMonthGroups(summaries) {
   const pending = summaries.filter(
-    (s) => s.hasDonationsInMonth && s.abatementStatus === "pending",
+    (s) =>
+      s.hasDonationsInMonth &&
+      s.abatementStatus === "pending" &&
+      !s.isSubsumed,
   );
   const byMonth = new Map();
 

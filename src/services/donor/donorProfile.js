@@ -6,6 +6,12 @@ import {
 } from "../db";
 import { listAdjustmentsForDonor } from "../abatementAdjustmentService";
 import {
+  findOrphanAdjustments,
+  markSubsumedRows,
+  mergeAdjustmentsByMonth,
+  synthesizeAdjustmentOnlyRow,
+} from "../monthly/sharedFragments";
+import {
   mapDonorRow,
   normalizeDonorType,
 } from "./donorMappers";
@@ -314,14 +320,6 @@ export async function getDonorProfile(donorId) {
   `, [donorRows[0].person_id]);
 
   const donor = donorRows[0];
-  const totalNotes = monthlyRows.reduce(
-    (total, row) => total + Number(row.notes_count ?? 0),
-    0,
-  );
-  const totalAbatement = monthlyRows.reduce(
-    (total, row) => total + Number(row.abatement_amount ?? 0),
-    0,
-  );
 
   const activityRows = await queryPrepared(`
     SELECT
@@ -336,6 +334,77 @@ export async function getDonorProfile(donorId) {
   const lastDeactivation = activityRows.filter((r) => r.event_type === "deactivated").at(-1);
   const latestActivity = activityRows.at(-1);
   const adjustmentRows = await listAdjustmentsForDonor(donorId);
+
+  // Build a context object for synthesizing orphan-adjustment rows; lets the
+  // merged history surface catch-ups whose reference month has no underlying
+  // monthly_donor_summary entry.
+  const donorContext = {
+    cpf: donor.cpf ?? "",
+    donorName: donor.name ?? "",
+    demand: donor.demand ?? "",
+    donorType: normalizeDonorType(donor.donor_type),
+    donorTypeLabel: donor.donor_type === "auxiliary" ? "Auxiliar" : "Titular",
+    holderDonorId: donor.active_holder_donor_id ?? donor.holder_donor_id ?? "",
+    holderPersonId: donor.holder_person_id ?? "",
+    holderName: donor.holder_name ?? "",
+    holderCpf: donor.holder_cpf ?? "",
+    holderIsActiveDonor: Boolean(donor.active_holder_donor_id),
+    donationStartDate: donor.donation_start_date ?? "",
+  };
+
+  // Project monthly_donor_summary rows into the same shape used by the listing
+  // pipeline so we can reuse the merge/mark/orphan helpers and produce totals
+  // that agree with the gestão mensal view.
+  const baseMonthlyRows = monthlyRows.map((row) => {
+    const notesCount = Number(row.notes_count ?? 0);
+    return {
+      id: `${donorId}-${row.reference_month}`,
+      donorId,
+      referenceMonth: row.reference_month,
+      notesCount,
+      valuePerNote: Number(row.value_per_note ?? 0),
+      abatementAmount: Number(row.abatement_amount ?? 0),
+      abatementStatus: row.abatement_status ?? "pending",
+      hasDonationsInMonth: notesCount > 0,
+      canUpdateAbatement: notesCount > 0,
+    };
+  });
+
+  const mergedMonthlyRows = mergeAdjustmentsByMonth(
+    baseMonthlyRows,
+    adjustmentRows,
+  );
+  const taggedMonthlyRows = markSubsumedRows(mergedMonthlyRows, adjustmentRows);
+  const orphanAdjustments = findOrphanAdjustments(
+    taggedMonthlyRows,
+    adjustmentRows,
+  );
+  const orphanRows = orphanAdjustments.map((adjustment) =>
+    synthesizeAdjustmentOnlyRow(adjustment, donorContext),
+  );
+
+  const allHistoryRows = [...taggedMonthlyRows, ...orphanRows].sort(
+    (left, right) =>
+      String(right.referenceMonth ?? "").localeCompare(
+        String(left.referenceMonth ?? ""),
+      ),
+  );
+
+  const activeHistoryRows = allHistoryRows.filter((row) => !row.isSubsumed);
+  const totalNotes = activeHistoryRows.reduce(
+    (total, row) => total + Number(row.notesCount ?? 0),
+    0,
+  );
+  const totalAbatement = activeHistoryRows.reduce(
+    (total, row) => total + Number(row.abatementAmount ?? 0),
+    0,
+  );
+  const totalPending = activeHistoryRows
+    .filter((row) => row.abatementStatus !== "applied")
+    .reduce((total, row) => total + Number(row.abatementAmount ?? 0), 0);
+  const totalApplied = activeHistoryRows
+    .filter((row) => row.abatementStatus === "applied")
+    .reduce((total, row) => total + Number(row.abatementAmount ?? 0), 0);
 
   return {
     donor: {
@@ -384,12 +453,18 @@ export async function getDonorProfile(donorId) {
       donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
       totalNotes: Number(row.total_notes ?? 0),
     })),
-    monthlyHistory: monthlyRows.map((row) => ({
-      referenceMonth: row.reference_month,
-      notesCount: Number(row.notes_count ?? 0),
-      valuePerNote: Number(row.value_per_note ?? 0),
-      abatementAmount: Number(row.abatement_amount ?? 0),
-      abatementStatus: row.abatement_status ?? "pending",
+    monthlyHistory: allHistoryRows.map((row) => ({
+      referenceMonth: row.referenceMonth,
+      notesCount: Number(row.notesCount ?? 0),
+      valuePerNote: Number(row.valuePerNote ?? 0),
+      abatementAmount: Number(row.abatementAmount ?? 0),
+      abatementStatus: row.abatementStatus ?? "pending",
+      isSubsumed: Boolean(row.isSubsumed),
+      subsumedByReferenceMonth: row.subsumedByReferenceMonth ?? "",
+      hasAdjustment: Boolean(row.hasAdjustment),
+      isAdjustmentOnly: Boolean(row.isAdjustmentOnly),
+      adjustmentRangeStartMonth: row.adjustment?.rangeStartMonth ?? "",
+      adjustmentRangeEndMonth: row.adjustment?.rangeEndMonth ?? "",
     })),
     activityHistory: activityRows.map((row) => ({
       eventType: row.event_type,
@@ -406,7 +481,9 @@ export async function getDonorProfile(donorId) {
     totals: {
       totalNotes,
       totalAbatement,
-      monthCount: monthlyRows.length,
+      totalPending,
+      totalApplied,
+      monthCount: activeHistoryRows.length,
       linkedCpfCount: sourceRows.length,
       auxiliaryCount: auxiliaryRows.length,
     },
