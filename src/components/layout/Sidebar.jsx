@@ -44,7 +44,7 @@ function NavItem({ item, compact = false }) {
       }
     >
       {({ isActive }) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center gap-3 lg:justify-start">
           {isActive ? (
             <span
               aria-hidden="true"
@@ -60,7 +60,7 @@ function NavItem({ item, compact = false }) {
           >
             <Icon className="h-5 w-5" />
           </div>
-          <div className="min-w-0">
+          <div className="hidden min-w-0 lg:block">
             <p className="font-semibold">{item.label}</p>
           </div>
         </div>
@@ -78,7 +78,7 @@ function FooterNavItem({ item }) {
       to={item.to}
       end={item.end}
       className={({ isActive }) =>
-        `group relative flex items-center gap-3 overflow-hidden rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 ${
+        `group relative flex items-center justify-center gap-3 overflow-hidden rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 lg:justify-start ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
             : "border-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
@@ -96,7 +96,7 @@ function FooterNavItem({ item }) {
           <Icon
             className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--accent)]" : "group-hover:text-[var(--text-main)]"}`}
           />
-          <span className="font-medium">{item.label}</span>
+          <span className="hidden font-medium lg:inline">{item.label}</span>
         </>
       )}
     </NavLink>
@@ -106,7 +106,7 @@ function FooterNavItem({ item }) {
 export default function Sidebar() {
   return (
     <>
-      <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 lg:hidden">
+      <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 md:hidden">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
           <span className="font-[var(--font-display)] text-lg font-semibold">
             N
@@ -117,16 +117,16 @@ export default function Sidebar() {
         </p>
       </div>
 
-      <aside className="hidden h-full w-72 shrink-0 lg:block">
-        <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-4 py-5 text-[var(--text-main)]">
+      <aside className="hidden h-full shrink-0 md:block md:w-16 lg:w-72">
+        <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-4 text-[var(--text-main)] lg:px-4 lg:py-5">
           <div className="relative">
-            <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3">
+            <div className="flex items-center justify-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3 lg:justify-start">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
                 <span className="font-[var(--font-display)] text-2xl font-semibold">
                   N
                 </span>
               </div>
-              <div className="min-w-0">
+              <div className="hidden min-w-0 lg:block">
                 <p className="font-[var(--font-display)] text-2xl font-bold text-[var(--text-main)]">
                   Notar
                 </p>

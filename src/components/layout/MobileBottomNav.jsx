@@ -49,10 +49,10 @@ export default function MobileBottomNav() {
       {isOverflowOpen ? (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
             onClick={() => setIsOverflowOpen(false)}
           />
-          <div className="fixed bottom-16 left-0 right-0 z-50 mx-3 mb-1 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-elevated)] lg:hidden">
+          <div className="fixed bottom-16 left-0 right-0 z-50 mx-3 mb-1 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-elevated)] md:hidden">
             <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
               <span className="text-sm font-semibold text-[var(--text-main)]">
                 Mais páginas
@@ -85,7 +85,7 @@ export default function MobileBottomNav() {
         </>
       ) : null}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--line)] bg-[var(--surface)] lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--line)] bg-[var(--surface)] md:hidden">
         <div className="mx-auto flex max-w-[1600px] items-stretch px-2">
           {PRIMARY.map((item) => (
             <Tab key={item.to} item={item} />
