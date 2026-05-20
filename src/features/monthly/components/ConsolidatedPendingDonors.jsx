@@ -161,7 +161,7 @@ export default function ConsolidatedPendingDonors({
                                     operation: isApplied
                                       ? "undo-applied"
                                       : "manual",
-                                    summaryIds: [month.id],
+                                    summaryIds: month.ids ?? [month.id],
                                   },
                                 )
                               }
@@ -227,7 +227,9 @@ export default function ConsolidatedPendingDonors({
                         onClick={() =>
                           onStatusChange?.(donor, "applied", {
                             operation: "all",
-                            summaryIds: pendingMonths.map((month) => month.id),
+                            summaryIds: pendingMonths.flatMap(
+                              (month) => month.ids ?? [month.id],
+                            ),
                           })
                         }
                         leftIcon={<CheckIcon className="h-4 w-4" />}

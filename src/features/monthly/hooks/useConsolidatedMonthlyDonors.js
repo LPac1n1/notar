@@ -58,7 +58,11 @@ export function useConsolidatedMonthlyDonors({
     const donorsById = new Map();
 
     // Include ALL donation months (including subsumed) in the months display,
-    // but skip subsumed amounts when accumulating per-donor totals.
+    // but skip subsumed amounts when accumulating per-donor totals. Within a
+    // donor, duplicate rows for the same reference month (multiple imports
+    // for the same month) are collapsed into a single month entry — that
+    // way toggling the month operates on every underlying row at once and
+    // the user sees one button per month.
     for (const summary of donationSummaries) {
       const current = donorsById.get(summary.donorId) ?? {
         donorId: summary.donorId,
@@ -69,21 +73,44 @@ export function useConsolidatedMonthlyDonors({
         cpf: summary.cpf,
         demand: summary.demand,
         donationStartDate: summary.donationStartDate ?? "",
-        months: [],
+        monthsByRef: new Map(),
         totalPending: 0,
         totalApplied: 0,
         invalidNotesCount: 0,
       };
 
-      current.months.push({
+      const monthKey = summary.referenceMonth;
+      const month = current.monthsByRef.get(monthKey) ?? {
         id: summary.id,
-        referenceMonth: summary.referenceMonth,
-        abatementAmount: summary.abatementAmount,
-        abatementStatus: summary.abatementStatus,
-        adjustmentId: summary.adjustment?.id ?? "",
-        isSubsumed: summary.isSubsumed ?? false,
-        subsumedByReferenceMonth: summary.subsumedByReferenceMonth ?? "",
-      });
+        referenceMonth: monthKey,
+        abatementAmount: 0,
+        abatementStatus: "applied",
+        ids: [],
+        adjustmentIds: [],
+        isSubsumed: false,
+        subsumedByReferenceMonth: "",
+      };
+
+      month.ids.push(summary.id);
+      const adjustmentId = summary.adjustment?.id ?? "";
+      if (adjustmentId && !month.adjustmentIds.includes(adjustmentId)) {
+        month.adjustmentIds.push(adjustmentId);
+      }
+      month.abatementAmount += Number(summary.abatementAmount ?? 0);
+      // Any pending row keeps the month pending; subsumption from any row
+      // wins so the button stays non-actionable.
+      if (summary.abatementStatus !== "applied") {
+        month.abatementStatus = "pending";
+      }
+      if (summary.isSubsumed) {
+        month.isSubsumed = true;
+        if (!month.subsumedByReferenceMonth) {
+          month.subsumedByReferenceMonth =
+            summary.subsumedByReferenceMonth ?? "";
+        }
+      }
+      current.monthsByRef.set(monthKey, month);
+
       current.invalidNotesCount += Number(summary.invalidNotesCount ?? 0);
       if (!summary.isSubsumed) {
         if (summary.abatementStatus === "applied") {
@@ -96,12 +123,15 @@ export function useConsolidatedMonthlyDonors({
     }
 
     return Array.from(donorsById.values())
-      .map((donor) => ({
-        ...donor,
-        months: donor.months.sort((left, right) =>
-          left.referenceMonth.localeCompare(right.referenceMonth),
-        ),
-      }))
+      .map((donor) => {
+        const { monthsByRef, ...rest } = donor;
+        return {
+          ...rest,
+          months: Array.from(monthsByRef.values()).sort((left, right) =>
+            left.referenceMonth.localeCompare(right.referenceMonth),
+          ),
+        };
+      })
       .sort(
         (left, right) =>
           right.totalPending - left.totalPending ||

@@ -296,9 +296,24 @@ export function mergeAdjustmentsByMonth(rows, adjustments) {
     ]),
   );
 
+  // monthly_donor_summary can have multiple rows per (donor, month) when
+  // there are multiple imports for the same month. The catch-up belongs to
+  // the (donor, month) pair as a whole, not to each import — so only ONE row
+  // per key may consume the adjustment. The remaining duplicates pass through
+  // unchanged, preventing the catch-up amount from being added N times.
+  const consumedKeys = new Set();
+
   return rows.map((row) => {
     const key = `${row.donorId}|${row.referenceMonth}`;
-    return mergeAdjustmentIntoRow(row, adjustmentMap.get(key));
+    if (consumedKeys.has(key)) {
+      return row;
+    }
+    const adjustment = adjustmentMap.get(key);
+    if (!adjustment) {
+      return row;
+    }
+    consumedKeys.add(key);
+    return mergeAdjustmentIntoRow(row, adjustment);
   });
 }
 

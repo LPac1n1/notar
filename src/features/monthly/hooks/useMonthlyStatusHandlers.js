@@ -142,11 +142,12 @@ export function useMonthlyStatusHandlers({
       }
 
       const summaryIdSet = new Set(summaryIds);
-      const changedMonths = donor.months.filter(
-        (month) =>
-          month.abatementStatus !== status &&
-          (summaryIdSet.size === 0 || summaryIdSet.has(month.id)),
-      );
+      const changedMonths = donor.months.filter((month) => {
+        if (month.abatementStatus === status) return false;
+        if (summaryIdSet.size === 0) return true;
+        const monthIds = month.ids ?? [month.id];
+        return monthIds.some((id) => summaryIdSet.has(id));
+      });
 
       if (changedMonths.length === 0) {
         return;
@@ -155,8 +156,13 @@ export function useMonthlyStatusHandlers({
       const statusLabel = status === "applied" ? "realizado" : "pendente";
       const previousStatusLabel =
         status === "applied" ? "pendente(s)" : "realizado(s)";
+      const allChangedIds = changedMonths.flatMap(
+        (month) => month.ids ?? [month.id],
+      );
       const previousStatusByMonthId = new Map(
-        changedMonths.map((month) => [month.id, month.abatementStatus]),
+        changedMonths.flatMap((month) =>
+          (month.ids ?? [month.id]).map((id) => [id, month.abatementStatus]),
+        ),
       );
       const optimisticMarker = new Date().toISOString();
 
@@ -166,8 +172,8 @@ export function useMonthlyStatusHandlers({
         onStart: () => {
           setOptimisticStatusOverrides((current) => {
             const next = { ...current };
-            for (const month of changedMonths) {
-              next[month.id] = {
+            for (const id of allChangedIds) {
+              next[id] = {
                 abatementStatus: status,
                 abatementMarkedAt: status === "applied" ? optimisticMarker : "",
               };
@@ -184,10 +190,14 @@ export function useMonthlyStatusHandlers({
               operation,
               status,
             }),
-            summaryIds: changedMonths.map((month) => month.id),
-            adjustmentIds: changedMonths
-              .map((month) => month.adjustmentId)
-              .filter(Boolean),
+            summaryIds: changedMonths.flatMap(
+              (month) => month.ids ?? [month.id],
+            ),
+            adjustmentIds: changedMonths.flatMap(
+              (month) =>
+                month.adjustmentIds ??
+                (month.adjustmentId ? [month.adjustmentId] : []),
+            ),
             status,
           }),
         successMessage: `${formatInteger(changedMonths.length)} mês(es) de ${donor.donorName} marcado(s) como ${statusLabel}.`,
@@ -195,9 +205,9 @@ export function useMonthlyStatusHandlers({
         onError: () => {
           setOptimisticStatusOverrides((current) => {
             const next = { ...current };
-            for (const month of changedMonths) {
-              next[month.id] = {
-                abatementStatus: previousStatusByMonthId.get(month.id) ?? "pending",
+            for (const id of allChangedIds) {
+              next[id] = {
+                abatementStatus: previousStatusByMonthId.get(id) ?? "pending",
               };
             }
             return next;
@@ -205,11 +215,17 @@ export function useMonthlyStatusHandlers({
         },
         undo: () =>
           handleUndoStatusChanges({
-            changes: changedMonths.map((month) => ({
-              summaryId: month.id,
-              adjustmentId: month.adjustmentId,
-              status: month.abatementStatus,
-            })),
+            changes: changedMonths.flatMap((month) => {
+              const ids = month.ids ?? [month.id];
+              const adjIds =
+                month.adjustmentIds ??
+                (month.adjustmentId ? [month.adjustmentId] : []);
+              return ids.map((id, index) => ({
+                summaryId: id,
+                adjustmentId: adjIds[index] ?? adjIds[0] ?? "",
+                status: month.abatementStatus,
+              }));
+            }),
             donorId: donor.donorId,
             history: buildAbatementHistoryEntry({
               actionType: "monthly_abatement_status_undo",
