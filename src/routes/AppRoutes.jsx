@@ -1,3 +1,4 @@
+import { AnimatePresence } from "framer-motion";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import PageTransition from "../components/layout/PageTransition";
@@ -18,24 +19,29 @@ import NotFound from "../pages/NotFound";
 function AnimatedRoutes() {
   const location = useLocation();
 
+  // AnimatePresence with mode="wait" makes the previous page run its exit
+  // animation before the next page enters. `initial={false}` skips the
+  // first-mount fade so the app's initial paint doesn't flash.
   return (
     <Layout>
-      <PageTransition key={location.pathname}>
-        <Routes location={location}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/doadores" element={<Donors />} />
-          <Route path="/doadores/:donorId" element={<DonorProfile />} />
-          <Route path="/pessoas" element={<People />} />
-          <Route path="/demandas" element={<Demands />} />
-          <Route path="/mensal" element={<Monthly />} />
-          <Route path="/importacoes" element={<Imports />} />
-          <Route path="/anotacoes" element={<Notes />} />
-          <Route path="/lixeira" element={<Trash />} />
-          <Route path="/historico" element={<ActionHistory />} />
-          <Route path="/configuracoes" element={<Settings />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </PageTransition>
+      <AnimatePresence mode="wait" initial={false}>
+        <PageTransition key={location.pathname}>
+          <Routes location={location}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/doadores" element={<Donors />} />
+            <Route path="/doadores/:donorId" element={<DonorProfile />} />
+            <Route path="/pessoas" element={<People />} />
+            <Route path="/demandas" element={<Demands />} />
+            <Route path="/mensal" element={<Monthly />} />
+            <Route path="/importacoes" element={<Imports />} />
+            <Route path="/anotacoes" element={<Notes />} />
+            <Route path="/lixeira" element={<Trash />} />
+            <Route path="/historico" element={<ActionHistory />} />
+            <Route path="/configuracoes" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </PageTransition>
+      </AnimatePresence>
     </Layout>
   );
 }
