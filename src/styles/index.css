@@ -262,9 +262,12 @@ textarea {
   --text-soft: #3d4148;
   --muted: #7a7e88;
   --muted-strong: #555a64;
-  --accent: #d97706;
-  --accent-strong: #b45309;
-  --accent-soft: rgba(217, 119, 6, 0.12);
+  /* Accent kept in the same yellow-gold hue family as dark mode (#ffd24d)
+   * — only the lightness is adapted for legibility on a white surface.
+   * Hue ≈ 44° in both modes preserves brand identity across themes. */
+  --accent: #b08000;
+  --accent-strong: #8a6300;
+  --accent-soft: rgba(176, 128, 0, 0.12);
   --accent-2: #059669;
   --accent-2-soft: rgba(5, 150, 105, 0.1);
   --danger: #dc2626;
@@ -281,7 +284,7 @@ textarea {
 }
 
 .light ::selection {
-  background: rgba(217, 119, 6, 0.18);
+  background: rgba(176, 128, 0, 0.22);
   color: var(--text-main);
 }
 
