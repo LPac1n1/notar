@@ -4,7 +4,7 @@ const VARIANTS = {
   primary:
     "border border-[color:var(--accent)] bg-[color:var(--accent)] text-[#12151c] hover:border-[color:var(--accent-strong)] hover:bg-[color:var(--accent-strong)]",
   danger:
-    "border border-[var(--danger-line)] bg-[color:var(--danger-soft)] text-[color:var(--danger)] hover:border-[color:var(--danger)] hover:bg-[rgba(255,91,91,0.2)]",
+    "border border-[color:var(--danger)] bg-[color:var(--danger)] text-white hover:border-[color:var(--danger-strong)] hover:bg-[color:var(--danger-strong)]",
   subtle:
     "border border-[color:var(--line)] bg-[color:var(--surface-elevated)] text-[color:var(--text-main)] hover:border-[color:var(--line-strong)] hover:bg-[color:var(--surface-muted)]",
   ghost:

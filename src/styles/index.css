@@ -18,6 +18,7 @@
   --accent-2: #1ae680;
   --accent-2-soft: rgba(26, 230, 128, 0.12);
   --danger: #ff5b5b;
+  --danger-strong: #e04545;
   --danger-line: rgba(255, 91, 91, 0.45);
   --danger-soft: rgba(255, 91, 91, 0.14);
   --success: #1ae680;
@@ -271,6 +272,7 @@ textarea {
   --accent-2: #059669;
   --accent-2-soft: rgba(5, 150, 105, 0.1);
   --danger: #dc2626;
+  --danger-strong: #b91c1c;
   --danger-line: rgba(220, 38, 38, 0.35);
   --danger-soft: rgba(220, 38, 38, 0.08);
   --success: #059669;
