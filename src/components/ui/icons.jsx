@@ -33,6 +33,7 @@ export {
   ListOrdered as OrderedListIcon,
   ListTodo as DemandIcon,
   LoaderCircle as LoadingIcon,
+  MoreHorizontal as MoreIcon,
   Pencil as EditIcon,
   Plus as PlusIcon,
   RefreshCw as RefreshIcon,
