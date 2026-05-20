@@ -3,9 +3,9 @@
 :root {
   --app-bg: #0f1319;
   --surface: #12151c;
-  --surface-strong: #151920;
-  --surface-muted: #23262e;
-  --surface-elevated: #181c23;
+  --surface-strong: #161c28;
+  --surface-muted: #252b38;
+  --surface-elevated: #1c2332;
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.16);
   --text-main: #f7f7f4;
@@ -52,9 +52,16 @@ html {
 
 body {
   font-family: var(--font-sans);
+  font-size: 15px;
   color: var(--text-main);
   background: var(--app-bg);
   overflow: hidden;
+}
+
+input,
+select,
+textarea {
+  font-size: 1rem; /* prevents iOS Safari auto-zoom on focus (requires ≥16px) */
 }
 
 #root {
@@ -97,6 +104,26 @@ body {
 
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% center;
+  }
+  to {
+    background-position: -200% center;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s linear infinite;
+  background-image: linear-gradient(
+    90deg,
+    var(--surface-muted) 30%,
+    var(--surface-elevated) 50%,
+    var(--surface-muted) 70%
+  );
+  background-size: 200% 100%;
 }
 
 button {
@@ -254,9 +281,9 @@ textarea {
 .light {
   --app-bg: #f0f1f4;
   --surface: #ffffff;
-  --surface-strong: #f4f5f8;
-  --surface-muted: #e8eaef;
-  --surface-elevated: #f8f9fb;
+  --surface-strong: #f2f4f8;
+  --surface-muted: #e4e7ee;
+  --surface-elevated: #ebeff6;
   --line: rgba(0, 0, 0, 0.08);
   --line-strong: rgba(0, 0, 0, 0.16);
   --text-main: #111214;

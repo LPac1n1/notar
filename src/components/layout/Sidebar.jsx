@@ -45,6 +45,12 @@ function NavItem({ item, compact = false }) {
     >
       {({ isActive }) => (
         <div className="flex items-center gap-3">
+          {isActive ? (
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 w-0.5 rounded-r-full bg-[var(--accent)]"
+            />
+          ) : null}
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
               isActive
@@ -72,7 +78,7 @@ function FooterNavItem({ item }) {
       to={item.to}
       end={item.end}
       className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 ${
+        `group relative flex items-center gap-3 overflow-hidden rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
             : "border-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
@@ -81,6 +87,12 @@ function FooterNavItem({ item }) {
     >
       {({ isActive }) => (
         <>
+          {isActive ? (
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 w-0.5 rounded-r-full bg-[var(--accent)]"
+            />
+          ) : null}
           <Icon
             className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--accent)]" : "group-hover:text-[var(--text-main)]"}`}
           />

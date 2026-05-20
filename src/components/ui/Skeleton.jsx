@@ -2,7 +2,7 @@ export default function Skeleton({ className = "" }) {
   return (
     <div
       aria-hidden="true"
-      className={`animate-pulse rounded-md bg-[color:var(--surface-muted)] ${className}`.trim()}
+      className={`animate-shimmer rounded-md ${className}`.trim()}
     />
   );
 }

@@ -1,6 +1,6 @@
 export default function MetricCard({ helper = "", label, onClick, value }) {
   const sharedClassName =
-    "rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4 text-left transition-colors duration-150";
+    "rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-4 text-left shadow-[var(--shadow-popover)] transition-colors duration-150";
 
   const content = (
     <>

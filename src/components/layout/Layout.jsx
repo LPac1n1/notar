@@ -21,10 +21,10 @@ export default function Layout({ children }) {
 
   return (
     <div className="h-dvh overflow-hidden">
-      <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-3 p-3 lg:flex-row lg:gap-4 lg:p-4">
+      <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-4 p-4 lg:flex-row lg:gap-5 lg:p-5">
         <Sidebar />
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
           <Header />
 
           <main className="min-h-0 flex-1 overflow-hidden">
