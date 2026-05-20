@@ -1,9 +1,11 @@
 import { useId } from "react";
+import { CheckIcon } from "./icons";
 
 export default function TextInput({
   className = "",
   description = "",
   error = "",
+  success = "",
   hideLabel = false,
   id,
   label = "",
@@ -14,9 +16,16 @@ export default function TextInput({
   const inputId = id || props.name || generatedId;
   const descriptionId = description ? `${inputId}-description` : "";
   const errorId = error ? `${inputId}-error` : "";
-  const ariaDescribedBy = [descriptionId, errorId]
+  const successId = success ? `${inputId}-success` : "";
+  const ariaDescribedBy = [descriptionId, errorId, successId]
     .filter(Boolean)
     .join(" ");
+
+  const borderClass = error
+    ? "border-[color:var(--danger)] focus:border-[color:var(--danger)]"
+    : success
+    ? "border-[color:var(--success-line)] focus:border-[color:var(--success)]"
+    : "";
 
   return (
     <div className={`space-y-1.5 ${wrapperClassName}`.trim()}>
@@ -33,13 +42,20 @@ export default function TextInput({
         </label>
       ) : null}
 
-      <input
-        id={inputId}
-        aria-describedby={ariaDescribedBy || undefined}
-        aria-invalid={Boolean(error)}
-        className={`w-full rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${error ? "border-[color:var(--danger)] focus:border-[color:var(--danger)]" : ""} ${className}`.trim()}
-        {...props}
-      />
+      <div className="relative">
+        <input
+          id={inputId}
+          aria-describedby={ariaDescribedBy || undefined}
+          aria-invalid={Boolean(error)}
+          className={`w-full rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${success ? "pr-10" : ""} ${borderClass} ${className}`.trim()}
+          {...props}
+        />
+        {success ? (
+          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+            <CheckIcon className="h-4 w-4 text-[color:var(--success)]" />
+          </div>
+        ) : null}
+      </div>
 
       {description ? (
         <p
@@ -53,9 +69,18 @@ export default function TextInput({
       {error ? (
         <p
           id={errorId}
-          className="text-xs leading-5 text-[var(--danger)]"
+          className="text-xs leading-5 text-[color:var(--danger)]"
         >
           {error}
+        </p>
+      ) : null}
+
+      {success && !error ? (
+        <p
+          id={successId}
+          className="text-xs leading-5 text-[color:var(--success)]"
+        >
+          {success}
         </p>
       ) : null}
     </div>

@@ -141,7 +141,7 @@ export default function DonorListItem({
   onRemove,
 }) {
   return (
-    <li className="flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between">
+    <li className="group flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between">
       <div className="min-w-0 flex-1">
         <div className="mb-2 flex items-start gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -258,8 +258,8 @@ export default function DonorListItem({
       </div>
 
       {/* Desktop-only action column (md+). Mobile shows the context menu in
-          the header row instead. */}
-      <div className="hidden flex-col gap-2 md:flex md:w-40 md:self-stretch">
+          the header row instead. Hidden until row is hovered or focused. */}
+      <div className="hidden flex-col gap-2 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 md:flex md:w-40 md:self-stretch">
         <Button
           className="w-full md:flex-1"
           onClick={() => onOpenProfile(donor.id)}
