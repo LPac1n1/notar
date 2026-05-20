@@ -191,7 +191,7 @@ export default function ImportedMonthsCarousel({
       <div
         ref={railRef}
         aria-label="Meses importados"
-        className="no-scrollbar flex gap-3 overflow-x-auto"
+        className="no-scrollbar flex gap-3 overflow-x-auto [touch-action:pan-x] snap-x snap-mandatory"
       >
         {imports.map((item) => {
           const referenceMonth = item.referenceMonth.slice(0, 7);
@@ -204,7 +204,7 @@ export default function ImportedMonthsCarousel({
               onClick={() => onSelectMonth(isSelected ? "" : referenceMonth)}
               aria-label={`${isSelected ? "Limpar seleção de" : "Selecionar"} ${formatMonthYear(item.referenceMonth)}`}
               aria-pressed={isSelected}
-              className={`min-w-[250px] rounded-md border p-4 text-left transition ${
+              className={`snap-start min-w-[250px] rounded-md border p-4 text-left transition ${
                 isSelected
                   ? "border-[var(--accent)] bg-[var(--surface-elevated)]"
                   : "border-[var(--line)] bg-[var(--surface-strong)] hover:border-[var(--line-strong)]"

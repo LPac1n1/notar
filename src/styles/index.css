@@ -106,6 +106,15 @@ textarea {
   background: transparent;
 }
 
+/* Expand CopyButton tap area to 44 × 44 px on touch without altering layout */
+@media (hover: none) and (pointer: coarse) {
+  [data-copy-label]::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+
 @keyframes shimmer {
   from {
     background-position: 200% center;
