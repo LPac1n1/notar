@@ -213,6 +213,7 @@ export default function ConsolidatedPendingDonors({
                         className="w-full"
                         disabled={isUpdating}
                         onClick={() => onCatchUp?.(donor)}
+                        title="Agrupa meses pendentes em um único lançamento de acumulado, ideal para doadores que não doaram por um período e retomaram."
                       >
                         Lançar acumulado
                       </Button>

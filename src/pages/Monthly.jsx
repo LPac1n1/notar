@@ -16,6 +16,7 @@ import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonth
 import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
 import MonthlySummaryList from "../features/monthly/components/MonthlySummaryList";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
+import FirstVisitHint from "../components/ui/FirstVisitHint";
 import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
 import { useMonthlyStatusHandlers } from "../features/monthly/hooks/useMonthlyStatusHandlers";
@@ -513,6 +514,15 @@ export default function Monthly() {
         subtitle="Abatimentos por mês, doador e status."
         className="mb-6"
       />
+      <FirstVisitHint
+        storageKey="notar:monthly-hint-v1"
+        title="Como usar a Gestão Mensal"
+      >
+        Selecione um mês importado no carrossel para ver os doadores daquele
+        período. Use os filtros para refinar por status ou tipo. Para doadores
+        com meses pendentes acumulados, use "Lançar acumulado" para consolidar
+        em um único abatimento.
+      </FirstVisitHint>
       <FeedbackMessage message={error} tone="error" />
       <FeedbackMessage
         message={

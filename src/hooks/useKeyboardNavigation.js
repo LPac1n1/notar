@@ -11,7 +11,7 @@ const ROUTES = {
   n: "/anotacoes",
   l: "/lixeira",
   r: "/historico",
-  s: "/configuracoes",
+  c: "/configuracoes",
 };
 
 // Shown in the keyboard shortcut hint UI

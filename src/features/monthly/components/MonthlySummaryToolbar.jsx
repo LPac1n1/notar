@@ -66,6 +66,7 @@ export default function MonthlySummaryToolbar({
           isLoading={isExportingPdf}
           loadingLabel="Gerando PDF..."
           leftIcon={<FileIcon className="h-4 w-4" />}
+          title="Gera um PDF por demanda com os doadores filtrados. Disponível após selecionar um mês."
         >
           PDFs por demanda
         </Button>
@@ -76,6 +77,7 @@ export default function MonthlySummaryToolbar({
           isLoading={isExportingJpeg}
           loadingLabel="Gerando JPEG..."
           leftIcon={<FileIcon className="h-4 w-4" />}
+          title="Gera uma imagem JPEG por demanda com os doadores filtrados. Disponível após selecionar um mês."
         >
           JPEGs por demanda
         </Button>
