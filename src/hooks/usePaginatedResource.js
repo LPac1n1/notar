@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDataResource } from "./useDataResource";
 
 /**
@@ -21,23 +21,13 @@ export function usePaginatedResource({
   initialPageSize = 25,
   ...rest
 }) {
-  const [page, setPageRaw] = useState(initialPage);
-  const [pageSize, setPageSize] = useState(initialPageSize);
-
-  // Reset to page 1 when the user changes filters (not on initial mount).
-  const prevFiltersRef = useRef(filters);
-  const didMountRef = useRef(false);
-  useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true;
-      prevFiltersRef.current = filters;
-      return;
-    }
-    if (prevFiltersRef.current !== filters) {
-      prevFiltersRef.current = filters;
-      setPageRaw(1);
-    }
-  }, [filters]);
+  const [paginationState, setPaginationState] = useState(() => ({
+    filters,
+    page: initialPage,
+    pageSize: initialPageSize,
+  }));
+  const pageSize = paginationState.pageSize;
+  const page = paginationState.filters === filters ? paginationState.page : 1;
 
   const pagedFilters = useMemo(
     () => ({ ...filters, limit: pageSize, offset: (page - 1) * pageSize }),
@@ -55,19 +45,31 @@ export function usePaginatedResource({
   const endItem = Math.min(totalCount, currentPage * pageSize);
 
   const handlePageSizeChange = useCallback((event) => {
-    setPageSize(Number(event.target.value));
-    setPageRaw(1);
-  }, []);
+    setPaginationState((current) => ({
+      ...current,
+      filters,
+      page: 1,
+      pageSize: Number(event.target.value) || initialPageSize,
+    }));
+  }, [filters, initialPageSize]);
 
   const setPage = useCallback(
     (nextPage) => {
-      setPageRaw((current) => {
+      setPaginationState((current) => {
+        const currentPage = current.filters === filters ? current.page : 1;
         const resolved =
-          typeof nextPage === "function" ? nextPage(current) : nextPage;
-        return Math.min(Math.max(Number(resolved) || 1, 1), Math.max(1, totalPages));
+          typeof nextPage === "function" ? nextPage(currentPage) : nextPage;
+        return {
+          ...current,
+          filters,
+          page: Math.min(
+            Math.max(Number(resolved) || 1, 1),
+            Math.max(1, totalPages),
+          ),
+        };
       });
     },
-    [totalPages],
+    [filters, totalPages],
   );
 
   return {

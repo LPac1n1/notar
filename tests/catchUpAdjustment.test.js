@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createTestConnection } from "./helpers/duckdbHelper.js";
 import { runMigrations } from "../src/services/db/migrations.js";
+import { buildAbatementAdjustmentDescription } from "../src/utils/abatementAdjustmentDescription.js";
 
 /**
  * End-to-end tests for the "lançamento de acumulado" (catch-up adjustment)
@@ -67,6 +68,32 @@ async function seedDonorWithHistoricalImports(conn) {
 
   return importRows;
 }
+
+test("buildAbatementAdjustmentDescription reflects period, target month and totals", () => {
+  assert.equal(
+    buildAbatementAdjustmentDescription({
+      referenceMonth: "2025-11",
+      rangeStartMonth: "2025-06",
+      rangeEndMonth: "2025-10",
+      notesCount: 25,
+      abatementAmount: 750,
+    }),
+    "Acumulado de Junho de 2025 a Outubro de 2025 para lançamento em Novembro de 2025 - 25 notas - R$ 750,00.",
+  );
+});
+
+test("buildAbatementAdjustmentDescription handles a single-month period", () => {
+  assert.equal(
+    buildAbatementAdjustmentDescription({
+      referenceMonth: "2025-11-01",
+      rangeStartMonth: "2025-10-01",
+      rangeEndMonth: "2025-10-01",
+      notesCount: 1,
+      abatementAmount: 30,
+    }),
+    "Acumulado de Outubro de 2025 para lançamento em Novembro de 2025 - 1 nota - R$ 30,00.",
+  );
+});
 
 test("preview aggregates donations by CPF even when matched_source_id is NULL", async () => {
   const conn = await createTestConnection();

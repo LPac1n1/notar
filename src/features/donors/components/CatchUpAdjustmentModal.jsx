@@ -3,7 +3,6 @@ import Button from "../../../components/ui/Button";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
 import Modal from "../../../components/ui/Modal";
 import MonthInput from "../../../components/ui/MonthInput";
-import TextInput from "../../../components/ui/TextInput";
 import { MonthlyIcon } from "../../../components/ui/icons";
 import {
   createAbatementAdjustment,
@@ -11,6 +10,7 @@ import {
   previewCatchUpRange,
 } from "../../../services/abatementAdjustmentService";
 import { logError } from "../../../services/logger";
+import { buildAbatementAdjustmentDescription } from "../../../utils/abatementAdjustmentDescription";
 import { formatMonthYear } from "../../../utils/date";
 import { getErrorMessage } from "../../../utils/error";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -20,17 +20,6 @@ function toMonthYearMonthInput(monthIso) {
     return "";
   }
   return monthIso.slice(0, 7);
-}
-
-function buildDefaultDescription(start, end) {
-  if (!start || !end) {
-    return "";
-  }
-  const startLabel = formatMonthYear(`${start.slice(0, 7)}-01`);
-  const endLabel = formatMonthYear(`${end.slice(0, 7)}-01`);
-  return startLabel === endLabel
-    ? `Acumulado de ${startLabel}`
-    : `Acumulado de ${startLabel} a ${endLabel}`;
 }
 
 /**
@@ -62,7 +51,6 @@ export default function CatchUpAdjustmentModal({
     const previous = new Date(year, month - 2, 1);
     return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [description, setDescription] = useState("");
   const [existingAdjustments, setExistingAdjustments] = useState([]);
   const [preview, setPreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -78,6 +66,23 @@ export default function CatchUpAdjustmentModal({
   const rangeWithinReference =
     fieldsValid && rangeEndMonth <= referenceMonth;
   const allValid = rangeOrderValid && rangeWithinReference;
+  const automaticDescription = useMemo(
+    () =>
+      buildAbatementAdjustmentDescription({
+        referenceMonth,
+        rangeStartMonth,
+        rangeEndMonth,
+        notesCount: preview?.totalNotes,
+        abatementAmount: preview?.totalAmount,
+      }),
+    [
+      referenceMonth,
+      rangeStartMonth,
+      rangeEndMonth,
+      preview?.totalAmount,
+      preview?.totalNotes,
+    ],
+  );
 
   useEffect(() => {
     if (!donor?.id) return;
@@ -152,14 +157,6 @@ export default function CatchUpAdjustmentModal({
     };
   }, [donor?.id, rangeStartMonth, rangeEndMonth, allValid]);
 
-  // Auto-suggest a description matching the chosen range.
-  useEffect(() => {
-    if (description) return;
-    if (!rangeStartMonth || !rangeEndMonth) return;
-    setDescription(buildDefaultDescription(rangeStartMonth, rangeEndMonth));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeStartMonth, rangeEndMonth]);
-
   const validationMessage = useMemo(() => {
     if (!referenceMonth) {
       return "Selecione o mês onde o acumulado será lançado.";
@@ -210,7 +207,7 @@ export default function CatchUpAdjustmentModal({
         rangeEndMonth,
         notesCount: preview.totalNotes,
         abatementAmount: preview.totalAmount,
-        description: description.trim(),
+        description: automaticDescription,
       });
       onConfirmed?.();
     } catch (err) {
@@ -268,14 +265,19 @@ export default function CatchUpAdjustmentModal({
           />
         </div>
 
-        <TextInput
-          label="Descrição"
-          name="description"
-          value={description}
-          placeholder="Ex.: Acumulado de jun/2025 a out/2025"
-          description="Aparece no histórico e no relatório PDF para contextualizar o lançamento."
-          onChange={(event) => setDescription(event.target.value)}
-        />
+        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+            Descrição automática
+          </p>
+          <p className="mt-1 text-sm font-medium leading-6 text-[var(--text-main)]">
+            {automaticDescription ||
+              "Defina o período para gerar a descrição automaticamente."}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+            Atualizada conforme o mês de lançamento, o período e a prévia
+            calculada.
+          </p>
+        </div>
       </div>
 
       {validationMessage ? (

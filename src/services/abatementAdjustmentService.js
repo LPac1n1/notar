@@ -9,6 +9,7 @@ import {
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { formatMonthYear } from "../utils/date";
+import { buildAbatementAdjustmentDescription } from "../utils/abatementAdjustmentDescription";
 
 /**
  * Abatement adjustments are explicit "catch-up" entries: a single row that
@@ -308,11 +309,19 @@ export async function createAbatementAdjustment({
   }
 
   const id = nanoid();
+  const finalDescription =
+    String(description ?? "").trim() ||
+    buildAbatementAdjustmentDescription({
+      referenceMonth: normalizedReferenceMonth,
+      rangeStartMonth: normalizedStart,
+      rangeEndMonth: normalizedEnd,
+      notesCount: safeNotesCount,
+      abatementAmount: safeAmount,
+    });
 
   await runInTransaction(async () => {
-    // `description` is free-form user text — keep it in a prepared parameter
-    // rather than splicing it through `escapeSqlString` so any future
-    // pathological inputs cannot affect the SQL boundary.
+    // `finalDescription` may include user-derived labels and formatted values.
+    // Keep it bound as a prepared parameter so the SQL boundary stays explicit.
     await executePrepared(
       `
         INSERT INTO abatement_adjustments (
@@ -338,7 +347,7 @@ export async function createAbatementAdjustment({
         normalizedEnd,
         safeNotesCount,
         safeAmount,
-        description,
+        finalDescription,
       ],
     );
   });
@@ -348,7 +357,7 @@ export async function createAbatementAdjustment({
     entityType: "abatement_adjustment",
     entityId: id,
     label: donorName || donorId,
-    description: `Lançamento de acumulado em ${formatMonthYear(normalizedReferenceMonth)}: ${description || "sem descrição"}.`,
+    description: `Lançamento de acumulado em ${formatMonthYear(normalizedReferenceMonth)}: ${finalDescription}`,
     payload: {
       donorId,
       referenceMonth: normalizedReferenceMonth,
@@ -356,6 +365,7 @@ export async function createAbatementAdjustment({
       rangeEndMonth: normalizedEnd,
       notesCount: safeNotesCount,
       abatementAmount: safeAmount,
+      description: finalDescription,
     },
   });
 
