@@ -9,6 +9,7 @@ import {
   CloudIcon,
   CloudOffIcon,
   RefreshIcon,
+  SearchIcon,
 } from "../ui/icons";
 import { formatSyncTime } from "../../utils/date";
 
@@ -42,7 +43,7 @@ function describeStatus(status, lastSyncedAt) {
   };
 }
 
-export default function Header() {
+export default function Header({ onOpenSearch }) {
   const { status: authStatus, user } = useAuth();
   const [sync, setSync] = useState(() => getCloudSyncStatus());
 
@@ -60,7 +61,20 @@ export default function Header() {
     : describeStatus(sync.status, sync.lastSyncedAt);
 
   return (
-    <header className="flex justify-end">
+    <header className="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={onOpenSearch}
+        aria-label="Busca global (Ctrl+K)"
+        title="Busca global (Ctrl+K)"
+        className="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
+      >
+        <SearchIcon className="h-4 w-4" />
+        <span className="hidden sm:inline">Buscar</span>
+        <kbd className="hidden rounded border border-[var(--line)] px-1.5 py-0.5 font-mono text-xs sm:inline">
+          Ctrl K
+        </kbd>
+      </button>
       <Link
         to="/configuracoes"
         className={`inline-flex max-w-full items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-muted)] ${className}`}
