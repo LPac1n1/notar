@@ -57,7 +57,7 @@ export const MAIN_NAV_ITEMS = [
   },
 ];
 
-export const FOOTER_NAV_ITEMS = [
+export const AUDIT_NAV_ITEMS = [
   {
     to: "/lixeira",
     label: "Lixeira",
@@ -70,6 +70,9 @@ export const FOOTER_NAV_ITEMS = [
     description: "Auditoria e ações recentes",
     icon: HistoryIcon,
   },
+];
+
+export const CONFIG_NAV_ITEMS = [
   {
     to: "/configuracoes",
     label: "Configurações",
@@ -77,6 +80,8 @@ export const FOOTER_NAV_ITEMS = [
     icon: SettingsIcon,
   },
 ];
+
+export const FOOTER_NAV_ITEMS = [...AUDIT_NAV_ITEMS, ...CONFIG_NAV_ITEMS];
 
 // Kept for backwards-compatibility with getNavigationItem
 export const NAV_ITEMS = [...MAIN_NAV_ITEMS, ...FOOTER_NAV_ITEMS];

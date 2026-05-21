@@ -87,7 +87,7 @@ export default function ImportUploadModal({
 
       {previewData ? (
         <div className="mt-6">
-          <h3 className="mb-3 font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
+          <h3 className="mb-3 font-display text-2xl font-semibold text-[var(--text-main)]">
             Pré-visualização
           </h3>
           <p className="mb-3 break-all text-sm text-[var(--muted)]">

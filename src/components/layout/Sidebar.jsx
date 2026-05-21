@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { FOOTER_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
+import { AUDIT_NAV_ITEMS, CONFIG_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
 
 function NavItem({ item, compact = false }) {
   const Icon = item.icon;
@@ -108,11 +108,11 @@ export default function Sidebar() {
     <>
       <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 md:hidden">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
-          <span className="font-[var(--font-display)] text-lg font-semibold">
+          <span className="font-display text-lg font-semibold">
             N
           </span>
         </div>
-        <p className="font-[var(--font-display)] text-xl font-semibold text-[var(--text-main)]">
+        <p className="font-display text-xl font-semibold text-[var(--text-main)]">
           Notar
         </p>
       </div>
@@ -122,12 +122,12 @@ export default function Sidebar() {
           <div className="relative">
             <div className="flex items-center justify-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3 lg:justify-start">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
-                <span className="font-[var(--font-display)] text-2xl font-semibold">
+                <span className="font-display text-2xl font-semibold">
                   N
                 </span>
               </div>
               <div className="hidden min-w-0 lg:block">
-                <p className="font-[var(--font-display)] text-2xl font-bold text-[var(--text-main)]">
+                <p className="font-display text-2xl font-bold text-[var(--text-main)]">
                   Notar
                 </p>
               </div>
@@ -142,7 +142,11 @@ export default function Sidebar() {
 
           <div className="mt-4 border-t border-[var(--line)] pt-4">
             <nav className="flex flex-col gap-1">
-              {FOOTER_NAV_ITEMS.map((item) => (
+              {AUDIT_NAV_ITEMS.map((item) => (
+                <FooterNavItem key={item.to} item={item} />
+              ))}
+              <div className="my-1 border-t border-[var(--line)]" />
+              {CONFIG_NAV_ITEMS.map((item) => (
                 <FooterNavItem key={item.to} item={item} />
               ))}
             </nav>

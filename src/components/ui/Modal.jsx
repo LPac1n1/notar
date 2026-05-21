@@ -224,7 +224,7 @@ export default function Modal({
                 {title ? (
                   <h2
                     id={titleId}
-                    className="font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]"
+                    className="font-display text-2xl font-semibold text-[var(--text-main)]"
                   >
                     {title}
                   </h2>

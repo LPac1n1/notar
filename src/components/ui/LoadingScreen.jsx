@@ -38,7 +38,7 @@ export default function LoadingScreen({
         </div>
 
         <div className="space-y-2">
-          <h2 className="font-[var(--font-display)] text-2xl font-semibold text-[var(--text-main)]">
+          <h2 className="font-display text-2xl font-semibold text-[var(--text-main)]">
             {title}
           </h2>
           <p className="mx-auto max-w-xl text-sm leading-6 text-[var(--muted)]">

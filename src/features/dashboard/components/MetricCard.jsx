@@ -5,7 +5,7 @@ export default function MetricCard({ helper = "", label, onClick, value }) {
   const content = (
     <>
       <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
-      <p className="mt-2 font-[var(--font-display)] text-3xl font-semibold text-[var(--text-main)]">
+      <p className="mt-2 font-display text-3xl font-semibold text-[var(--text-main)]">
         {value}
       </p>
       {helper ? (

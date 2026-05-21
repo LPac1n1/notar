@@ -13,7 +13,7 @@ export default function NoteCard({ note, onEdit, onDelete }) {
 
       <div className="flex min-w-0 flex-1 flex-col gap-4 p-4">
         <div className="min-w-0">
-          <h3 className="break-words font-[var(--font-display)] text-xl font-semibold text-[var(--text-main)] [overflow-wrap:anywhere]">
+          <h3 className="break-words font-display text-xl font-semibold text-[var(--text-main)] [overflow-wrap:anywhere]">
             {note.title}
           </h3>
           <p className="mt-1 text-xs text-[var(--muted)]">

@@ -1,6 +1,24 @@
 @import "tailwindcss";
 
+@theme {
+  /* Registers font-display utility class (replaces font-[var(--font-display)] arbitrary values) */
+  --font-display:
+    "Montserrat", "Aptos", "Segoe UI Variable", "Segoe UI", "Noto Sans",
+    Arial, sans-serif;
+}
+
 :root {
+  /* Type scale */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  /* Border radius scale */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
   --app-bg: #0f1319;
   --surface: #12151c;
   --surface-strong: #161c28;
@@ -34,7 +52,6 @@
   --font-sans:
     "Montserrat", "Aptos", "Segoe UI Variable", "Segoe UI", "Noto Sans",
     Arial, sans-serif;
-  --font-display: var(--font-sans);
 }
 
 html,

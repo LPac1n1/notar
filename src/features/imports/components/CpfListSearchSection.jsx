@@ -149,7 +149,7 @@ function ResultGroup({ definition, items, onOpenDonorProfile }) {
               label={`${formatInteger(items.length)} CPF(s)`}
               tone={definition.tone}
             />
-            <h3 className="font-[var(--font-display)] text-base font-bold text-[var(--text-main)]">
+            <h3 className="font-display text-base font-bold text-[var(--text-main)]">
               {definition.title}
             </h3>
           </div>
@@ -263,7 +263,7 @@ export default function CpfListSearchSection({ onOpenDonorProfile }) {
     <SectionCard className="mb-5">
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="font-[var(--font-display)] text-xl font-bold text-[var(--text-main)]">
+          <h2 className="font-display text-xl font-bold text-[var(--text-main)]">
             Busca por lista de CPFs
           </h2>
           <p className="mt-1 text-xs text-[var(--muted)]">
