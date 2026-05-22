@@ -8,6 +8,7 @@ export default function ImportHistoryItem({
   deletingImportId,
   item,
   onDelete,
+  onReimport,
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[repeat(6,minmax(0,1fr))_auto]">
@@ -43,7 +44,12 @@ export default function ImportHistoryItem({
           <p className="text-sm text-[var(--muted)]">Doadores que doaram</p>
           <p className="font-medium">{formatInteger(item.matchedDonors)}</p>
         </div>
-        <div className="flex items-center justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {onReimport ? (
+            <Button variant="subtle" onClick={() => onReimport(item)}>
+              Reimportar planilha
+            </Button>
+          ) : null}
           <Button
             variant="danger"
             onClick={() => onDelete(item)}

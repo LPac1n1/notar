@@ -6,6 +6,7 @@ import {
   normalizeCpf,
   notifyDatabaseChanged,
   query,
+  queryPrepared,
   releaseRegisteredFile,
   registerFileText,
   runInTransaction,
@@ -16,6 +17,7 @@ import { reconcileImport } from "./importReconcile";
 import {
   INVALID_ORDER_STATUS_PATTERNS,
   detectCpfColumn,
+  detectDonationColumns,
   detectOrderStatusColumn,
   getImportFileExtension,
   isExcelImportExtension,
@@ -61,6 +63,138 @@ function normalizeCpfSqlExpression(expression) {
       ''
     )
   `;
+}
+
+function buildInvalidStatusExpression(orderStatusColumn) {
+  if (!orderStatusColumn) {
+    return "FALSE";
+  }
+
+  return `(${INVALID_ORDER_STATUS_PATTERNS.map(
+    (pattern) =>
+      `lower(coalesce(CAST(${escapeIdentifier(orderStatusColumn)} AS VARCHAR), '')) LIKE '%${escapeSqlString(pattern)}%'`,
+  ).join(" OR ")})`;
+}
+
+/**
+ * Inserts one row per donation note into `donation_notes` directly from the
+ * registered CSV/XLSX preview. Identity columns (id, import_id) are filled by
+ * DuckDB; per-row data flows through SQL expressions that normalize CPF/CNPJ
+ * to digits-only, parse Brazilian `dd/mm/aa` dates via `try_strptime`, and
+ * tolerate missing optional columns. The match key (cnpj_estabelecimento,
+ * numero_nota, data_nota) is preserved as-is for later reconciliation.
+ */
+async function populateDonationNotesFromCsv({
+  importId,
+  registeredFileName,
+  cpfColumn,
+  orderStatusColumn,
+  donationColumns,
+  normalizedMonth,
+}) {
+  const normalizedCpfExpression = normalizeCpfSqlExpression(
+    escapeIdentifier(cpfColumn),
+  );
+
+  const textColumn = (columnName) =>
+    columnName
+      ? `trim(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), ''))`
+      : `''`;
+  const digitsOnlyColumn = (columnName) =>
+    columnName
+      ? `regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), ''), '[^0-9]', '', 'g')`
+      : `''`;
+  const dateColumn = (columnName) =>
+    columnName
+      ? `try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE`
+      : `NULL`;
+  const doubleColumn = (columnName) =>
+    columnName
+      ? `try_cast(replace(replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '.', ''), ',', '.') AS DOUBLE)`
+      : `0`;
+
+  const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
+
+  await execute(`
+    INSERT INTO donation_notes (
+      id,
+      import_id,
+      cpf,
+      reference_month,
+      numero_nota,
+      valor_nota,
+      data_nota,
+      data_pedido,
+      cnpj_estabelecimento,
+      status_pedido,
+      tipo_doacao,
+      is_valid,
+      created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      '${escapeSqlString(importId)}',
+      ${normalizedCpfExpression},
+      '${escapeSqlString(normalizedMonth)}',
+      ${textColumn(donationColumns.numeroNota)},
+      ${doubleColumn(donationColumns.valorNota)},
+      ${dateColumn(donationColumns.dataNota)},
+      ${dateColumn(donationColumns.dataPedido)},
+      ${digitsOnlyColumn(donationColumns.cnpjEstabelecimento)},
+      ${textColumn(orderStatusColumn)},
+      ${textColumn(donationColumns.tipoDoacao)},
+      NOT ${invalidStatusExpression},
+      CURRENT_TIMESTAMP
+    FROM ${buildCsvSource(registeredFileName)}
+    WHERE length(${normalizedCpfExpression}) = 11
+  `);
+
+  // CNPJ Entidade Social is constant per planilha — pick the first non-empty
+  // value (≥14 digits after stripping separators) and persist it on the
+  // import row for auditing.
+  if (donationColumns.cnpjEntidadeSocial) {
+    const cnpjExpr = digitsOnlyColumn(donationColumns.cnpjEntidadeSocial);
+    const cnpjRows = await query(`
+      SELECT ${cnpjExpr} AS cnpj
+      FROM ${buildCsvSource(registeredFileName)}
+      WHERE length(${cnpjExpr}) >= 14
+      LIMIT 1
+    `);
+
+    const cnpjEntidadeSocial = cnpjRows[0]?.cnpj ?? "";
+    if (cnpjEntidadeSocial) {
+      await executePrepared(
+        `
+          UPDATE imports
+          SET cnpj_entidade_social = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [cnpjEntidadeSocial, importId],
+      );
+    }
+  }
+}
+
+async function aggregateCpfCountsFromDonationNotes(importId) {
+  const rows = await queryPrepared(
+    `
+      SELECT
+        cpf,
+        count(*) FILTER (WHERE is_valid = TRUE) AS notes_count,
+        count(*) FILTER (WHERE is_valid = FALSE) AS invalid_notes_count
+      FROM donation_notes
+      WHERE import_id = ?
+      GROUP BY cpf
+      ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
+    `,
+    [importId],
+  );
+
+  return rows.map((row) => ({
+    cpf: row.cpf,
+    notesCount: Number(row.notes_count ?? 0),
+    invalidNotesCount: Number(row.invalid_notes_count ?? 0),
+  }));
 }
 
 async function registerSpreadsheetPreviewFile(file, registeredFileName) {
@@ -343,32 +477,50 @@ export async function processImportedFile({
       escapeIdentifier(cpfColumn),
     );
     const orderStatusColumn = detectOrderStatusColumn(fileColumnNames);
-    const invalidStatusExpression = orderStatusColumn
-      ? `(${INVALID_ORDER_STATUS_PATTERNS.map(
-          (pattern) =>
-            `lower(coalesce(${escapeIdentifier(orderStatusColumn)}, '')) LIKE '%${escapeSqlString(pattern)}%'`,
-        ).join(" OR ")})`
-      : "FALSE";
+    const donationColumns = detectDonationColumns(fileColumnNames);
+    // The presence of `CNPJ Estabelecimento` is the marker for the new-format
+    // spreadsheet that carries per-note detail. Without it we fall back to the
+    // legacy aggregated path so older planilhas keep importing.
+    const hasPerNoteFormat = Boolean(donationColumns.cnpjEstabelecimento);
 
-    const cpfCounts = await query(`
-      SELECT
-        ${normalizedCpfExpression} AS cpf,
-        count(*) FILTER (WHERE NOT ${invalidStatusExpression}) AS notes_count,
-        count(*) FILTER (WHERE ${invalidStatusExpression}) AS invalid_notes_count
-      FROM ${buildCsvSource(registeredFileName)}
-      WHERE length(${normalizedCpfExpression}) = 11
-      GROUP BY 1
-      ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
-    `);
+    let cpfCounts;
+
+    if (hasPerNoteFormat) {
+      await populateDonationNotesFromCsv({
+        importId,
+        registeredFileName,
+        cpfColumn,
+        orderStatusColumn,
+        donationColumns,
+        normalizedMonth,
+      });
+
+      cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
+    } else {
+      const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
+
+      const cpfCountsRaw = await query(`
+        SELECT
+          ${normalizedCpfExpression} AS cpf,
+          count(*) FILTER (WHERE NOT ${invalidStatusExpression}) AS notes_count,
+          count(*) FILTER (WHERE ${invalidStatusExpression}) AS invalid_notes_count
+        FROM ${buildCsvSource(registeredFileName)}
+        WHERE length(${normalizedCpfExpression}) = 11
+        GROUP BY 1
+        ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
+      `);
+
+      cpfCounts = cpfCountsRaw.map((row) => ({
+        cpf: row.cpf,
+        notesCount: Number(row.notes_count ?? 0),
+        invalidNotesCount: Number(row.invalid_notes_count ?? 0),
+      }));
+    }
 
     await saveImportCpfSummary({
       importId,
       referenceMonth: normalizedMonth,
-      cpfCounts: cpfCounts.map((row) => ({
-        cpf: row.cpf,
-        notesCount: Number(row.notes_count ?? 0),
-        invalidNotesCount: Number(row.invalid_notes_count ?? 0),
-      })),
+      cpfCounts,
     }, { emitChange: false });
 
     notifyDatabaseChanged({ source: "import" });
@@ -473,6 +625,26 @@ export async function deleteImport(importId) {
     FROM monthly_donor_summary
     WHERE import_id = '${escapeSqlString(importId)}'
   `);
+
+  const donationNoteRows = await query(`
+    SELECT
+      id,
+      import_id,
+      cpf,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      numero_nota,
+      valor_nota,
+      CAST(data_nota AS VARCHAR) AS data_nota,
+      CAST(data_pedido AS VARCHAR) AS data_pedido,
+      cnpj_estabelecimento,
+      status_pedido,
+      tipo_doacao,
+      is_valid,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM donation_notes
+    WHERE import_id = '${escapeSqlString(importId)}'
+  `);
+
   const trashItemId = nanoid();
 
   await runInTransaction(async () => {
@@ -499,6 +671,7 @@ export async function deleteImport(importId) {
           imports: importRows,
           importCpfSummary: importCpfSummaryRows,
           monthlyDonorSummary: monthlySummaryRows,
+          donationNotes: donationNoteRows,
         }),
       ],
     );
@@ -510,6 +683,11 @@ export async function deleteImport(importId) {
 
     await execute(`
       DELETE FROM import_cpf_summary
+      WHERE import_id = '${escapeSqlString(importId)}'
+    `);
+
+    await execute(`
+      DELETE FROM donation_notes
       WHERE import_id = '${escapeSqlString(importId)}'
     `);
 
@@ -532,4 +710,326 @@ export async function deleteImport(importId) {
   });
 
   return trashItemId;
+}
+
+/**
+ * Parses cpf counts directly from a registered CSV without writing anything.
+ * Shared between the legacy-format import path and the reimport preview, which
+ * needs the new state in memory to diff against `import_cpf_summary` before the
+ * user commits.
+ */
+async function parseCpfCountsFromCsv({
+  registeredFileName,
+  cpfColumn,
+  orderStatusColumn,
+}) {
+  const normalizedCpfExpression = normalizeCpfSqlExpression(
+    escapeIdentifier(cpfColumn),
+  );
+  const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
+
+  const rows = await query(`
+    SELECT
+      ${normalizedCpfExpression} AS cpf,
+      count(*) FILTER (WHERE NOT ${invalidStatusExpression}) AS notes_count,
+      count(*) FILTER (WHERE ${invalidStatusExpression}) AS invalid_notes_count
+    FROM ${buildCsvSource(registeredFileName)}
+    WHERE length(${normalizedCpfExpression}) = 11
+    GROUP BY 1
+    ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
+  `);
+
+  return rows.map((row) => ({
+    cpf: row.cpf,
+    notesCount: Number(row.notes_count ?? 0),
+    invalidNotesCount: Number(row.invalid_notes_count ?? 0),
+  }));
+}
+
+/**
+ * Loads the existing per-CPF state for an import together with the abatement
+ * status carried by `monthly_donor_summary`. Used by the reimport preview to
+ * flag CPFs that, if removed by the new file, would drop a row already marked
+ * as "applied" — those are the ones the user must explicitly acknowledge.
+ */
+async function loadCurrentImportState(importId) {
+  const rows = await queryPrepared(
+    `
+      SELECT
+        ics.cpf,
+        ics.notes_count,
+        coalesce(donors.name, '') AS donor_name,
+        coalesce(mds.abatement_status, '') AS abatement_status
+      FROM import_cpf_summary ics
+      LEFT JOIN donors
+        ON donors.id = ics.matched_donor_id
+      LEFT JOIN monthly_donor_summary mds
+        ON mds.import_id = ics.import_id
+        AND mds.donor_id = ics.matched_donor_id
+      WHERE ics.import_id = ?
+    `,
+    [importId],
+  );
+
+  const byCpf = new Map();
+  for (const row of rows) {
+    byCpf.set(row.cpf, {
+      cpf: row.cpf,
+      notesCount: Number(row.notes_count ?? 0),
+      donorName: row.donor_name ?? "",
+      abatementStatus: row.abatement_status ?? "",
+    });
+  }
+
+  return byCpf;
+}
+
+/**
+ * First step of a non-destructive reimport. Registers the candidate file,
+ * parses the new state without writing, and diffs it against the import's
+ * current per-CPF rows. The returned payload is fed straight into
+ * `applyReimport` once the user confirms; the registered file stays alive
+ * until then.
+ *
+ * If the user cancels, call `cancelReimportPreview(previewData)` to release
+ * the file. `applyReimport` releases it itself.
+ */
+export async function prepareReimportPreview(importId, file) {
+  if (!file) {
+    throw new Error("Selecione um arquivo para reimportar.");
+  }
+
+  const importRows = await queryPrepared(
+    `
+      SELECT
+        id,
+        strftime(reference_month, '%Y-%m-01') AS reference_month,
+        file_name
+      FROM imports
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [importId],
+  );
+
+  if (importRows.length === 0) {
+    throw new Error("Importação não encontrada.");
+  }
+
+  const fileExtension = getImportFileExtension(file.name);
+  if (!isSupportedImportExtension(fileExtension)) {
+    throw new Error(
+      "Por enquanto, a importação suporta apenas arquivos CSV, TXT ou XLSX.",
+    );
+  }
+
+  const registeredFileName = `${nanoid()}-${file.name}`;
+  try {
+    await registerSpreadsheetPreviewFile(file, registeredFileName);
+
+    const fileColumns = await query(`
+      DESCRIBE SELECT *
+      FROM ${buildCsvSource(registeredFileName)}
+    `);
+    const fileColumnNames = fileColumns.map((column) => column.column_name);
+    const cpfColumn = detectCpfColumn(fileColumnNames);
+
+    if (!cpfColumn) {
+      throw new Error(
+        "Não foi possível detectar a coluna de CPF na planilha. Verifique o cabeçalho.",
+      );
+    }
+
+    const orderStatusColumn = detectOrderStatusColumn(fileColumnNames);
+    const donationColumns = detectDonationColumns(fileColumnNames);
+    const hasPerNoteFormat = Boolean(donationColumns.cnpjEstabelecimento);
+    const normalizedMonth = importRows[0].reference_month;
+
+    const newCpfCounts = await parseCpfCountsFromCsv({
+      registeredFileName,
+      cpfColumn,
+      orderStatusColumn,
+    });
+
+    const currentStateByCpf = await loadCurrentImportState(importId);
+    const newStateByCpf = new Map(
+      newCpfCounts
+        .filter((item) => normalizeCpf(item.cpf).length === 11)
+        .map((item) => [normalizeCpf(item.cpf), item]),
+    );
+
+    const newCpfs = [];
+    const removedCpfs = [];
+    const changedCpfs = [];
+    let unchangedCount = 0;
+
+    for (const [cpf, newEntry] of newStateByCpf) {
+      const current = currentStateByCpf.get(cpf);
+      if (!current) {
+        newCpfs.push({
+          cpf,
+          notesCount: newEntry.notesCount,
+        });
+      } else if (current.notesCount !== newEntry.notesCount) {
+        changedCpfs.push({
+          cpf,
+          donorName: current.donorName,
+          oldNotesCount: current.notesCount,
+          newNotesCount: newEntry.notesCount,
+        });
+      } else {
+        unchangedCount += 1;
+      }
+    }
+
+    for (const [cpf, current] of currentStateByCpf) {
+      if (!newStateByCpf.has(cpf)) {
+        removedCpfs.push({
+          cpf,
+          donorName: current.donorName,
+          notesCount: current.notesCount,
+          hasAppliedAbatement: current.abatementStatus === "applied",
+        });
+      }
+    }
+
+    return {
+      registeredFileName,
+      originalFileName: file.name,
+      importId,
+      referenceMonth: normalizedMonth,
+      cpfColumn,
+      orderStatusColumn,
+      donationColumns,
+      hasPerNoteFormat,
+      cpfCounts: newCpfCounts,
+      diff: {
+        newCpfs,
+        removedCpfs,
+        changedCpfs,
+        unchangedCount,
+        totals: {
+          current: currentStateByCpf.size,
+          next: newStateByCpf.size,
+        },
+        hasAppliedAbatementAtRisk: removedCpfs.some(
+          (entry) => entry.hasAppliedAbatement,
+        ),
+      },
+    };
+  } catch (error) {
+    await releaseRegisteredFile(registeredFileName);
+    throw error;
+  }
+}
+
+/**
+ * Releases the registered file held open by `prepareReimportPreview` after
+ * the user cancels. Safe to call multiple times.
+ */
+export async function cancelReimportPreview(previewData) {
+  if (previewData?.registeredFileName) {
+    await releaseRegisteredFile(previewData.registeredFileName);
+  }
+}
+
+/**
+ * Second step: applies the reimport using the preview's already-registered
+ * file. Non-destructive by design — `reconcileImport` captures the existing
+ * `abatement_status` per (import_id, donor_id) and reapplies it after
+ * rebuilding `monthly_donor_summary`, so re-imports never lose progress for
+ * CPFs that remain in the new file.
+ */
+export async function applyReimport(previewData) {
+  if (!previewData?.importId || !previewData?.registeredFileName) {
+    throw new Error("Pré-visualização da reimportação inválida.");
+  }
+
+  const {
+    importId,
+    registeredFileName,
+    originalFileName,
+    referenceMonth,
+    cpfColumn,
+    orderStatusColumn,
+    donationColumns,
+    hasPerNoteFormat,
+  } = previewData;
+
+  try {
+    // Wipe old donation_notes for this import — the new file is the source of
+    // truth from this point. `saveImportCpfSummary` handles the corresponding
+    // wipe-and-reinsert of `import_cpf_summary`; the chained `reconcileImport`
+    // call inside it preserves abatement_status from the existing
+    // monthly_donor_summary rows before deleting them.
+    await execute(`
+      DELETE FROM donation_notes
+      WHERE import_id = '${escapeSqlString(importId)}'
+    `);
+
+    let cpfCounts;
+
+    if (hasPerNoteFormat) {
+      await populateDonationNotesFromCsv({
+        importId,
+        registeredFileName,
+        cpfColumn,
+        orderStatusColumn,
+        donationColumns,
+        normalizedMonth: referenceMonth,
+      });
+
+      cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
+    } else {
+      cpfCounts = await parseCpfCountsFromCsv({
+        registeredFileName,
+        cpfColumn,
+        orderStatusColumn,
+      });
+    }
+
+    await executePrepared(
+      `
+        UPDATE imports
+        SET
+          file_name = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [originalFileName, importId],
+    );
+
+    await saveImportCpfSummary(
+      {
+        importId,
+        referenceMonth,
+        cpfCounts,
+      },
+      { emitChange: false },
+    );
+
+    notifyDatabaseChanged({ source: "reimport" });
+
+    await createActionHistoryEntry({
+      actionType: "import",
+      entityType: "import",
+      entityId: importId,
+      label: originalFileName,
+      description: `Planilha ${originalFileName} reimportada.`,
+      payload: {
+        cpfColumn,
+        fileName: originalFileName,
+        referenceMonth,
+        reimport: true,
+        rowCount: cpfCounts.reduce(
+          (total, row) => total + Number(row.notesCount ?? 0),
+          0,
+        ),
+      },
+    });
+
+    return importId;
+  } finally {
+    await releaseRegisteredFile(registeredFileName);
+  }
 }

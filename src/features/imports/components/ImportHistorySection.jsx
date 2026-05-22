@@ -20,6 +20,7 @@ export default function ImportHistorySection({
   onDelete,
   onExport,
   onFilterChange,
+  onReimport,
   options,
   pagination,
   statusOptions,
@@ -111,6 +112,7 @@ export default function ImportHistorySection({
               deletingImportId={deletingImportId}
               item={item}
               onDelete={onDelete}
+              onReimport={onReimport}
             />
           ))}
 

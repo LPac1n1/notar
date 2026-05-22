@@ -369,6 +369,10 @@ async function restoreImport(payload) {
   await insertRows("imports", payload.imports ?? []);
   await insertRows("import_cpf_summary", payload.importCpfSummary ?? []);
   await insertRows("monthly_donor_summary", payload.monthlyDonorSummary ?? []);
+  // `donationNotes` is only present in payloads created after migration v5.
+  // Older trash items predate the per-note storage and silently restore as
+  // before (no donation_notes rows for that import).
+  await insertRows("donation_notes", payload.donationNotes ?? []);
 }
 
 export async function restoreTrashItem(id) {

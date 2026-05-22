@@ -525,6 +525,73 @@ export const MIGRATIONS = [
       }
     },
   },
+  {
+    id: 5,
+    name: "donation-notes-and-credit-key",
+    up: async (conn) => {
+      // Per-note storage of donation rows. Until v5, the importer collapsed the
+      // donations spreadsheet into per-CPF counts (`import_cpf_summary`); the
+      // raw notes were discarded. Phase 1 of the reconciliation feature needs
+      // each individual note so it can later be matched against the credits
+      // spreadsheet by (cnpj_estabelecimento, numero_nota, data_nota).
+      //
+      // `is_valid` mirrors the existing INVALID_ORDER_STATUS_PATTERNS filter:
+      // invalid rows are kept for diagnostics but excluded from totals.
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS donation_notes (
+          id TEXT,
+          import_id TEXT,
+          cpf TEXT,
+          reference_month DATE,
+          numero_nota TEXT,
+          valor_nota DOUBLE DEFAULT 0,
+          data_nota DATE,
+          data_pedido DATE,
+          cnpj_estabelecimento TEXT,
+          status_pedido TEXT,
+          tipo_doacao TEXT,
+          is_valid BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await conn.query(`
+        ALTER TABLE imports
+        ADD COLUMN IF NOT EXISTS cnpj_entidade_social TEXT
+      `);
+
+      const donationNoteIndexes = [
+        ["uq_donation_notes_id", "donation_notes(id)", true],
+        [
+          "idx_donation_notes_import",
+          "donation_notes(import_id)",
+          false,
+        ],
+        ["idx_donation_notes_cpf", "donation_notes(cpf)", false],
+        // Match key against the credits spreadsheet. Non-unique because the
+        // same physical nota could appear in two imports if the user re-imports
+        // overlapping data; uniqueness is enforced per-import in the parser.
+        [
+          "idx_donation_notes_match_key",
+          "donation_notes(cnpj_estabelecimento, numero_nota, data_nota)",
+          false,
+        ],
+      ];
+
+      for (const [indexName, columns, unique] of donationNoteIndexes) {
+        await conn
+          .query(
+            `CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${indexName} ON ${columns}`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v5: skipping index ${indexName} on ${columns}.`,
+              error,
+            );
+          });
+      }
+    },
+  },
 ];
 
 export async function runMigrations(conn) {

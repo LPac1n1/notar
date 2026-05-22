@@ -12,6 +12,7 @@ import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDet
 import CpfSummarySection from "../features/imports/components/CpfSummarySection";
 import ImportHistorySection from "../features/imports/components/ImportHistorySection";
 import ImportUploadModal from "../features/imports/components/ImportUploadModal";
+import ReimportModal from "../features/imports/components/ReimportModal";
 import {
   CPF_REGISTRATION_FILTER_OPTIONS,
   IMPORT_STATUS_OPTIONS,
@@ -29,10 +30,13 @@ import {
   exportImportsCsv,
 } from "../services/exportService";
 import {
+  applyReimport,
+  cancelReimportPreview,
   deleteImport,
   listImportCpfSummary,
   listImports,
   prepareImportPreview,
+  prepareReimportPreview,
   processImportedFile,
 } from "../services/importService";
 import { restoreTrashItem } from "../services/trashService";
@@ -98,6 +102,11 @@ export default function Imports() {
   const [isExportingImports, setIsExportingImports] = useState(false);
   const [isExportingCpfSummary, setIsExportingCpfSummary] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState("");
+  const reimportModal = useModalState(null);
+  const [reimportPreview, setReimportPreview] = useState(null);
+  const [isReimportPreviewLoading, setIsReimportPreviewLoading] = useState(false);
+  const [isReimportApplying, setIsReimportApplying] = useState(false);
+  const [reimportError, setReimportError] = useState("");
   const navigate = useNavigate();
 
   const {
@@ -525,6 +534,82 @@ export default function Imports() {
     }
   };
 
+  const handleStartReimport = useCallback((item) => {
+    setReimportError("");
+    setReimportPreview(null);
+    setError("");
+    setSuccessMessage("");
+    setSuccessAction(null);
+    reimportModal.open(item);
+  }, [reimportModal, setError]);
+
+  const handlePickReimportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (reimportPreview?.registeredFileName) {
+      await cancelReimportPreview(reimportPreview).catch(() => null);
+      setReimportPreview(null);
+    }
+
+    if (!reimportModal.value) return;
+
+    setReimportError("");
+    setIsReimportPreviewLoading(true);
+    try {
+      const preview = await prepareReimportPreview(reimportModal.value.id, file);
+      setReimportPreview(preview);
+    } catch (err) {
+      logError("ImportsPage.reimportPreview", err);
+      setReimportError(
+        getErrorMessage(err, "Não foi possível analisar a planilha."),
+      );
+    } finally {
+      setIsReimportPreviewLoading(false);
+    }
+  };
+
+  const handleCancelReimportPreview = async () => {
+    if (reimportPreview?.registeredFileName) {
+      await cancelReimportPreview(reimportPreview).catch(() => null);
+    }
+    setReimportPreview(null);
+    setReimportError("");
+  };
+
+  const handleCloseReimportModal = async () => {
+    if (isReimportApplying) return;
+    if (reimportPreview?.registeredFileName) {
+      await cancelReimportPreview(reimportPreview).catch(() => null);
+    }
+    setReimportPreview(null);
+    setReimportError("");
+    reimportModal.close();
+  };
+
+  const handleConfirmReimport = async () => {
+    if (!reimportPreview) return;
+
+    setIsReimportApplying(true);
+    setReimportError("");
+    try {
+      await importOperation.run(() => applyReimport(reimportPreview), {
+        loadingMessage: "Aplicando reimportação...",
+      });
+      setReimportPreview(null);
+      reimportModal.close();
+      await refreshImports();
+      setSuccessMessage("Planilha reimportada com sucesso.");
+    } catch (err) {
+      logError("ImportsPage.reimportApply", err);
+      setReimportError(
+        getErrorMessage(err, "Não foi possível aplicar a reimportação."),
+      );
+    } finally {
+      setIsReimportApplying(false);
+    }
+  };
+
   const handleClearImportFilters = () => {
     setImportFilters({ ...INITIAL_IMPORT_FILTERS });
   };
@@ -612,6 +697,7 @@ export default function Imports() {
         onDelete={removeModal.open}
         onExport={handleExportImports}
         onFilterChange={handleImportFilterChange}
+        onReimport={handleStartReimport}
         options={importHistoryOptions}
         pagination={importsPagination}
         statusOptions={IMPORT_STATUS_OPTIONS}
@@ -658,6 +744,22 @@ export default function Imports() {
             isLoading={deletingImportId === removeModal.value.id}
             onCancel={removeModal.close}
             onConfirm={handleDeleteImport}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {reimportModal.isOpen ? (
+          <ReimportModal
+            errorMessage={reimportError}
+            importItem={reimportModal.value}
+            isPreviewLoading={isReimportPreviewLoading}
+            isApplying={isReimportApplying}
+            onCancel={handleCancelReimportPreview}
+            onClose={handleCloseReimportModal}
+            onConfirm={handleConfirmReimport}
+            onPickFile={handlePickReimportFile}
+            preview={reimportPreview}
           />
         ) : null}
       </AnimatePresence>

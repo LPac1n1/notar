@@ -47,6 +47,34 @@ export function detectOrderStatusColumn(columnNames = []) {
   );
 }
 
+// Donation spreadsheet columns introduced with the credit-reconciliation
+// feature. Each detector matches the normalized header (lowercase, no
+// accents, no separators) of one column. Exact equality where ambiguity is
+// possible (e.g. `cnpjentidadesocial` vs `cnpjestabelecimento` both contain
+// "cnpj") so the wrong column is never picked.
+export const DONATION_COLUMN_DETECTORS = {
+  numeroNota: (normalized) => normalized === "numerodanota",
+  valorNota: (normalized) => normalized === "valordanota",
+  dataNota: (normalized) => normalized === "datadanota",
+  cnpjEntidadeSocial: (normalized) => normalized === "cnpjentidadesocial",
+  dataPedido: (normalized) => normalized === "datadopedido",
+  tipoDoacao: (normalized) => normalized === "tipodadoacao",
+  cnpjEstabelecimento: (normalized) => normalized === "cnpjestabelecimento",
+};
+
+export function detectDonationColumns(columnNames = []) {
+  const detected = {};
+
+  for (const [fieldName, predicate] of Object.entries(DONATION_COLUMN_DETECTORS)) {
+    detected[fieldName] =
+      columnNames.find((columnName) =>
+        predicate(normalizeColumnName(columnName)),
+      ) ?? "";
+  }
+
+  return detected;
+}
+
 // Patterns usam `_` (LIKE wildcard de 1 caractere) no lugar de letras
 // acentuadas para casar tanto o conteúdo correto em UTF-8 quanto arquivos em
 // Windows-1252/Latin-1, onde o DuckDB lê acentos como o caractere de
