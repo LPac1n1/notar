@@ -1,7 +1,7 @@
 import { useState } from "react";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
-import { ChevronDownIcon } from "../../../components/ui/icons";
+import { ChevronDownIcon, WarningIcon } from "../../../components/ui/icons";
 import { formatCpf } from "../../../utils/cpf";
 import {
   formatMonthYear,
@@ -215,16 +215,22 @@ export default function MonthlySummaryRow({
             ) : null}
 
             {hasStartDateConflict ? (
-              <p className="mt-2 text-sm text-[var(--warning)]">
-                Atenção: {summary.sourceStartConflictCount || 1} CPF(s)
-                vinculado(s) apareceram antes do início de doação informado.
+              <p className="mt-2 flex items-start gap-1.5 text-sm text-[var(--warning)]">
+                <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  Atenção: {summary.sourceStartConflictCount || 1} CPF(s)
+                  vinculado(s) apareceram antes do início de doação informado.
+                </span>
               </p>
             ) : null}
 
             {summary.invalidNotesCount > 0 ? (
-              <p className="mt-2 text-sm text-[var(--warning)]">
-                {formatInteger(summary.invalidNotesCount)} nota(s) descartada(s)
-                por status do pedido inválido.
+              <p className="mt-2 flex items-start gap-1.5 text-sm text-[var(--warning)]">
+                <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  {formatInteger(summary.invalidNotesCount)} nota(s) descartada(s)
+                  por status do pedido inválido.
+                </span>
               </p>
             ) : null}
           </div>

@@ -314,7 +314,7 @@ textarea {
   --line-strong: rgba(0, 0, 0, 0.16);
   --text-main: #111214;
   --text-soft: #3d4148;
-  --muted: #7a7e88;
+  --muted: #696d76; /* #7a7e88 was 4.06:1 on white — fails AA; #696d76 gives 5.18:1 */
   --muted-strong: #555a64;
   /* Accent kept in the same yellow-gold hue family as dark mode (#ffd24d)
    * — only the lightness is adapted for legibility on a white surface.
@@ -330,9 +330,9 @@ textarea {
   --danger-soft: rgba(220, 38, 38, 0.08);
   --success: #059669;
   --success-line: rgba(5, 150, 105, 0.35);
-  --warning: #d97706;
-  --warning-line: rgba(217, 119, 6, 0.35);
-  --warning-soft: rgba(217, 119, 6, 0.1);
+  --warning: #a16207; /* #d97706 was 3.1:1 on white — fails AA for small text; #a16207 gives 4.95:1 */
+  --warning-line: rgba(161, 98, 7, 0.35);
+  --warning-soft: rgba(161, 98, 7, 0.1);
   --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.16);
   --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.12);
   --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.1);

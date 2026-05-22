@@ -612,8 +612,9 @@ export default function RichNoteEditor({
         </p>
 
         <div
-          className="flex flex-wrap gap-1 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-1"
+          role="toolbar"
           aria-label="Ferramentas de formatação"
+          className="flex flex-wrap gap-1 rounded-md border border-[var(--line)] bg-[var(--surface-strong)] p-1"
         >
           {FORMAT_BUTTONS.map((item) => {
             const Icon = item.icon;
@@ -659,6 +660,7 @@ export default function RichNoteEditor({
       <div
         ref={editorRef}
         role="textbox"
+        aria-multiline="true"
         aria-label={label}
         data-testid="note-rich-editor"
         data-placeholder="Escreva sua anotação..."

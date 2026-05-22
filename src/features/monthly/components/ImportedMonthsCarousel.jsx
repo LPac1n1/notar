@@ -190,8 +190,23 @@ export default function ImportedMonthsCarousel({
 
       <div
         ref={railRef}
+        role="list"
         aria-label="Meses importados"
         className="no-scrollbar flex gap-3 overflow-x-auto [touch-action:pan-x] snap-x snap-mandatory"
+        onKeyDown={(e) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+          e.preventDefault();
+          const buttons = [...railRef.current.querySelectorAll("button")];
+          const idx = buttons.indexOf(document.activeElement);
+          if (idx === -1) return;
+          let next = idx;
+          if (e.key === "ArrowLeft") next = Math.max(0, idx - 1);
+          else if (e.key === "ArrowRight") next = Math.min(buttons.length - 1, idx + 1);
+          else if (e.key === "Home") next = 0;
+          else if (e.key === "End") next = buttons.length - 1;
+          buttons[next].focus();
+          buttons[next].scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        }}
       >
         {imports.map((item) => {
           const referenceMonth = item.referenceMonth.slice(0, 7);
@@ -200,6 +215,7 @@ export default function ImportedMonthsCarousel({
           return (
             <button
               key={item.id}
+              role="listitem"
               type="button"
               onClick={() => onSelectMonth(isSelected ? "" : referenceMonth)}
               aria-label={`${isSelected ? "Limpar seleção de" : "Selecionar"} ${formatMonthYear(item.referenceMonth)}`}
