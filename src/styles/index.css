@@ -23,7 +23,7 @@
   --surface: #12151c;
   --surface-strong: #151922;
   --surface-muted: #242a38;
-  --surface-elevated: #181d2a;
+  --surface-elevated: #151922;
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.16);
   --text-main: #f7f7f4;
@@ -309,7 +309,7 @@ textarea {
   --surface: #ffffff;
   --surface-strong: #f2f4f8;
   --surface-muted: #e4e7ee;
-  --surface-elevated: #ebeff6;
+  --surface-elevated: #f2f4f8;
   --line: rgba(0, 0, 0, 0.08);
   --line-strong: rgba(0, 0, 0, 0.16);
   --text-main: #111214;

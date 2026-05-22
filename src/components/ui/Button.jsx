@@ -8,7 +8,7 @@ const VARIANTS = {
   subtle:
     "border border-[color:var(--line)] bg-[color:var(--surface-elevated)] text-[color:var(--text-main)] hover:border-[color:var(--line-strong)] hover:bg-[color:var(--surface-muted)]",
   ghost:
-    "border border-transparent text-[color:var(--muted-strong)] hover:border-[color:var(--line)] hover:bg-[color:var(--surface-elevated)] hover:text-[color:var(--text-main)]",
+    "border border-transparent text-[color:var(--muted-strong)] hover:border-[color:var(--line)] hover:bg-[color:var(--surface-muted)] hover:text-[color:var(--text-main)]",
 };
 
 export default function Button({

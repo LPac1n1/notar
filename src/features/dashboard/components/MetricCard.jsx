@@ -23,7 +23,7 @@ export default function MetricCard({ helper = "", label, onClick, value }) {
   return (
     <button
       type="button"
-      className={`${sharedClassName} hover:border-[var(--line-strong)] hover:bg-[var(--surface-elevated)]`}
+      className={`${sharedClassName} hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)]`}
       onClick={onClick}
     >
       {content}

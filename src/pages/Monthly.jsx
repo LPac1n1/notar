@@ -586,7 +586,7 @@ export default function Monthly() {
           <button
             type="button"
             onClick={() => setIsFiltersExpanded((v) => !v)}
-            className="flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-sm font-medium text-[var(--muted-strong)] transition hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
+            className="flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-sm font-medium text-[var(--muted-strong)] transition hover:border-[var(--line)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
           >
             <ChevronDownIcon
               className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isFiltersExpanded ? "rotate-180" : ""}`}

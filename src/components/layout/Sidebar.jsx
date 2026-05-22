@@ -39,7 +39,7 @@ function NavItem({ item, compact = false }) {
         `group relative overflow-hidden rounded-md border px-3 py-3 text-sm transition-colors duration-150 ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
-            : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
+            : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
         }`
       }
     >
@@ -81,7 +81,7 @@ function FooterNavItem({ item }) {
         `group relative flex items-center justify-center gap-3 overflow-hidden rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 lg:justify-start ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
-            : "border-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-main)]"
+            : "border-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
         }`
       }
     >
