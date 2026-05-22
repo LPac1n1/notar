@@ -57,7 +57,7 @@ export default function SignInPanel() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] p-6">
-      <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow-elevated)]">
+      <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--surface-elevated)] p-6">
         <h1 className="text-2xl font-semibold text-[var(--text-main)]">Notar</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
           Entre com seu e-mail para receber um link de acesso. Não precisa de senha.

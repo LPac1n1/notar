@@ -10,7 +10,7 @@ function KeyboardNavigationHint({ isPendingG }) {
   if (!isPendingG) return null;
   return (
     <div className="pointer-events-none fixed bottom-20 left-1/2 z-[200] -translate-x-1/2 lg:bottom-4">
-      <div className="rounded-lg border border-[var(--line-strong)] bg-[var(--surface-muted)] px-3 py-2 text-sm font-medium text-[var(--text-main)] shadow-[var(--shadow-popover)]">
+      <div className="rounded-lg border border-[var(--line-strong)] bg-[var(--surface-muted)] px-3 py-2 text-sm font-medium text-[var(--text-main)]">
         <kbd className="font-mono font-bold text-[var(--accent)]">g</kbd>
         <span className="ml-2 text-[var(--muted)]">→ pressione uma letra para navegar</span>
       </div>

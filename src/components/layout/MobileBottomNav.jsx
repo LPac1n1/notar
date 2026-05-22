@@ -52,7 +52,7 @@ export default function MobileBottomNav() {
             className="fixed inset-0 z-40 bg-black/40 md:hidden"
             onClick={() => setIsOverflowOpen(false)}
           />
-          <div className="fixed bottom-16 left-0 right-0 z-50 mx-3 mb-1 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-elevated)] md:hidden">
+          <div className="fixed bottom-16 left-0 right-0 z-50 mx-3 mb-1 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] md:hidden">
             <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
               <span className="text-sm font-semibold text-[var(--text-main)]">
                 Mais páginas

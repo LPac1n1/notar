@@ -138,7 +138,7 @@ export default function CommandPalette({ isOpen, onClose, query, onQueryChange, 
         role="dialog"
         aria-modal="true"
         aria-label="Busca global"
-        className="fixed left-1/2 top-[15%] z-50 w-full max-w-xl -translate-x-1/2 overflow-hidden rounded-xl border border-[var(--line-strong)] bg-[var(--surface)] shadow-[var(--shadow-elevated)]"
+        className="fixed left-1/2 top-[15%] z-50 w-full max-w-xl -translate-x-1/2 overflow-hidden rounded-xl border border-[var(--line-strong)] bg-[var(--surface)]"
       >
         {/* Search input */}
         <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">

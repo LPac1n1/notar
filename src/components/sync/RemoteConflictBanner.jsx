@@ -24,7 +24,7 @@ export default function RemoteConflictBanner() {
     <div
       role="alert"
       aria-live="assertive"
-      className="fixed inset-x-0 top-0 z-50 mx-auto mt-4 max-w-3xl rounded-md border border-[var(--warning-line,_var(--line))] bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-elevated)]"
+      className="fixed inset-x-0 top-0 z-50 mx-auto mt-4 max-w-3xl rounded-md border border-[var(--warning-line,_var(--line))] bg-[var(--surface-elevated)] p-4"
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>

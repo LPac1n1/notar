@@ -7,7 +7,7 @@ export default function SectionCard({
 }) {
   return (
     <section
-      className={`rounded-md border border-[var(--line)] bg-[var(--surface)] p-5 shadow-[var(--shadow-elevated)] ${className}`.trim()}
+      className={`rounded-md border border-[var(--line)] bg-[var(--surface)] p-5 ${className}`.trim()}
     >
       {(title || description) ? (
         <div className="mb-5">

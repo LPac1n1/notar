@@ -466,7 +466,7 @@ export default function SelectInput({
                 <Motion.div
                   ref={menuRef}
                   style={menuStyle ?? undefined}
-                  className="fixed z-[140] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-popover)]"
+                  className="fixed z-[140] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)]"
                   initial={{ opacity: 0, y: 8, scale: 0.99 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 6, scale: 0.99 }}
