@@ -7,6 +7,7 @@ import {
   updateStorageInfo,
 } from "./events.js";
 import { runSchemaBootstrap } from "./schema.js";
+import { getCached, invalidateCache, setCached } from "../queryCache.js";
 
 // We use the EH (WASM exception handling) bundle instead of MVP because
 // the MVP worker in this dev release of duckdb-wasm references an unbound
@@ -119,7 +120,19 @@ export async function execute(sql, { domains, flush = true, source } = {}) {
  * statement is closed automatically once results are read, so callers don't
  * have to track the lifetime themselves.
  */
-export async function queryPrepared(sql, params = []) {
+export async function queryPrepared(sql, params = [], { cacheTtl } = {}) {
+  if (cacheTtl !== undefined) {
+    const key = `${sql}::${JSON.stringify(params)}`;
+    const hit = getCached(key);
+    if (hit !== undefined) return hit;
+    const rows = await _runPrepared(sql, params);
+    setCached(key, rows, cacheTtl);
+    return rows;
+  }
+  return _runPrepared(sql, params);
+}
+
+async function _runPrepared(sql, params) {
   const connection = await initDB();
   const stmt = await connection.prepare(sql);
   try {
@@ -147,6 +160,8 @@ export async function executePrepared(
   } finally {
     await stmt.close().catch(() => null);
   }
+
+  invalidateCache();
 
   if (flush && transactionDepth === 0) {
     await flushAfterTransaction();

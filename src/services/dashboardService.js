@@ -1,4 +1,8 @@
 import { query, queryPrepared } from "./db";
+import { getCached, setCached } from "./queryCache.js";
+
+const DASHBOARD_CACHE_KEY = "dashboard:overview";
+const DASHBOARD_TTL_MS = 30_000;
 
 function toNumber(value) {
   return Number(value ?? 0);
@@ -21,6 +25,15 @@ function toNumber(value) {
  * statements internally.
  */
 export async function getDashboardOverview() {
+  const cached = getCached(DASHBOARD_CACHE_KEY);
+  if (cached !== undefined) return cached;
+
+  const result = await _fetchDashboardOverview();
+  setCached(DASHBOARD_CACHE_KEY, result, DASHBOARD_TTL_MS);
+  return result;
+}
+
+async function _fetchDashboardOverview() {
   const [
     totalsRows,
     recentImportsRows,
@@ -417,3 +430,4 @@ export async function getDashboardOverview() {
     },
   };
 }
+

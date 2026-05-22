@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Button from "../components/ui/Button";
 import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -16,9 +16,8 @@ import {
 import { listActionHistory } from "../services/actionHistoryService";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
-import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useDataResource } from "../hooks/useDataResource";
 import { usePagination } from "../hooks/usePagination";
-import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 
 const INITIAL_FILTERS = {
@@ -27,79 +26,22 @@ const INITIAL_FILTERS = {
   label: "",
 };
 
+const loadHistory = (f) => listActionHistory({ ...f, limit: 100 });
+
 export default function ActionHistory() {
-  const [actions, setActions] = useState([]);
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState("");
-  const debouncedFilters = useDebouncedValue(filters, 180);
-  const historyRequestIdRef = useRef(0);
-  const hasInitializedRef = useRef(false);
+
+  const { data: actions, isLoading, isRefreshing, error, reload } = useDataResource({
+    loader: loadHistory,
+    filters,
+    scope: "ActionHistory",
+    errorMessage: "Não foi possível carregar o histórico de ações.",
+  });
+
   const historyPagination = usePagination(actions, { initialPageSize: 25 });
   const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshIndicator(isRefreshing);
 
-  const loadHistory = useCallback(async (
-    currentFilters = INITIAL_FILTERS,
-    { showLoading = false } = {},
-  ) => {
-    const requestId = historyRequestIdRef.current + 1;
-    historyRequestIdRef.current = requestId;
-
-    try {
-      if (showLoading) {
-        setIsLoading(true);
-      } else {
-        setIsRefreshing(true);
-      }
-
-      setError("");
-      const actionRows = await listActionHistory({
-        ...currentFilters,
-        limit: 100,
-      });
-
-      if (requestId !== historyRequestIdRef.current) {
-        return;
-      }
-
-      setActions(actionRows);
-    } catch (historyError) {
-      if (requestId !== historyRequestIdRef.current) {
-        return;
-      }
-
-      setError(
-        getErrorMessage(
-          historyError,
-          "Não foi possível carregar o histórico de ações.",
-        ),
-      );
-    } finally {
-      if (requestId === historyRequestIdRef.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHistory(INITIAL_FILTERS, { showLoading: true }).then(() => {
-      hasInitializedRef.current = true;
-    });
-  }, [loadHistory]);
-
-  useEffect(() => {
-    if (!hasInitializedRef.current) {
-      return;
-    }
-
-    loadHistory(debouncedFilters);
-  }, [debouncedFilters, loadHistory]);
-
-  useDatabaseChangeEffect(() => loadHistory(filters), {
-    domains: ["history"],
-  });
+  useDatabaseChangeEffect(reload, { domains: ["history"] });
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
