@@ -6,6 +6,9 @@ import { logError } from "../services/logger";
 // when they don't need neutralized keys. Using a stable reference here keeps
 // `buildOptionFilters` from invalidating every render.
 const EMPTY_NEUTRALIZED_KEYS = Object.freeze([]);
+// Same idea for callers without filters at all — kept stable so reload effects
+// don't re-trigger on every render of a filter-less page.
+const EMPTY_FILTERS = Object.freeze({});
 
 /**
  * Generic loader hook for the "filter-driven page" pattern that recurs across
@@ -60,7 +63,7 @@ const EMPTY_NEUTRALIZED_KEYS = Object.freeze([]);
 export function useDataResource({
   loader,
   countLoader,
-  filters,
+  filters = EMPTY_FILTERS,
   errorMessage = "Não foi possível carregar os dados.",
   scope = "useDataResource",
   debounceMs = 180,
@@ -115,6 +118,7 @@ export function useDataResource({
 
   const runLoad = useCallback(
     async (currentFilters, { showLoading = false } = {}) => {
+      const safeFilters = currentFilters ?? EMPTY_FILTERS;
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
 
@@ -125,11 +129,11 @@ export function useDataResource({
           setIsRefreshing(true);
         }
 
-        const optionFilters = buildOptionFilters(currentFilters);
+        const optionFilters = buildOptionFilters(safeFilters);
         // countLoader receives filters without pagination params.
-        const { limit: _l, offset: _o, ...countFilters } = currentFilters;
+        const { limit: _l, offset: _o, ...countFilters } = safeFilters;
         const [primary, options, count] = await Promise.all([
-          loader(currentFilters),
+          loader(safeFilters),
           optionFilters
             ? (optionLoader ?? loader)(optionFilters)
             : Promise.resolve(null),

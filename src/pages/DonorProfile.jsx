@@ -15,6 +15,7 @@ import CatchUpAdjustmentModal from "../features/donors/components/CatchUpAdjustm
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
 import DonorAbatementAdjustmentsSection from "../features/donors/components/DonorAbatementAdjustmentsSection";
 import DonorCpfSourcesSection from "../features/donors/components/DonorCpfSourcesSection";
+import DonorCreditReconciliationSection from "../features/donors/components/DonorCreditReconciliationSection";
 import DonorLinkedSection from "../features/donors/components/DonorLinkedSection";
 import DonorMonthlyHistorySection from "../features/donors/components/DonorMonthlyHistorySection";
 import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
@@ -297,6 +298,8 @@ export default function DonorProfile() {
         auxiliaryDonors={profile.auxiliaryDonors}
         onNavigateToRelated={navigateToRelatedDonor}
       />
+
+      <DonorCreditReconciliationSection donorId={donor.id} />
 
       <div className="mb-6 grid gap-3 md:grid-cols-4">
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">

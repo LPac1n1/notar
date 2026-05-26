@@ -14,8 +14,13 @@ export default function MonthlySummaryList({
   updatingSummaryId,
   onNavigate,
   onStatusChange,
+  reconciliationByDonor,
   showReferenceMonth,
 }) {
+  const resolveReconciliation = (summary) =>
+    reconciliationByDonor && summary.donorId
+      ? reconciliationByDonor.get(summary.donorId)
+      : null;
   const paginationProps = {
     endItem: pagination.endItem,
     onPageChange: pagination.setPage,
@@ -45,6 +50,7 @@ export default function MonthlySummaryList({
               isUpdating={updatingSummaryId === summary.id}
               onNavigate={onNavigate}
               onStatusChange={onStatusChange}
+              reconciliation={resolveReconciliation(summary)}
               showReferenceMonth={showReferenceMonth}
             />
           ))}
@@ -66,6 +72,7 @@ export default function MonthlySummaryList({
               isUpdating={updatingSummaryId === summary.id}
               onNavigate={onNavigate}
               onStatusChange={onStatusChange}
+              reconciliation={resolveReconciliation(summary)}
               showReferenceMonth={showReferenceMonth}
             />
           ))}

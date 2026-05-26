@@ -448,6 +448,10 @@ function createEmptySnapshot() {
     donorActivityHistory: [],
     abatementAdjustments: [],
     trashItems: [],
+    donationNotes: [],
+    creditImports: [],
+    creditNotes: [],
+    creditReconciliation: [],
   };
 }
 

@@ -26,6 +26,7 @@ import { exportDonationReportPdf } from "../features/reports/services/donationPd
 import { exportDonationReportJpeg } from "../features/reports/services/donationJpegReportService";
 import { listImports } from "../services/importService";
 import { listMonthlySummaries } from "../services/monthlyService";
+import { listDonorReconciliationStatuses } from "../services/reconciliation/creditReconciliationService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -136,18 +137,34 @@ export default function Monthly() {
       onBulkAbateSuccess: () => setShowBulkAbatementModal(false),
     });
 
+  const [reconciliationByDonor, setReconciliationByDonor] = useState(new Map());
+
   const loadAvailableImports = useCallback(async () => {
     const rows = await listImports({ status: "processed" });
     setAvailableImports(rows);
   }, []);
 
+  const loadReconciliationStatuses = useCallback(async () => {
+    try {
+      const map = await listDonorReconciliationStatuses();
+      setReconciliationByDonor(map);
+    } catch (err) {
+      logError("Monthly.reconciliation", err);
+    }
+  }, []);
+
   useEffect(() => {
     loadAvailableImports();
-  }, [loadAvailableImports]);
+    loadReconciliationStatuses();
+  }, [loadAvailableImports, loadReconciliationStatuses]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadAvailableImports(), reloadSummaries()]);
-  }, [loadAvailableImports, reloadSummaries]);
+    await Promise.all([
+      loadAvailableImports(),
+      reloadSummaries(),
+      loadReconciliationStatuses(),
+    ]);
+  }, [loadAvailableImports, reloadSummaries, loadReconciliationStatuses]);
 
   // Monthly cares about almost every database mutation (donor/import/abate
   // change can shift summary rows), but ignore notes — saving an annotation
@@ -655,6 +672,7 @@ export default function Monthly() {
             updatingSummaryId={updatingSummaryId}
             onNavigate={handleOpenDonorProfile}
             onStatusChange={handleStatusChange}
+            reconciliationByDonor={reconciliationByDonor}
             showReferenceMonth={!hasSelectedReferenceMonth}
           />
         )}

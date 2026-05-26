@@ -304,35 +304,51 @@ async function applyDataNormalizations(conn) {
       updated_at = coalesce(updated_at, CURRENT_TIMESTAMP)
   `);
 
-  await conn.query(`
-    INSERT INTO import_cpf_summary (
-      id,
-      import_id,
-      reference_month,
-      cpf,
-      notes_count,
-      is_registered_donor,
-      created_at,
-      updated_at
-    )
-    SELECT
-      import_items.id,
-      import_items.import_id,
-      imports.reference_month,
-      import_items.cpf,
-      import_items.notes_count,
-      FALSE,
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    FROM import_items
-    INNER JOIN imports
-      ON imports.id = import_items.import_id
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM import_cpf_summary
-      WHERE import_cpf_summary.id = import_items.id
-    )
-  `).catch(() => null);
+  // Legacy `import_items` was renamed to `import_cpf_summary` long ago. Some
+  // very old databases still carry the original table; new installs don't.
+  // Check before running the migration insert so DuckDB-WASM doesn't log a
+  // Catalog Error on every boot of a fresh DB (the surrounding `.catch` only
+  // swallows the JS rejection, not the engine-level log).
+  const legacyImportItemsRows = (
+    await conn.query(`
+      SELECT count(*) AS total
+      FROM information_schema.tables
+      WHERE table_name = 'import_items'
+    `)
+  ).toArray();
+  const hasLegacyImportItems = Number(legacyImportItemsRows[0]?.total ?? 0) > 0;
+
+  if (hasLegacyImportItems) {
+    await conn.query(`
+      INSERT INTO import_cpf_summary (
+        id,
+        import_id,
+        reference_month,
+        cpf,
+        notes_count,
+        is_registered_donor,
+        created_at,
+        updated_at
+      )
+      SELECT
+        import_items.id,
+        import_items.import_id,
+        imports.reference_month,
+        import_items.cpf,
+        import_items.notes_count,
+        FALSE,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      FROM import_items
+      INNER JOIN imports
+        ON imports.id = import_items.import_id
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM import_cpf_summary
+        WHERE import_cpf_summary.id = import_items.id
+      )
+    `).catch(() => null);
+  }
 
   await conn.query(`
     UPDATE import_cpf_summary

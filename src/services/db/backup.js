@@ -61,6 +61,7 @@ export const RESTORE_TABLE_COLUMNS = {
     "matched_donors",
     "status",
     "notes",
+    "cnpj_entidade_social",
     "imported_at",
     "updated_at",
   ],
@@ -141,6 +142,53 @@ export const RESTORE_TABLE_COLUMNS = {
     "payload_json",
     "deleted_at",
   ],
+  donation_notes: [
+    "id",
+    "import_id",
+    "cpf",
+    "reference_month",
+    "numero_nota",
+    "valor_nota",
+    "data_nota",
+    "data_pedido",
+    "cnpj_estabelecimento",
+    "status_pedido",
+    "tipo_doacao",
+    "is_valid",
+    "created_at",
+  ],
+  credit_imports: [
+    "id",
+    "reference_month",
+    "file_name",
+    "total_rows",
+    "valid_rows",
+    "status",
+    "notes",
+    "imported_at",
+    "updated_at",
+  ],
+  credit_notes: [
+    "id",
+    "credit_import_id",
+    "cnpj_estabelecimento",
+    "emitente",
+    "numero_nota",
+    "data_emissao",
+    "valor_nf",
+    "data_registro",
+    "credito",
+    "situacao",
+    "is_valid",
+    "created_at",
+  ],
+  credit_reconciliation: [
+    "id",
+    "credit_note_id",
+    "donation_note_id",
+    "match_status",
+    "created_at",
+  ],
 };
 
 export async function exportDatabaseSnapshot() {
@@ -216,6 +264,7 @@ export async function exportDatabaseSnapshot() {
       matched_donors,
       status,
       notes,
+      cnpj_entidade_social,
       CAST(imported_at AS VARCHAR) AS imported_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM imports
@@ -325,6 +374,69 @@ export async function exportDatabaseSnapshot() {
     ORDER BY reference_month ASC, donor_id ASC, id ASC
   `);
 
+  const donationNotes = await query(`
+    SELECT
+      id,
+      import_id,
+      cpf,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      numero_nota,
+      valor_nota,
+      CAST(data_nota AS VARCHAR) AS data_nota,
+      CAST(data_pedido AS VARCHAR) AS data_pedido,
+      cnpj_estabelecimento,
+      status_pedido,
+      tipo_doacao,
+      is_valid,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM donation_notes
+    ORDER BY import_id ASC, id ASC
+  `);
+
+  const creditImports = await query(`
+    SELECT
+      id,
+      CAST(reference_month AS VARCHAR) AS reference_month,
+      file_name,
+      total_rows,
+      valid_rows,
+      status,
+      notes,
+      CAST(imported_at AS VARCHAR) AS imported_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM credit_imports
+    ORDER BY reference_month ASC, id ASC
+  `);
+
+  const creditNotes = await query(`
+    SELECT
+      id,
+      credit_import_id,
+      cnpj_estabelecimento,
+      emitente,
+      numero_nota,
+      CAST(data_emissao AS VARCHAR) AS data_emissao,
+      valor_nf,
+      CAST(data_registro AS VARCHAR) AS data_registro,
+      credito,
+      situacao,
+      is_valid,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM credit_notes
+    ORDER BY credit_import_id ASC, id ASC
+  `);
+
+  const creditReconciliation = await query(`
+    SELECT
+      id,
+      credit_note_id,
+      donation_note_id,
+      match_status,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM credit_reconciliation
+    ORDER BY match_status ASC, id ASC
+  `);
+
   return {
     demands,
     people,
@@ -338,6 +450,10 @@ export async function exportDatabaseSnapshot() {
     donorActivityHistory,
     abatementAdjustments,
     trashItems,
+    donationNotes,
+    creditImports,
+    creditNotes,
+    creditReconciliation,
   };
 }
 
@@ -356,6 +472,12 @@ export async function restoreDatabaseSnapshot(
   }
 
   const tableOrderToClear = [
+    // Reconciliation derived data first — references both donation_notes
+    // and credit_notes, so wiping it before its sources avoids dangling
+    // references during the rebuild.
+    "credit_reconciliation",
+    "credit_notes",
+    "donation_notes",
     "abatement_adjustments",
     "donor_activity_history",
     "action_history",
@@ -363,6 +485,7 @@ export async function restoreDatabaseSnapshot(
     "monthly_donor_summary",
     "import_cpf_summary",
     "imports",
+    "credit_imports",
     "donor_cpf_links",
     "donors",
     "people",
@@ -375,14 +498,25 @@ export async function restoreDatabaseSnapshot(
     ["donors", normalizedSnapshot.donors],
     ["donor_cpf_links", normalizedSnapshot.donorCpfLinks],
     ["imports", normalizedSnapshot.imports],
+    ["donation_notes", normalizedSnapshot.donationNotes],
     ["import_cpf_summary", normalizedSnapshot.importCpfSummary],
     ["monthly_donor_summary", normalizedSnapshot.monthlyDonorSummary],
     ["notes", normalizedSnapshot.notes],
     ["action_history", normalizedSnapshot.actionHistory],
     ["donor_activity_history", normalizedSnapshot.donorActivityHistory],
     ["abatement_adjustments", normalizedSnapshot.abatementAdjustments],
+    ["credit_imports", normalizedSnapshot.creditImports],
+    ["credit_notes", normalizedSnapshot.creditNotes],
+    ["credit_reconciliation", normalizedSnapshot.creditReconciliation],
     ["trash_items", normalizedSnapshot.trashItems],
   ];
+
+  // Chunked bulk insert. Restoring a 30k+ row table one INSERT at a time
+  // through DuckDB-WASM's single-threaded executor took several seconds per
+  // table; multi-row VALUES in batches of 500 brings the same load under a
+  // second. The chunk size leaves plenty of headroom under DuckDB's parsed-
+  // SQL size limit even for the widest table here (donation_notes, 13 cols).
+  const BULK_INSERT_CHUNK_SIZE = 500;
 
   await runInTransaction(
     async () => {
@@ -391,23 +525,42 @@ export async function restoreDatabaseSnapshot(
       }
 
       for (const [tableName, rows] of tableEntriesToInsert) {
-        for (const row of rows) {
-          const allowedColumns = RESTORE_TABLE_COLUMNS[tableName] ?? [];
-          const columns = Object.keys(row).filter((columnName) =>
-            allowedColumns.includes(columnName),
-          );
+        if (!rows || rows.length === 0) continue;
 
-          if (columns.length === 0) {
-            continue;
-          }
+        const allowedColumns = RESTORE_TABLE_COLUMNS[tableName] ?? [];
+        if (allowedColumns.length === 0) continue;
 
-          const values = columns.map((columnName) =>
-            serializeSqlValue(row[columnName]),
+        // Decide the column set ONCE per table — taken from the union of
+        // allowed columns and what the first row carries. All subsequent
+        // rows are coerced to the same column order; missing keys serialize
+        // as NULL so a heterogeneous payload (legacy backup without new
+        // columns) still imports cleanly.
+        const sampleColumns = Object.keys(rows[0] ?? {}).filter((columnName) =>
+          allowedColumns.includes(columnName),
+        );
+        if (sampleColumns.length === 0) continue;
+
+        for (
+          let chunkStart = 0;
+          chunkStart < rows.length;
+          chunkStart += BULK_INSERT_CHUNK_SIZE
+        ) {
+          const chunk = rows.slice(
+            chunkStart,
+            chunkStart + BULK_INSERT_CHUNK_SIZE,
           );
+          const valuesSql = chunk
+            .map((row) => {
+              const values = sampleColumns.map((columnName) =>
+                serializeSqlValue(row[columnName]),
+              );
+              return `(${values.join(", ")})`;
+            })
+            .join(",\n");
 
           await execute(`
-            INSERT INTO ${tableName} (${columns.join(", ")})
-            VALUES (${values.join(", ")})
+            INSERT INTO ${tableName} (${sampleColumns.join(", ")})
+            VALUES ${valuesSql}
           `);
         }
       }

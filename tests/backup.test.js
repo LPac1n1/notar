@@ -61,6 +61,10 @@ test("snapshot helpers detect data and count rows correctly", () => {
     donorActivityHistory: 0,
     abatementAdjustments: 0,
     trashItems: 0,
+    donationNotes: 0,
+    creditImports: 0,
+    creditNotes: 0,
+    creditReconciliation: 0,
   });
 });
 

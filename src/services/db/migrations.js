@@ -592,6 +592,166 @@ export const MIGRATIONS = [
       }
     },
   },
+  {
+    id: 6,
+    name: "credit-notes",
+    up: async (conn) => {
+      // Credits spreadsheet — second feed for the reconciliation feature.
+      // Each row represents one Nota Fiscal Paulista credit line emitted by a
+      // CNPJ establishment. `credito` is the real (R$) credit value the donor
+      // generated; `is_valid` is TRUE only when the `Situação do Crédito` came
+      // through as "calculado", per the user's business rule. Other situations
+      // are kept around for diagnostics but excluded from totals.
+      //
+      // `valor_nf` is stored alongside the credit value but never used in the
+      // arithmetic — it's the original NF amount and only valuable for audit.
+      //
+      // Match against `donation_notes` (Fase 3) pivots on
+      // (cnpj_estabelecimento, numero_nota, data_emissao); the composite
+      // index below makes that lookup cheap.
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS credit_imports (
+          id TEXT,
+          file_name TEXT,
+          total_rows INTEGER DEFAULT 0,
+          valid_rows INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'pending',
+          notes TEXT,
+          imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS credit_notes (
+          id TEXT,
+          credit_import_id TEXT,
+          cnpj_estabelecimento TEXT,
+          emitente TEXT,
+          numero_nota TEXT,
+          data_emissao DATE,
+          valor_nf DOUBLE DEFAULT 0,
+          data_registro DATE,
+          credito DOUBLE DEFAULT 0,
+          situacao TEXT,
+          is_valid BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      const creditIndexes = [
+        ["uq_credit_imports_id", "credit_imports(id)", true],
+        ["uq_credit_notes_id", "credit_notes(id)", true],
+        ["idx_credit_notes_import", "credit_notes(credit_import_id)", false],
+        // Match key against donation_notes — same shape as the index on the
+        // donations side so the join in Fase 3 hits both ends cheaply.
+        [
+          "idx_credit_notes_match_key",
+          "credit_notes(cnpj_estabelecimento, numero_nota, data_emissao)",
+          false,
+        ],
+        ["idx_credit_notes_data_emissao", "credit_notes(data_emissao)", false],
+      ];
+
+      for (const [indexName, columns, unique] of creditIndexes) {
+        await conn
+          .query(
+            `CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${indexName} ON ${columns}`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v6: skipping index ${indexName} on ${columns}.`,
+              error,
+            );
+          });
+      }
+    },
+  },
+  {
+    id: 7,
+    name: "credit-imports-reference-month",
+    up: async (conn) => {
+      // Each NFP credit export covers a single month — same shape as the
+      // donations side. Storing it lets Fase 3 pair donations × credits by
+      // (reference_month, match key) and the UI filter/list by month.
+      await conn.query(`
+        ALTER TABLE credit_imports
+        ADD COLUMN IF NOT EXISTS reference_month DATE
+      `);
+
+      await conn
+        .query(
+          `CREATE INDEX IF NOT EXISTS idx_credit_imports_reference_month
+             ON credit_imports(reference_month)`,
+        )
+        .catch((error) => {
+          console.warn(
+            "Migration v7: skipping reference_month index.",
+            error,
+          );
+        });
+    },
+  },
+  {
+    id: 8,
+    name: "credit-reconciliation",
+    up: async (conn) => {
+      // Reconciliation table — output of the PROCV step. One row per
+      // observed (donation_note, credit_note) pairing, plus rows for orphans
+      // and duplicates. Rebuilt wholesale every reconcile pass; the table is
+      // derived data, never edited by the user. Both id fields are nullable
+      // because orphans (credit_only / donation_only) only carry one side.
+      //
+      // match_status values:
+      //   matched          — both ids set; the canonical pairing.
+      //   credit_only      — credit_note_id set, donation missing.
+      //   donation_only    — donation_note_id set, credit missing.
+      //   duplicate_credit — credit_note_id set; the match key collides with
+      //                      other credit rows so the pairing is ambiguous.
+      //   duplicate_donation — same for the donations side.
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS credit_reconciliation (
+          id TEXT,
+          credit_note_id TEXT,
+          donation_note_id TEXT,
+          match_status TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      const reconciliationIndexes = [
+        ["uq_credit_reconciliation_id", "credit_reconciliation(id)", true],
+        [
+          "idx_credit_reconciliation_status",
+          "credit_reconciliation(match_status)",
+          false,
+        ],
+        [
+          "idx_credit_reconciliation_credit",
+          "credit_reconciliation(credit_note_id)",
+          false,
+        ],
+        [
+          "idx_credit_reconciliation_donation",
+          "credit_reconciliation(donation_note_id)",
+          false,
+        ],
+      ];
+
+      for (const [indexName, columns, unique] of reconciliationIndexes) {
+        await conn
+          .query(
+            `CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${indexName} ON ${columns}`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v8: skipping index ${indexName} on ${columns}.`,
+              error,
+            );
+          });
+      }
+    },
+  },
 ];
 
 export async function runMigrations(conn) {

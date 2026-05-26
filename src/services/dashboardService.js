@@ -1,4 +1,5 @@
 import { query, queryPrepared } from "./db";
+import { getReconciliationStats } from "./reconciliation/creditReconciliationService";
 import { getCached, setCached } from "./queryCache.js";
 
 const DASHBOARD_CACHE_KEY = "dashboard:overview";
@@ -45,6 +46,7 @@ async function _fetchDashboardOverview() {
     donorWithoutDemandRows,
     donorWithoutStartDateRows,
     emptyImportRows,
+    reconciliationStats,
   ] = await Promise.all([
     query(`
       SELECT
@@ -190,6 +192,7 @@ async function _fetchDashboardOverview() {
       ORDER BY reference_month DESC, imported_at DESC
       LIMIT 5
     `),
+    getReconciliationStats(),
   ]);
 
   const latestImport = recentImportsRows[0] ?? null;
@@ -428,6 +431,7 @@ async function _fetchDashboardOverview() {
         totalRows: toNumber(row.total_rows),
       })),
     },
+    reconciliation: reconciliationStats,
   };
 }
 

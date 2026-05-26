@@ -11,6 +11,14 @@ export const SNAPSHOT_TABLE_KEYS = [
   "donorActivityHistory",
   "abatementAdjustments",
   "trashItems",
+  // Reconciliation feature (Fases 1–3): per-note storage on the donations
+  // side, the full credits domain, and the derived reconciliation pairing.
+  // Without these keys here the cloud snapshot loses every credit/donation
+  // detail on reload — the user's most recent import effectively "disappears".
+  "donationNotes",
+  "creditImports",
+  "creditNotes",
+  "creditReconciliation",
 ];
 
 export function createEmptySnapshot() {
@@ -27,6 +35,10 @@ export function createEmptySnapshot() {
     donorActivityHistory: [],
     abatementAdjustments: [],
     trashItems: [],
+    donationNotes: [],
+    creditImports: [],
+    creditNotes: [],
+    creditReconciliation: [],
   };
 }
 

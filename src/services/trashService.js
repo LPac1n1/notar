@@ -8,6 +8,7 @@ import {
   runInTransaction,
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
+import { reconcileCredits } from "./reconciliation/creditReconciliationService";
 import { reconcileImportsForCpfs } from "./importService";
 
 function serializeSqlValue(value) {
@@ -66,6 +67,10 @@ function getTrashEntityDomains(entityType) {
 
   if (entityType === "import") {
     return ["imports", "monthly", "trash", "history"];
+  }
+
+  if (entityType === "credit_import") {
+    return ["credits", "trash", "history"];
   }
 
   return ["trash", "history"];
@@ -375,6 +380,11 @@ async function restoreImport(payload) {
   await insertRows("donation_notes", payload.donationNotes ?? []);
 }
 
+async function restoreCreditImport(payload) {
+  await insertRows("credit_imports", payload.creditImports ?? []);
+  await insertRows("credit_notes", payload.creditNotes ?? []);
+}
+
 export async function restoreTrashItem(id) {
   const rows = await query(`
     SELECT id, entity_type, entity_id, label, payload_json
@@ -403,8 +413,20 @@ export async function restoreTrashItem(id) {
         await restoreDonor(payload);
       } else if (trashItem.entity_type === "import") {
         await restoreImport(payload);
+      } else if (trashItem.entity_type === "credit_import") {
+        await restoreCreditImport(payload);
       } else {
         throw new Error("Tipo de item da lixeira não suportado.");
+      }
+
+      // Restoring either an import or a credit_import reintroduces notes
+      // that the reconciliation should re-pair. Skip for unrelated entity
+      // types so we don't pay the cost on demand/person/donor restores.
+      if (
+        trashItem.entity_type === "import" ||
+        trashItem.entity_type === "credit_import"
+      ) {
+        await reconcileCredits({ emitChange: false });
       }
 
       await execute(`

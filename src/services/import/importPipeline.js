@@ -13,6 +13,7 @@ import {
   startOfMonth,
 } from "../db";
 import { createActionHistoryEntry } from "../actionHistoryService";
+import { reconcileCredits } from "../reconciliation/creditReconciliationService";
 import { reconcileImport } from "./importReconcile";
 import {
   INVALID_ORDER_STATUS_PATTERNS,
@@ -23,6 +24,7 @@ import {
   isExcelImportExtension,
   isSupportedImportExtension,
   parseValuePerNote,
+  readFileAsUtf8Text,
   toPositiveInteger,
 } from "../../utils/import";
 import { getErrorMessage } from "../../utils/error";
@@ -104,9 +106,15 @@ async function populateDonationNotesFromCsv({
     columnName
       ? `regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), ''), '[^0-9]', '', 'g')`
       : `''`;
+  // Brazilian dates come in two flavours in NFP exports: `dd/mm/aa` (CSV) and
+  // `dd/mm/aaaa` (XLSX with full year). Try both via coalesce so a single
+  // pipeline handles either source without per-import configuration.
   const dateColumn = (columnName) =>
     columnName
-      ? `try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE`
+      ? `coalesce(
+          try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%Y')::DATE,
+          try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
+        )`
       : `NULL`;
   const doubleColumn = (columnName) =>
     columnName
@@ -136,7 +144,7 @@ async function populateDonationNotesFromCsv({
       '${escapeSqlString(importId)}',
       ${normalizedCpfExpression},
       '${escapeSqlString(normalizedMonth)}',
-      ${textColumn(donationColumns.numeroNota)},
+      ${digitsOnlyColumn(donationColumns.numeroNota)},
       ${doubleColumn(donationColumns.valorNota)},
       ${dateColumn(donationColumns.dataNota)},
       ${dateColumn(donationColumns.dataPedido)},
@@ -230,7 +238,7 @@ async function registerSpreadsheetPreviewFile(file, registeredFileName) {
     };
   }
 
-  const fileText = await file.text();
+  const fileText = await readFileAsUtf8Text(file);
   await registerFileText(registeredFileName, fileText);
 
   return {
@@ -483,6 +491,19 @@ export async function processImportedFile({
     // legacy aggregated path so older planilhas keep importing.
     const hasPerNoteFormat = Boolean(donationColumns.cnpjEstabelecimento);
 
+    // Diagnostic for "why is my donation_notes.numero_nota empty?". Logs the
+    // full header list of the planilha alongside which file column was
+    // claimed by each schema field. Open DevTools → Console after an import
+    // to confirm the parser detected the columns you expect; an empty value
+    // here is exactly why the reconciliation match key falls back to "".
+    console.log("[ImportsPage.process] Detected columns for donations import:", {
+      fileColumns: fileColumnNames,
+      cpfColumn,
+      orderStatusColumn,
+      donationColumns,
+      hasPerNoteFormat,
+    });
+
     let cpfCounts;
 
     if (hasPerNoteFormat) {
@@ -522,6 +543,8 @@ export async function processImportedFile({
       referenceMonth: normalizedMonth,
       cpfCounts,
     }, { emitChange: false });
+
+    await reconcileCredits({ emitChange: false });
 
     notifyDatabaseChanged({ source: "import" });
 
@@ -708,6 +731,10 @@ export async function deleteImport(importId) {
       trashItemId,
     },
   });
+
+  // Removing donations changes which credits are orphans — rebuild the
+  // reconciliation so the dashboard / per-donor panels stay accurate.
+  await reconcileCredits();
 
   return trashItemId;
 }
@@ -1007,6 +1034,8 @@ export async function applyReimport(previewData) {
       },
       { emitChange: false },
     );
+
+    await reconcileCredits({ emitChange: false });
 
     notifyDatabaseChanged({ source: "reimport" });
 

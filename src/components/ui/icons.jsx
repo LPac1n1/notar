@@ -20,6 +20,7 @@ export {
   Database as StorageIcon,
   Download as DownloadIcon,
   FileSpreadsheet as ImportIcon,
+  Receipt as CreditIcon,
   FileText as FileIcon,
   FolderOpen as FolderOpenIcon,
   HardDriveDownload as BackupExportIcon,

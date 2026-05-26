@@ -9,6 +9,7 @@ import DashboardLatestMonthSection from "../features/dashboard/components/Dashbo
 import DashboardModals from "../features/dashboard/components/DashboardModals";
 import DashboardOverviewCards from "../features/dashboard/components/DashboardOverviewCards";
 import DashboardRankingsSection from "../features/dashboard/components/DashboardRankingsSection";
+import DashboardReconciliationSection from "../features/dashboard/components/DashboardReconciliationSection";
 import DashboardRecentImportsSection from "../features/dashboard/components/DashboardRecentImportsSection";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
@@ -160,6 +161,9 @@ export default function Dashboard() {
             inconsistencies={inconsistencies}
             onOpenModal={setActiveModal}
             totalInconsistencyCount={totalInconsistencyCount}
+          />
+          <DashboardReconciliationSection
+            reconciliation={dashboard?.reconciliation}
           />
           <DashboardLatestMonthSection
             latestMonth={latestMonth}

@@ -617,3 +617,685 @@ test("donation_notes deletion by import_id is scoped (does not affect siblings)"
     conn.close();
   }
 });
+
+test("migration v6 creates credit_imports and credit_notes tables", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    const tables = (
+      await conn.query(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_name IN ('credit_imports', 'credit_notes')
+         ORDER BY table_name ASC`,
+      )
+    ).toArray();
+
+    assert.equal(tables.length, 2);
+    assert.equal(String(tables[0].table_name), "credit_imports");
+    assert.equal(String(tables[1].table_name), "credit_notes");
+
+    // Sanity check that the match key columns exist on credit_notes.
+    const columns = (
+      await conn.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'credit_notes'
+         ORDER BY column_name ASC`,
+      )
+    ).toArray();
+
+    const columnNames = columns.map((row) => String(row.column_name));
+    for (const column of [
+      "cnpj_estabelecimento",
+      "numero_nota",
+      "data_emissao",
+      "credito",
+      "situacao",
+      "is_valid",
+    ]) {
+      assert.ok(
+        columnNames.includes(column),
+        `credit_notes missing expected column ${column}`,
+      );
+    }
+  } finally {
+    conn.close();
+  }
+});
+
+test("migration v6 creates the credit_notes match-key index", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // DuckDB exposes indexes via duckdb_indexes — query it for the composite
+    // index that Fase 3 will probe to join donations × credits.
+    const indexes = (
+      await conn.query(
+        `SELECT index_name FROM duckdb_indexes
+         WHERE table_name = 'credit_notes'
+         ORDER BY index_name ASC`,
+      )
+    ).toArray();
+
+    const names = indexes.map((row) => String(row.index_name));
+    assert.ok(
+      names.includes("idx_credit_notes_match_key"),
+      `expected idx_credit_notes_match_key; got ${names.join(", ")}`,
+    );
+    assert.ok(
+      names.includes("uq_credit_notes_id"),
+      `expected uq_credit_notes_id; got ${names.join(", ")}`,
+    );
+  } finally {
+    conn.close();
+  }
+});
+
+test("credit is_valid only when lower(trim(situacao)) = 'calculado'", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Drives the same SQL expression used by populateCreditNotesFromCsv. Lock
+    // in the case- and trim-insensitivity, and the strict rejection of
+    // anything else (Pendente, Cancelado, blank).
+    const rows = (
+      await conn.query(`
+        WITH samples(situacao) AS (
+          VALUES
+            ('Calculado'),
+            ('calculado'),
+            ('  CALCULADO  '),
+            ('Pendente'),
+            ('Cancelado'),
+            (''),
+            (NULL)
+        )
+        SELECT
+          situacao,
+          lower(trim(coalesce(situacao, ''))) = 'calculado' AS is_valid
+        FROM samples
+      `)
+    ).toArray();
+
+    const byStatus = new Map(
+      rows.map((row) => [
+        row.situacao === null ? "<null>" : String(row.situacao),
+        Boolean(row.is_valid),
+      ]),
+    );
+
+    assert.equal(byStatus.get("Calculado"), true);
+    assert.equal(byStatus.get("calculado"), true);
+    assert.equal(byStatus.get("  CALCULADO  "), true);
+    assert.equal(byStatus.get("Pendente"), false);
+    assert.equal(byStatus.get("Cancelado"), false);
+    assert.equal(byStatus.get(""), false);
+    assert.equal(byStatus.get("<null>"), false);
+  } finally {
+    conn.close();
+  }
+});
+
+test("credit_notes aggregation by credit_import_id splits valid vs total rows", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES
+        ('c1', 'ci-1', '11111111000111', '101', DATE '2025-01-15', 0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+        ('c2', 'ci-1', '22222222000122', '202', DATE '2025-02-10', 0.50, 'Pendente', FALSE, CURRENT_TIMESTAMP),
+        ('c3', 'ci-1', '33333333000133', '303', DATE '2025-03-05', 0.10, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+        ('c4', 'ci-2', '44444444000144', '404', DATE '2025-04-20', 1.20, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+    `);
+
+    const totals = (
+      await conn.query(`
+        SELECT
+          count(*) AS total_rows,
+          count(*) FILTER (WHERE is_valid = TRUE) AS valid_rows
+        FROM credit_notes
+        WHERE credit_import_id = 'ci-1'
+      `)
+    ).toArray();
+
+    assert.equal(Number(totals[0].total_rows), 3);
+    assert.equal(Number(totals[0].valid_rows), 2);
+  } finally {
+    conn.close();
+  }
+});
+
+test("credit_notes deletion by credit_import_id is scoped (does not affect siblings)", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, is_valid, created_at
+      )
+      VALUES
+        ('a1', 'ci-A', '111', '1', DATE '2025-01-01', TRUE, CURRENT_TIMESTAMP),
+        ('a2', 'ci-A', '222', '2', DATE '2025-01-02', TRUE, CURRENT_TIMESTAMP),
+        ('b1', 'ci-B', '333', '3', DATE '2025-02-01', TRUE, CURRENT_TIMESTAMP)
+    `);
+
+    await conn.query(`DELETE FROM credit_notes WHERE credit_import_id = 'ci-A'`);
+
+    const surviving = (
+      await conn.query("SELECT id FROM credit_notes ORDER BY id ASC")
+    ).toArray();
+
+    assert.equal(surviving.length, 1);
+    assert.equal(String(surviving[0].id), "b1");
+  } finally {
+    conn.close();
+  }
+});
+
+test("migration v7 adds reference_month to credit_imports", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    const columns = (
+      await conn.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'credit_imports'
+         ORDER BY column_name ASC`,
+      )
+    ).toArray();
+
+    const names = columns.map((row) => String(row.column_name));
+    assert.ok(
+      names.includes("reference_month"),
+      `credit_imports missing reference_month; got ${names.join(", ")}`,
+    );
+  } finally {
+    conn.close();
+  }
+});
+
+test("migration v8 creates credit_reconciliation table and indexes", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    const tables = (
+      await conn.query(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_name = 'credit_reconciliation'`,
+      )
+    ).toArray();
+
+    assert.equal(tables.length, 1);
+
+    const indexes = (
+      await conn.query(
+        `SELECT index_name FROM duckdb_indexes
+         WHERE table_name = 'credit_reconciliation'`,
+      )
+    ).toArray();
+
+    const names = indexes.map((row) => String(row.index_name));
+    for (const expected of [
+      "uq_credit_reconciliation_id",
+      "idx_credit_reconciliation_status",
+      "idx_credit_reconciliation_credit",
+      "idx_credit_reconciliation_donation",
+    ]) {
+      assert.ok(
+        names.includes(expected),
+        `expected index ${expected}; got ${names.join(", ")}`,
+      );
+    }
+  } finally {
+    conn.close();
+  }
+});
+
+// Helper: runs the exact SQL sequence that `reconcileCredits` issues. The
+// service wraps this in a transaction + notify, neither of which the test
+// connection needs. Keep this in sync with
+// src/services/reconciliation/creditReconciliationService.js — if they
+// drift, the test stops validating the production code path.
+async function runCreditReconciliation(conn) {
+  await conn.query(`DELETE FROM credit_reconciliation`);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (
+      id, credit_note_id, donation_note_id, match_status, created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      NULL,
+      donation_notes.id,
+      'duplicate_donation',
+      CURRENT_TIMESTAMP
+    FROM donation_notes
+    INNER JOIN (
+      SELECT cnpj_estabelecimento, numero_nota, data_nota
+      FROM donation_notes
+      WHERE is_valid = TRUE
+        AND cnpj_estabelecimento <> ''
+        AND numero_nota <> ''
+        AND data_nota IS NOT NULL
+      GROUP BY cnpj_estabelecimento, numero_nota, data_nota
+      HAVING count(*) > 1
+    ) AS donation_duplicates
+      ON donation_duplicates.cnpj_estabelecimento = donation_notes.cnpj_estabelecimento
+      AND donation_duplicates.numero_nota = donation_notes.numero_nota
+      AND donation_duplicates.data_nota = donation_notes.data_nota
+    WHERE donation_notes.is_valid = TRUE
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (
+      id, credit_note_id, donation_note_id, match_status, created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      credit_notes.id,
+      NULL,
+      'duplicate_credit',
+      CURRENT_TIMESTAMP
+    FROM credit_notes
+    INNER JOIN (
+      SELECT cnpj_estabelecimento, numero_nota, data_emissao
+      FROM credit_notes
+      WHERE is_valid = TRUE
+        AND cnpj_estabelecimento <> ''
+        AND numero_nota <> ''
+        AND data_emissao IS NOT NULL
+      GROUP BY cnpj_estabelecimento, numero_nota, data_emissao
+      HAVING count(*) > 1
+    ) AS credit_duplicates
+      ON credit_duplicates.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
+      AND credit_duplicates.numero_nota = credit_notes.numero_nota
+      AND credit_duplicates.data_emissao = credit_notes.data_emissao
+    WHERE credit_notes.is_valid = TRUE
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (
+      id, credit_note_id, donation_note_id, match_status, created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      credit_notes.id,
+      donation_notes.id,
+      'matched',
+      CURRENT_TIMESTAMP
+    FROM credit_notes
+    INNER JOIN donation_notes
+      ON donation_notes.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
+      AND donation_notes.numero_nota = credit_notes.numero_nota
+      AND donation_notes.data_nota = credit_notes.data_emissao
+    WHERE credit_notes.is_valid = TRUE
+      AND donation_notes.is_valid = TRUE
+      AND credit_notes.cnpj_estabelecimento <> ''
+      AND credit_notes.numero_nota <> ''
+      AND credit_notes.data_emissao IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM credit_reconciliation
+        WHERE credit_reconciliation.credit_note_id = credit_notes.id
+          OR credit_reconciliation.donation_note_id = donation_notes.id
+      )
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (
+      id, credit_note_id, donation_note_id, match_status, created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      credit_notes.id,
+      NULL,
+      'credit_only',
+      CURRENT_TIMESTAMP
+    FROM credit_notes
+    WHERE credit_notes.is_valid = TRUE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM credit_reconciliation
+        WHERE credit_reconciliation.credit_note_id = credit_notes.id
+      )
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (
+      id, credit_note_id, donation_note_id, match_status, created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      NULL,
+      donation_notes.id,
+      'donation_only',
+      CURRENT_TIMESTAMP
+    FROM donation_notes
+    WHERE donation_notes.is_valid = TRUE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM credit_reconciliation
+        WHERE credit_reconciliation.donation_note_id = donation_notes.id
+      )
+  `);
+}
+
+async function countReconciliationByStatus(conn) {
+  const rows = (
+    await conn.query(`
+      SELECT match_status, count(*) AS total
+      FROM credit_reconciliation
+      GROUP BY match_status
+    `)
+  ).toArray();
+  const out = {};
+  for (const row of rows) {
+    out[String(row.match_status)] = Number(row.total);
+  }
+  return out;
+}
+
+test("reconciliation matches paired notes by (cnpj, numero, data)", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, data_nota,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES (
+        'd1', 'imp-1', '11111111111', '101', DATE '2025-01-15',
+        '11111111000111', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES (
+        'c1', 'ci-1', '11111111000111', '101', DATE '2025-01-15',
+        0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+
+    await runCreditReconciliation(conn);
+    const counts = await countReconciliationByStatus(conn);
+
+    assert.equal(counts.matched, 1);
+    assert.equal(counts.credit_only ?? 0, 0);
+    assert.equal(counts.donation_only ?? 0, 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("reconciliation flags credit and donation orphans separately", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, data_nota,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES
+        ('d-paired', 'imp-1', '11111111111', '101', DATE '2025-01-10',
+         '11111111000111', TRUE, CURRENT_TIMESTAMP),
+        ('d-orphan', 'imp-1', '22222222222', '999', DATE '2025-01-20',
+         '22222222000222', TRUE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES
+        ('c-paired', 'ci-1', '11111111000111', '101', DATE '2025-01-10',
+         0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+        ('c-orphan', 'ci-1', '33333333000333', '888', DATE '2025-01-25',
+         0.50, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+    `);
+
+    await runCreditReconciliation(conn);
+    const counts = await countReconciliationByStatus(conn);
+
+    assert.equal(counts.matched, 1);
+    assert.equal(counts.credit_only, 1);
+    assert.equal(counts.donation_only, 1);
+  } finally {
+    conn.close();
+  }
+});
+
+test("reconciliation surfaces duplicates on either side", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Two donations share the same triple — both should land in
+    // duplicate_donation, neither should match the single credit.
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, data_nota,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES
+        ('d1', 'imp-1', '11111111111', '101', DATE '2025-01-15',
+         '11111111000111', TRUE, CURRENT_TIMESTAMP),
+        ('d2', 'imp-1', '22222222222', '101', DATE '2025-01-15',
+         '11111111000111', TRUE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES (
+        'c1', 'ci-1', '11111111000111', '101', DATE '2025-01-15',
+        0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+
+    await runCreditReconciliation(conn);
+    const counts = await countReconciliationByStatus(conn);
+
+    assert.equal(counts.duplicate_donation, 2);
+    assert.equal(counts.matched ?? 0, 0);
+    // Credit was excluded by NOT EXISTS guarding the matched pass, so it
+    // falls through to credit_only.
+    assert.equal(counts.credit_only, 1);
+  } finally {
+    conn.close();
+  }
+});
+
+test("reconciliation excludes invalid notes from both sides", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Mark the donation invalid (e.g., status pedido was a rejection
+    // pattern); reconciliation must skip it entirely and surface the
+    // credit as orphan.
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, data_nota,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES (
+        'd-invalid', 'imp-1', '11111111111', '101', DATE '2025-01-15',
+        '11111111000111', FALSE, CURRENT_TIMESTAMP
+      )
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES (
+        'c-valid', 'ci-1', '11111111000111', '101', DATE '2025-01-15',
+        0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+
+    await runCreditReconciliation(conn);
+    const counts = await countReconciliationByStatus(conn);
+
+    assert.equal(counts.matched ?? 0, 0);
+    assert.equal(counts.credit_only, 1);
+    // Invalid donation must not appear anywhere.
+    assert.equal(counts.donation_only ?? 0, 0);
+    assert.equal(counts.duplicate_donation ?? 0, 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("reconciliation is idempotent across repeated runs", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, data_nota,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES
+        ('d1', 'imp-1', '11111111111', '101', DATE '2025-01-15',
+         '11111111000111', TRUE, CURRENT_TIMESTAMP),
+        ('d2', 'imp-1', '22222222222', '202', DATE '2025-02-20',
+         '22222222000222', TRUE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES (
+        'c1', 'ci-1', '11111111000111', '101', DATE '2025-01-15',
+        0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+
+    await runCreditReconciliation(conn);
+    const firstCounts = await countReconciliationByStatus(conn);
+
+    await runCreditReconciliation(conn);
+    const secondCounts = await countReconciliationByStatus(conn);
+
+    assert.deepEqual(secondCounts, firstCounts);
+    // Sanity: 1 matched + 1 donation_only.
+    assert.equal(secondCounts.matched, 1);
+    assert.equal(secondCounts.donation_only, 1);
+  } finally {
+    conn.close();
+  }
+});
+
+test("credit is_valid survives BOM and NBSP in situacao values", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Same expression `populateCreditNotesFromCsv` builds — replace U+FEFF
+    // (BOM) and U+00A0 (non-breaking space) before lowering/trimming so the
+    // strict equality with 'calculado' isn't defeated by invisible chars
+    // that survive a plain trim().
+    const rows = (
+      await conn.query(`
+        WITH samples(situacao) AS (
+          VALUES
+            ('Calculado'),
+            (chr(65279) || 'Calculado'),
+            ('Calculado' || chr(160)),
+            (chr(160) || 'Calculado' || chr(65279)),
+            ('Cancelado')
+        )
+        SELECT
+          situacao,
+          lower(trim(replace(replace(situacao, chr(65279), ''), chr(160), ' '))) = 'calculado' AS is_valid
+        FROM samples
+      `)
+    ).toArray();
+
+    const byInput = rows.map((row) => Boolean(row.is_valid));
+    assert.equal(byInput[0], true);
+    assert.equal(byInput[1], true);
+    assert.equal(byInput[2], true);
+    assert.equal(byInput[3], true);
+    assert.equal(byInput[4], false);
+  } finally {
+    conn.close();
+  }
+});
+
+test("credit_notes match key (cnpj, numero, data) joins donation_notes cleanly", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Donation row that should match (same triple).
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, reference_month,
+        numero_nota, data_nota, cnpj_estabelecimento,
+        is_valid, created_at
+      )
+      VALUES (
+        'd1', 'imp-1', '11111111111', DATE '2025-01-01',
+        '101', DATE '2025-01-15', '11111111000111',
+        TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Credit row with the same match key + one without.
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        data_emissao, credito, situacao, is_valid, created_at
+      )
+      VALUES
+        ('c1', 'ci-1', '11111111000111', '101', DATE '2025-01-15', 0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+        ('c2', 'ci-1', '99999999000199', '999', DATE '2025-09-30', 0.50, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+    `);
+
+    // Project the join — this is the shape Fase 3 will rely on.
+    const joined = (
+      await conn.query(`
+        SELECT
+          donation_notes.cpf,
+          credit_notes.credito,
+          credit_notes.numero_nota
+        FROM credit_notes
+        INNER JOIN donation_notes
+          ON donation_notes.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
+          AND donation_notes.numero_nota = credit_notes.numero_nota
+          AND donation_notes.data_nota = credit_notes.data_emissao
+        WHERE credit_notes.is_valid = TRUE
+        ORDER BY credit_notes.numero_nota ASC
+      `)
+    ).toArray();
+
+    assert.equal(joined.length, 1);
+    assert.equal(String(joined[0].cpf), "11111111111");
+    assert.equal(String(joined[0].numero_nota), "101");
+  } finally {
+    conn.close();
+  }
+});

@@ -11,13 +11,35 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricField from "./MetricField";
 import StatusToggle from "./StatusToggle";
 
+const RECONCILIATION_BADGE = {
+  exceeded: {
+    label: "Crédito excedido",
+    title:
+      "Abatimento marcado como realizado é maior que o crédito real gerado na NFP.",
+    className:
+      "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]",
+  },
+  incomplete: {
+    label: "Crédito disponível",
+    title:
+      "Ainda há crédito real na NFP não marcado como abatido para este doador.",
+    className:
+      "border-[var(--warning-line)] bg-[var(--warning-soft)] text-[var(--warning)]",
+  },
+};
+
 export default function MonthlySummaryRow({
   summary,
   isUpdating = false,
   onNavigate,
   onStatusChange,
+  reconciliation,
   showReferenceMonth = false,
 }) {
+  const reconciliationBadge =
+    reconciliation && RECONCILIATION_BADGE[reconciliation.status]
+      ? RECONCILIATION_BADGE[reconciliation.status]
+      : null;
   const [expanded, setExpanded] = useState(false);
 
   const hasStartDateConflict =
@@ -150,6 +172,14 @@ export default function MonthlySummaryRow({
                   title={summary.adjustment.description || ""}
                 >
                   Acumulado
+                </span>
+              ) : null}
+              {reconciliationBadge ? (
+                <span
+                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${reconciliationBadge.className}`}
+                  title={reconciliationBadge.title}
+                >
+                  {reconciliationBadge.label}
                 </span>
               ) : null}
             </div>
