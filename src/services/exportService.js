@@ -1,8 +1,24 @@
 import { listDonors } from "./donorService.js";
 import { listImportCpfSummary, listImports } from "./importService.js";
 import { listMonthlySummaries } from "./monthlyService.js";
+import {
+  listReconciliationByDonor,
+  listReconciliationPairs,
+} from "./reconciliation/creditReconciliationService.js";
 import { buildCsvContent } from "../utils/csv.js";
 import { downloadFile } from "../utils/download.js";
+
+const RECONCILIATION_STATUS_LABEL = {
+  ok: "Dentro do limite",
+  exceeded: "Abatimento excedido",
+  incomplete: "Crédito disponível",
+  "no-credit": "Sem crédito conciliado",
+};
+
+const MATCH_STATUS_LABEL = {
+  matched: "Casado",
+  divergent: "Valor divergente",
+};
 
 function downloadCsv(fileName, csvContent) {
   downloadFile({
@@ -137,4 +153,71 @@ export async function exportImportsCsv(filters = {}) {
   downloadCsv("notar-historico-importacoes.csv", csvContent);
 
   return { rowCount: imports.length };
+}
+
+/**
+ * Per-donor reconciliation rollup CSV (Fase 5). One row per active donor —
+ * the "executive summary" view: how much real credit each donor generated
+ * vs. how much the system has marked as abated, with the comparison status
+ * spelled out in Portuguese for the spreadsheet reader.
+ */
+export async function exportReconciliationByDonorCsv() {
+  const rows = await listReconciliationByDonor();
+  const csvContent = buildCsvContent(
+    [
+      { key: "donorName", label: "Doador" },
+      { key: "cpf", label: "CPF" },
+      { key: "demand", label: "Demanda" },
+      { key: "statusLabel", label: "Status" },
+      { key: "totalCredit", label: "Crédito real (R$)" },
+      { key: "totalAbated", label: "Total abatido (R$)" },
+      { key: "difference", label: "Diferença (R$)" },
+      { key: "matchedNoteCount", label: "Notas casadas" },
+      { key: "divergentNoteCount", label: "Notas divergentes" },
+      { key: "divergentCreditValue", label: "Crédito em divergência (R$)" },
+      { key: "orphanDonationNoteCount", label: "Notas sem crédito" },
+    ],
+    rows.map((row) => ({
+      ...row,
+      statusLabel: RECONCILIATION_STATUS_LABEL[row.status] ?? row.status,
+    })),
+  );
+
+  downloadCsv("notar-conciliacao-doadores.csv", csvContent);
+
+  return { rowCount: rows.length };
+}
+
+/**
+ * Pair-level audit CSV (Fase 5). One row per (credit ↔ donation) pairing,
+ * matched and divergent only. Lets the user trace the exact nota fiscal
+ * behind every line in the rollup CSV.
+ */
+export async function exportReconciliationPairsCsv() {
+  const rows = await listReconciliationPairs();
+  const csvContent = buildCsvContent(
+    [
+      { key: "statusLabel", label: "Pareamento" },
+      { key: "donorName", label: "Doador" },
+      { key: "donorCpf", label: "CPF" },
+      { key: "donorDemand", label: "Demanda" },
+      { key: "cnpjEstabelecimento", label: "CNPJ estabelecimento" },
+      { key: "numeroNota", label: "Número da nota" },
+      { key: "dataNota", label: "Data da nota (doações)" },
+      { key: "dataEmissao", label: "Data de emissão (créditos)" },
+      { key: "donationReferenceMonth", label: "Mês de referência" },
+      { key: "valorDonation", label: "Valor doação (R$)" },
+      { key: "valorCredit", label: "Valor crédito (R$)" },
+      { key: "valorDifference", label: "Diferença de valor (R$)" },
+      { key: "creditoReal", label: "Crédito real gerado (R$)" },
+    ],
+    rows.map((row) => ({
+      ...row,
+      statusLabel: MATCH_STATUS_LABEL[row.matchStatus] ?? row.matchStatus,
+    })),
+  );
+
+  downloadCsv("notar-conciliacao-pareamentos.csv", csvContent);
+
+  return { rowCount: rows.length };
 }

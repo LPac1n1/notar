@@ -8,7 +8,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { SkeletonRows } from "../components/ui/Skeleton";
-import { PlusIcon } from "../components/ui/icons";
+import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import CreditHistoryItem from "../features/credits/components/CreditHistoryItem";
 import CreditReimportModal from "../features/credits/components/CreditReimportModal";
 import CreditUploadModal from "../features/credits/components/CreditUploadModal";
@@ -28,6 +28,10 @@ import {
   prepareReimportCreditPreview,
   processCreditImport,
 } from "../services/creditImportService";
+import {
+  exportReconciliationByDonorCsv,
+  exportReconciliationPairsCsv,
+} from "../services/exportService";
 import { logError } from "../services/logger";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -46,6 +50,8 @@ export default function Credits() {
   const [isReimportPreviewLoading, setIsReimportPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isReimportApplying, setIsReimportApplying] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportKind, setExportKind] = useState("");
   const [deletingCreditImportId, setDeletingCreditImportId] = useState("");
   const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -222,6 +228,39 @@ export default function Credits() {
     }
   };
 
+  const runExport = async (kind, exporter, successLabel) => {
+    if (isExporting) return;
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsExporting(true);
+      setExportKind(kind);
+      const { rowCount } = await exporter();
+      setSuccessMessage(`${successLabel}: ${formatInteger(rowCount)} linha(s).`);
+    } catch (err) {
+      logError(`CreditsPage.export.${kind}`, err);
+      setError(getErrorMessage(err, "Não foi possível exportar."));
+    } finally {
+      setIsExporting(false);
+      setExportKind("");
+    }
+  };
+
+  const handleExportDonorCsv = () =>
+    runExport(
+      "donor",
+      exportReconciliationByDonorCsv,
+      "Conciliação por doador exportada",
+    );
+
+  const handleExportPairsCsv = () =>
+    runExport(
+      "pairs",
+      exportReconciliationPairsCsv,
+      "Pareamentos exportados",
+    );
+
   const handleDelete = async () => {
     if (!removeModal.value) return;
 
@@ -357,12 +396,32 @@ export default function Credits() {
         tone="success"
       />
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <Button
           onClick={handleOpenUpload}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
           Nova importação de créditos
+        </Button>
+        <Button
+          variant="subtle"
+          onClick={handleExportDonorCsv}
+          disabled={isExporting}
+          isLoading={isExporting && exportKind === "donor"}
+          loadingLabel="Exportando..."
+          leftIcon={<DownloadIcon className="h-4 w-4" />}
+        >
+          Exportar conciliação (doadores)
+        </Button>
+        <Button
+          variant="subtle"
+          onClick={handleExportPairsCsv}
+          disabled={isExporting}
+          isLoading={isExporting && exportKind === "pairs"}
+          loadingLabel="Exportando..."
+          leftIcon={<DownloadIcon className="h-4 w-4" />}
+        >
+          Exportar pareamentos
         </Button>
       </div>
 

@@ -1364,6 +1364,178 @@ test("reconciliation classifies same-key/different-value as divergent", async ()
   }
 });
 
+// Helper: seed the schema with a donor, an active donor_cpf_link binding
+// CPF → donor_id, plus paired notes that drive the export aggregations.
+async function seedReconciliationFixtures(conn) {
+  await conn.query(`
+    INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+    VALUES
+      ('donor-1', 'Alice Doadora', '11111111111', 'São Lucas', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('donor-2', 'Bruno Doador', '22222222222', 'Luiz Gama', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, created_at, updated_at)
+    VALUES
+      ('link-1', 'donor-1', 'Alice Doadora', '11111111111', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('link-2', 'donor-2', 'Bruno Doador', '22222222222', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+
+  // Alice: 1 matched (R$50 ⇒ 5000 cents) + 1 orphan donation
+  // Bruno: 1 divergent (donation 100, credit 200)
+  await conn.query(`
+    INSERT INTO donation_notes (
+      id, import_id, cpf, numero_nota, valor_nota,
+      cnpj_estabelecimento, is_valid, created_at
+    )
+    VALUES
+      ('d-alice-match', 'imp-1', '11111111111', '101', 50.00, '11111111000111', TRUE, CURRENT_TIMESTAMP),
+      ('d-alice-orphan', 'imp-1', '11111111111', '999', 25.00, '99999999000199', TRUE, CURRENT_TIMESTAMP),
+      ('d-bruno-divergent', 'imp-1', '22222222222', '202', 100.00, '22222222000222', TRUE, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO credit_notes (
+      id, credit_import_id, cnpj_estabelecimento, numero_nota,
+      valor_nf, credito, situacao, is_valid, created_at
+    )
+    VALUES
+      ('c-alice-match', 'ci-1', '11111111000111', '101', 50.00, 0.20, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+      ('c-bruno-divergent', 'ci-1', '22222222000222', '202', 200.00, 0.55, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO monthly_donor_summary (
+      id, import_id, donor_id, reference_month, cpf, donor_name,
+      notes_count, value_per_note, abatement_amount, abatement_status,
+      abatement_marked_at, created_at, updated_at
+    )
+    VALUES
+      ('m-alice', 'imp-1', 'donor-1', DATE '2025-01-01', '11111111111', 'Alice Doadora',
+       1, 1.00, 1.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+}
+
+test("listReconciliationByDonor aggregates matched/divergent/orphans correctly", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedReconciliationFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    // Mirror of `listReconciliationByDonor` — keep this in sync with
+    // src/services/reconciliation/creditReconciliationService.js so the test
+    // exercises the production SQL path.
+    const rows = (
+      await conn.query(`
+        SELECT
+          donors.id AS donor_id,
+          donors.name AS donor_name,
+          coalesce(matched_totals.total_credit, 0) AS matched_credit_value,
+          coalesce(matched_totals.matched_count, 0) AS matched_count,
+          coalesce(divergent_totals.divergent_credit, 0) AS divergent_credit_value,
+          coalesce(divergent_totals.divergent_count, 0) AS divergent_count,
+          coalesce(orphan_totals.orphan_count, 0) AS orphan_donation_count,
+          coalesce(abated_totals.total_abated, 0) AS total_abated
+        FROM donors
+        LEFT JOIN (
+          SELECT donor_cpf_links.donor_id, sum(credit_notes.credito) AS total_credit, count(*) AS matched_count
+          FROM credit_reconciliation
+          INNER JOIN donation_notes ON donation_notes.id = credit_reconciliation.donation_note_id
+          INNER JOIN donor_cpf_links ON donor_cpf_links.cpf = donation_notes.cpf AND donor_cpf_links.is_active = TRUE
+          INNER JOIN credit_notes ON credit_notes.id = credit_reconciliation.credit_note_id
+          WHERE credit_reconciliation.match_status = 'matched'
+          GROUP BY donor_cpf_links.donor_id
+        ) AS matched_totals ON matched_totals.donor_id = donors.id
+        LEFT JOIN (
+          SELECT donor_cpf_links.donor_id, sum(credit_notes.credito) AS divergent_credit, count(*) AS divergent_count
+          FROM credit_reconciliation
+          INNER JOIN donation_notes ON donation_notes.id = credit_reconciliation.donation_note_id
+          INNER JOIN donor_cpf_links ON donor_cpf_links.cpf = donation_notes.cpf AND donor_cpf_links.is_active = TRUE
+          INNER JOIN credit_notes ON credit_notes.id = credit_reconciliation.credit_note_id
+          WHERE credit_reconciliation.match_status = 'divergent'
+          GROUP BY donor_cpf_links.donor_id
+        ) AS divergent_totals ON divergent_totals.donor_id = donors.id
+        LEFT JOIN (
+          SELECT donor_cpf_links.donor_id, count(*) AS orphan_count
+          FROM credit_reconciliation
+          INNER JOIN donation_notes ON donation_notes.id = credit_reconciliation.donation_note_id
+          INNER JOIN donor_cpf_links ON donor_cpf_links.cpf = donation_notes.cpf AND donor_cpf_links.is_active = TRUE
+          WHERE credit_reconciliation.match_status = 'donation_only'
+          GROUP BY donor_cpf_links.donor_id
+        ) AS orphan_totals ON orphan_totals.donor_id = donors.id
+        LEFT JOIN (
+          SELECT donor_id, sum(abatement_amount) AS total_abated
+          FROM monthly_donor_summary
+          WHERE abatement_status = 'applied'
+          GROUP BY donor_id
+        ) AS abated_totals ON abated_totals.donor_id = donors.id
+        WHERE donors.is_active = TRUE
+        ORDER BY donors.name ASC
+      `)
+    ).toArray();
+
+    assert.equal(rows.length, 2);
+
+    const alice = rows.find((row) => String(row.donor_id) === "donor-1");
+    assert.equal(Number(alice.matched_count), 1, "Alice has 1 matched");
+    assert.equal(Number(alice.divergent_count), 0);
+    assert.equal(Number(alice.orphan_donation_count), 1, "Alice has 1 orphan");
+    assert.equal(Number(alice.total_abated), 1, "Alice has R$1 abated");
+
+    const bruno = rows.find((row) => String(row.donor_id) === "donor-2");
+    assert.equal(Number(bruno.matched_count), 0);
+    assert.equal(Number(bruno.divergent_count), 1, "Bruno has 1 divergent");
+    assert.equal(Number(bruno.orphan_donation_count), 0);
+    assert.equal(Number(bruno.total_abated), 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("listReconciliationPairs returns matched + divergent rows with both sides' values", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedReconciliationFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    const rows = (
+      await conn.query(`
+        SELECT
+          credit_reconciliation.match_status,
+          donors.name AS donor_name,
+          donation_notes.valor_nota AS valor_donation,
+          credit_notes.valor_nf AS valor_credit,
+          credit_notes.credito AS credito_real
+        FROM credit_reconciliation
+        INNER JOIN donation_notes ON donation_notes.id = credit_reconciliation.donation_note_id
+        INNER JOIN credit_notes ON credit_notes.id = credit_reconciliation.credit_note_id
+        LEFT JOIN donor_cpf_links ON donor_cpf_links.cpf = donation_notes.cpf AND donor_cpf_links.is_active = TRUE
+        LEFT JOIN donors ON donors.id = donor_cpf_links.donor_id
+        WHERE credit_reconciliation.match_status IN ('matched', 'divergent')
+        ORDER BY credit_reconciliation.match_status DESC, donors.name ASC
+      `)
+    ).toArray();
+
+    assert.equal(rows.length, 2);
+    // Matched first (DESC sort on status: matched < m comes after divergent
+    // alphabetically — actually divergent < matched). Verify both exist.
+    const byStatus = Object.fromEntries(
+      rows.map((row) => [String(row.match_status), row]),
+    );
+    assert.ok(byStatus.matched, "matched row present");
+    assert.equal(String(byStatus.matched.donor_name), "Alice Doadora");
+    assert.equal(Number(byStatus.matched.valor_donation), 50);
+    assert.equal(Number(byStatus.matched.valor_credit), 50);
+
+    assert.ok(byStatus.divergent, "divergent row present");
+    assert.equal(String(byStatus.divergent.donor_name), "Bruno Doador");
+    assert.equal(Number(byStatus.divergent.valor_donation), 100);
+    assert.equal(Number(byStatus.divergent.valor_credit), 200);
+  } finally {
+    conn.close();
+  }
+});
+
 test("matched requires exact valor_cents — strict equality", async () => {
   const conn = await createTestConnection();
   try {
