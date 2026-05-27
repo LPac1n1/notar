@@ -301,6 +301,12 @@ export async function prepareImportPreview(file) {
 
     const columnNames = columns.map((column) => column.column_name);
     const cpfColumn = detectCpfColumn(columnNames);
+    // Surface the donations-domain detection at preview time so the upload
+    // modal can render the per-column checklist (Fase 6 UX work). Same
+    // helpers `processImportedFile` runs after the user confirms — keeps
+    // both paths in sync.
+    const donationColumns = detectDonationColumns(columnNames);
+    const orderStatusColumn = detectOrderStatusColumn(columnNames);
 
     return {
       registeredFileName,
@@ -308,6 +314,8 @@ export async function prepareImportPreview(file) {
       columns: columnNames,
       previewRows,
       detectedCpfColumn: cpfColumn ?? "",
+      donationColumns,
+      orderStatusColumn,
       sourceType: sourceMetadata.sourceType,
       worksheetName: sourceMetadata.worksheetName,
       worksheetCount: sourceMetadata.worksheetCount,

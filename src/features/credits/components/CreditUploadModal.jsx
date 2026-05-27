@@ -1,9 +1,24 @@
 import Button from "../../../components/ui/Button";
+import DetectedColumnsChecklist from "../../../components/ui/DetectedColumnsChecklist";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
 import Modal from "../../../components/ui/Modal";
 import MonthInput from "../../../components/ui/MonthInput";
 import TextInput from "../../../components/ui/TextInput";
 import ImportPreviewTable from "../../imports/components/ImportPreviewTable";
+
+// Drives the post-preview checklist. `cnpjEmit`, `numero`, `dataEmissao`,
+// `credito` and `situacao` are required by the parser — the import is
+// rejected without them. The others are stored for display only.
+const CREDIT_COLUMN_FIELDS = [
+  { key: "cnpjEmit", label: "CNPJ emit.", required: true },
+  { key: "numero", label: "Número (No.)", required: true },
+  { key: "dataEmissao", label: "Data Emissão", required: true },
+  { key: "credito", label: "Créditos (R$)", required: true },
+  { key: "situacao", label: "Situação do Crédito", required: true },
+  { key: "emitente", label: "Emitente" },
+  { key: "valorNf", label: "Valor NF" },
+  { key: "dataRegistro", label: "Data Registro" },
+];
 
 /**
  * Lightweight version of `ImportUploadModal` for the credits side: no value-
@@ -51,6 +66,18 @@ export default function CreditUploadModal({
       </div>
 
       <FeedbackMessage tone="error" message={errorMessage} persistent />
+
+      {previewData ? (
+        <div className="mb-4">
+          <DetectedColumnsChecklist
+            title="Colunas detectadas (créditos)"
+            fields={CREDIT_COLUMN_FIELDS.map((field) => ({
+              ...field,
+              detectedColumn: previewData.creditColumns?.[field.key] ?? "",
+            }))}
+          />
+        </div>
+      ) : null}
 
       <Button
         onClick={onProcessImport}

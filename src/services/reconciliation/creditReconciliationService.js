@@ -804,9 +804,36 @@ export async function countDonorReconciliationIssues() {
  * abated in the system, the comparison status, plus diagnostic counters.
  *
  * Returned in donor-name order so the spreadsheet reads naturally.
+ *
+ * @param {object} [options]
+ * @param {string} [options.referenceMonth] - YYYY-MM-01 to scope the
+ *   aggregates to a single donation month. Both the credit-paired buckets
+ *   and the abated total honour the filter so the row stays internally
+ *   consistent.
+ * @param {string} [options.statusFilter] - One of "ok" | "exceeded" |
+ *   "incomplete" | "no-credit". Filtered in JS after aggregation since
+ *   the status depends on the comparison of two summed columns.
  */
-export async function listReconciliationByDonor() {
-  const rows = await query(`
+export async function listReconciliationByDonor({
+  referenceMonth = "",
+  statusFilter = "",
+} = {}) {
+  // Inject the same `AND donation_notes.reference_month = ?` into each of
+  // the three credit-side aggregates, and `AND mds.reference_month = ?`
+  // into the abated aggregate. Four placeholders → four occurrences in
+  // the params array (DuckDB-WASM doesn't share params across them).
+  const noteMonthClause = referenceMonth
+    ? `AND donation_notes.reference_month = ?`
+    : "";
+  const abatedMonthClause = referenceMonth
+    ? `AND monthly_donor_summary.reference_month = ?`
+    : "";
+  const params = referenceMonth
+    ? [referenceMonth, referenceMonth, referenceMonth, referenceMonth]
+    : [];
+
+  const rows = await queryPrepared(
+    `
     SELECT
       donors.id AS donor_id,
       donors.name AS donor_name,
@@ -834,6 +861,7 @@ export async function listReconciliationByDonor() {
       INNER JOIN credit_notes
         ON credit_notes.id = credit_reconciliation.credit_note_id
       WHERE credit_reconciliation.match_status = 'matched'
+        ${noteMonthClause}
       GROUP BY donor_cpf_links.donor_id
     ) AS matched_totals
       ON matched_totals.donor_id = donors.id
@@ -851,6 +879,7 @@ export async function listReconciliationByDonor() {
       INNER JOIN credit_notes
         ON credit_notes.id = credit_reconciliation.credit_note_id
       WHERE credit_reconciliation.match_status = 'divergent'
+        ${noteMonthClause}
       GROUP BY donor_cpf_links.donor_id
     ) AS divergent_totals
       ON divergent_totals.donor_id = donors.id
@@ -865,6 +894,7 @@ export async function listReconciliationByDonor() {
         ON donor_cpf_links.cpf = donation_notes.cpf
         AND donor_cpf_links.is_active = TRUE
       WHERE credit_reconciliation.match_status = 'donation_only'
+        ${noteMonthClause}
       GROUP BY donor_cpf_links.donor_id
     ) AS orphan_totals
       ON orphan_totals.donor_id = donors.id
@@ -872,14 +902,17 @@ export async function listReconciliationByDonor() {
       SELECT donor_id, sum(abatement_amount) AS total_abated
       FROM monthly_donor_summary
       WHERE abatement_status = 'applied'
+        ${abatedMonthClause}
       GROUP BY donor_id
     ) AS abated_totals
       ON abated_totals.donor_id = donors.id
     WHERE donors.is_active = TRUE
     ORDER BY donors.name ASC, donors.id ASC
-  `);
+  `,
+    params,
+  );
 
-  return rows.map((row) => {
+  const mapped = rows.map((row) => {
     const totalCredit = toNumber(row.matched_credit_value);
     const totalAbated = toNumber(row.total_abated);
     return {
@@ -898,6 +931,11 @@ export async function listReconciliationByDonor() {
       status: computeReconciliationStatus(totalCredit, totalAbated),
     };
   });
+
+  if (!statusFilter || statusFilter === "all") {
+    return mapped;
+  }
+  return mapped.filter((row) => row.status === statusFilter);
 }
 
 /**
@@ -905,9 +943,30 @@ export async function listReconciliationByDonor() {
  * with donor identification and both sides' values exposed for the audit
  * CSV. Orphans/duplicates are excluded because they have no counterpart
  * on the other side.
+ *
+ * @param {object} [options]
+ * @param {string} [options.referenceMonth] - YYYY-MM-01 to scope by the
+ *   donation's reference_month.
+ * @param {string} [options.statusFilter] - "matched" | "divergent" to
+ *   narrow further. Anything else (incl. "all") returns both.
  */
-export async function listReconciliationPairs() {
-  const rows = await query(`
+export async function listReconciliationPairs({
+  referenceMonth = "",
+  statusFilter = "",
+} = {}) {
+  const monthClause = referenceMonth
+    ? `AND donation_notes.reference_month = ?`
+    : "";
+  const statusClause =
+    statusFilter === "matched" || statusFilter === "divergent"
+      ? `AND credit_reconciliation.match_status = ?`
+      : "";
+  const params = [];
+  if (referenceMonth) params.push(referenceMonth);
+  if (statusClause) params.push(statusFilter);
+
+  const rows = await queryPrepared(
+    `
     SELECT
       credit_reconciliation.match_status,
       donors.name AS donor_name,
@@ -932,12 +991,16 @@ export async function listReconciliationPairs() {
     LEFT JOIN donors
       ON donors.id = donor_cpf_links.donor_id
     WHERE credit_reconciliation.match_status IN ('matched', 'divergent')
+      ${monthClause}
+      ${statusClause}
     ORDER BY
       credit_reconciliation.match_status DESC,
       donors.name ASC,
       donation_notes.data_nota DESC,
       donation_notes.numero_nota ASC
-  `);
+  `,
+    params,
+  );
 
   return rows.map((row) => {
     const valorDonation = toNumber(row.valor_donation);

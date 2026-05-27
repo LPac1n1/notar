@@ -201,6 +201,12 @@ async function _fetchDashboardOverview() {
   let demandBreakdown = [];
   let latestMonthPendingSummaries = [];
   let latestMonthUnregisteredCpfSamples = [];
+  // Per-month reconciliation roll-up. Globally we already have
+  // `reconciliationStats`; the month-scoped variant gives the dashboard
+  // a "atual: X% casado" KPI without forcing the user to leave the
+  // overview. Only computed once we know the latest reference_month —
+  // there's no point hitting the table for a month that doesn't exist.
+  let reconciliationLatestMonth = null;
 
   if (latestImport) {
     const latestImportId = latestImport.id;
@@ -322,6 +328,12 @@ async function _fetchDashboardOverview() {
         }
       : null;
 
+    if (latestMonth) {
+      reconciliationLatestMonth = await getReconciliationStats({
+        referenceMonth: latestMonth.referenceMonth,
+      }).catch(() => null);
+    }
+
     demandBreakdown = demandRows.map((row) => ({
       demand: row.demand,
       donorCount: toNumber(row.donor_count),
@@ -432,6 +444,7 @@ async function _fetchDashboardOverview() {
       })),
     },
     reconciliation: reconciliationStats,
+    reconciliationLatestMonth,
   };
 }
 

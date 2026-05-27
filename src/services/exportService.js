@@ -160,9 +160,13 @@ export async function exportImportsCsv(filters = {}) {
  * the "executive summary" view: how much real credit each donor generated
  * vs. how much the system has marked as abated, with the comparison status
  * spelled out in Portuguese for the spreadsheet reader.
+ *
+ * Accepts the same `{ referenceMonth, statusFilter }` options as
+ * `listReconciliationByDonor` so the export mirrors whatever the user is
+ * looking at on screen.
  */
-export async function exportReconciliationByDonorCsv() {
-  const rows = await listReconciliationByDonor();
+export async function exportReconciliationByDonorCsv(filters = {}) {
+  const rows = await listReconciliationByDonor(filters);
   const csvContent = buildCsvContent(
     [
       { key: "donorName", label: "Doador" },
@@ -183,7 +187,17 @@ export async function exportReconciliationByDonorCsv() {
     })),
   );
 
-  downloadCsv("notar-conciliacao-doadores.csv", csvContent);
+  const monthSuffix = filters.referenceMonth
+    ? `-${filters.referenceMonth}`
+    : "";
+  const statusSuffix =
+    filters.statusFilter && filters.statusFilter !== "all"
+      ? `-${filters.statusFilter}`
+      : "";
+  downloadCsv(
+    `notar-conciliacao-doadores${monthSuffix}${statusSuffix}.csv`,
+    csvContent,
+  );
 
   return { rowCount: rows.length };
 }
@@ -193,8 +207,8 @@ export async function exportReconciliationByDonorCsv() {
  * matched and divergent only. Lets the user trace the exact nota fiscal
  * behind every line in the rollup CSV.
  */
-export async function exportReconciliationPairsCsv() {
-  const rows = await listReconciliationPairs();
+export async function exportReconciliationPairsCsv(filters = {}) {
+  const rows = await listReconciliationPairs(filters);
   const csvContent = buildCsvContent(
     [
       { key: "statusLabel", label: "Pareamento" },
@@ -217,7 +231,17 @@ export async function exportReconciliationPairsCsv() {
     })),
   );
 
-  downloadCsv("notar-conciliacao-pareamentos.csv", csvContent);
+  const pairsMonthSuffix = filters.referenceMonth
+    ? `-${filters.referenceMonth}`
+    : "";
+  const pairsStatusSuffix =
+    filters.statusFilter && filters.statusFilter !== "all"
+      ? `-${filters.statusFilter}`
+      : "";
+  downloadCsv(
+    `notar-conciliacao-pareamentos${pairsMonthSuffix}${pairsStatusSuffix}.csv`,
+    csvContent,
+  );
 
   return { rowCount: rows.length };
 }

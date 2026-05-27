@@ -1,19 +1,59 @@
 import { useNavigate } from "react-router-dom";
 import DataSyncSectionLoading from "../../../components/ui/DataSyncSectionLoading";
 import SectionCard from "../../../components/ui/SectionCard";
+import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricCard from "./MetricCard";
 
+// Renders the headline percentage and short summary for a single
+// reconciliation snapshot (global or month-scoped). Reused by the
+// dashboard for both rows so the math doesn't have to be inlined twice.
+function ReconciliationLine({ label, stats, hint }) {
+  const totalPairs =
+    (stats?.matched ?? 0) +
+    (stats?.divergent ?? 0) +
+    (stats?.creditOnly ?? 0) +
+    (stats?.donationOnly ?? 0);
+  const matchedPercent =
+    totalPairs > 0
+      ? Math.round(((stats?.matched ?? 0) / totalPairs) * 100)
+      : 0;
+
+  return (
+    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+        {label}
+      </p>
+      <p className="mt-2 font-display text-3xl font-semibold text-[var(--text-main)]">
+        {totalPairs === 0 ? "—" : `${matchedPercent}%`}
+        <span className="ml-2 text-base font-normal text-[var(--muted)]">
+          casado
+        </span>
+      </p>
+      <p className="mt-2 text-xs text-[var(--text-soft)]">
+        {formatInteger(stats?.matched ?? 0)} casadas ·{" "}
+        {formatInteger(stats?.divergent ?? 0)} divergentes ·{" "}
+        {formatInteger(stats?.creditOnly ?? 0)} sem doação ·{" "}
+        {formatInteger(stats?.donationOnly ?? 0)} sem crédito
+      </p>
+      {hint ? (
+        <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
 /**
- * High-level reconciliation overview on the dashboard. Mirrors the visual
- * pattern of `DashboardReviewSection`: a row of `MetricCard`s, each clickable
- * (deep-linking into the Credits/Imports pages would come in a later sprint;
- * for now we route to /creditos as the canonical landing).
+ * High-level reconciliation overview on the dashboard. Two summaries:
+ * the global rollup plus an optional latest-month KPI so the user sees
+ * the most recent import's reconciliation health at a glance.
  */
 export default function DashboardReconciliationSection({
   dataSyncLabel = "Atualizando conciliação",
   isRefreshing = false,
   reconciliation,
+  reconciliationLatestMonth,
+  latestMonthLabel = "",
 }) {
   const navigate = useNavigate();
 
@@ -48,6 +88,19 @@ export default function DashboardReconciliationSection({
           cruzamento aqui.
         </div>
       ) : (
+        <>
+          <div className="mb-4 grid gap-3 md:grid-cols-2">
+            <ReconciliationLine
+              label="Conciliação global"
+              stats={reconciliation}
+            />
+            {reconciliationLatestMonth ? (
+              <ReconciliationLine
+                label={`Último mês importado${latestMonthLabel ? ` · ${formatMonthYear(latestMonthLabel)}` : ""}`}
+                stats={reconciliationLatestMonth}
+              />
+            ) : null}
+          </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard
             label="Notas conciliadas"
@@ -82,6 +135,7 @@ export default function DashboardReconciliationSection({
             onClick={() => navigate("/creditos")}
           />
         </div>
+        </>
       )}
     </SectionCard>
   );

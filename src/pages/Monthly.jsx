@@ -21,7 +21,10 @@ import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConso
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
 import { useMonthlyStatusHandlers } from "../features/monthly/hooks/useMonthlyStatusHandlers";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
-import { exportMonthlySummariesCsv } from "../services/exportService";
+import {
+  exportMonthlySummariesCsv,
+  exportReconciliationByDonorCsv,
+} from "../services/exportService";
 import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
 import { exportDonationReportJpeg } from "../features/reports/services/donationJpegReportService";
 import { listImports } from "../services/importService";
@@ -76,6 +79,8 @@ export default function Monthly() {
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingJpeg, setIsExportingJpeg] = useState(false);
+  const [isExportingReconciliation, setIsExportingReconciliation] =
+    useState(false);
   const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
   const [catchUpDonor, setCatchUpDonor] = useState(null);
   const [isBulkAbating, setIsBulkAbating] = useState(false);
@@ -341,6 +346,51 @@ export default function Monthly() {
     }
   };
 
+  const handleExportReconciliationCsv = async () => {
+    if (isExportingReconciliation) return;
+    setError("");
+    setSuccessMessage("");
+    setSuccessAction(null);
+    setIsExportingReconciliation(true);
+    try {
+      // Mirror the current Monthly filters into the export so the user
+      // downloads "what they see". Reference month + reconciliation status
+      // are the two that actually narrow the donor rollup.
+      const result = await monthlyOperation.run(
+        () =>
+          exportReconciliationByDonorCsv({
+            referenceMonth: filters.referenceMonth,
+            statusFilter:
+              filters.reconciliationStatus &&
+              filters.reconciliationStatus !== "all"
+                ? filters.reconciliationStatus
+                : "",
+          }),
+        { loadingMessage: "Exportando conciliação..." },
+      );
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: "reconciliation-by-donor-csv",
+        label: "Conciliação por doador CSV",
+        description: `${result.rowCount} doador(es) exportado(s) na conciliação.`,
+        payload: {
+          referenceMonth: filters.referenceMonth,
+          statusFilter: filters.reconciliationStatus,
+          rowCount: result.rowCount,
+        },
+      });
+      setSuccessMessage(
+        `${result.rowCount} doador(es) exportado(s) na conciliação.`,
+      );
+    } catch (err) {
+      logError("MonthlyPage.exportReconciliation", err);
+      setError("Não foi possível exportar a conciliação.");
+    } finally {
+      setIsExportingReconciliation(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     try {
       setError("");
@@ -603,10 +653,12 @@ export default function Monthly() {
           onExportCsv={handleExport}
           onExportPdf={handleExportPdf}
           onExportJpeg={handleExportJpeg}
+          onExportReconciliationCsv={handleExportReconciliationCsv}
           isBulkAbateDisabled={summaries.length === 0}
           isExportingCsv={isExporting}
           isExportingPdf={isExportingPdf}
           isExportingJpeg={isExportingJpeg}
+          isExportingReconciliation={isExportingReconciliation}
           isPdfDisabled={summaries.length === 0}
         />
 

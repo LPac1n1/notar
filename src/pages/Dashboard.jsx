@@ -164,6 +164,8 @@ export default function Dashboard() {
           />
           <DashboardReconciliationSection
             reconciliation={dashboard?.reconciliation}
+            reconciliationLatestMonth={dashboard?.reconciliationLatestMonth}
+            latestMonthLabel={latestMonth?.referenceMonth ?? ""}
           />
           <DashboardLatestMonthSection
             latestMonth={latestMonth}

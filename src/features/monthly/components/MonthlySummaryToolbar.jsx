@@ -13,10 +13,12 @@ export default function MonthlySummaryToolbar({
   onExportCsv,
   onExportPdf,
   onExportJpeg,
+  onExportReconciliationCsv,
   isBulkAbateDisabled,
   isExportingCsv,
   isExportingPdf,
   isExportingJpeg,
+  isExportingReconciliation,
   isPdfDisabled,
 }) {
   return (
@@ -81,6 +83,19 @@ export default function MonthlySummaryToolbar({
         >
           JPEGs por demanda
         </Button>
+        {onExportReconciliationCsv ? (
+          <Button
+            variant="subtle"
+            onClick={onExportReconciliationCsv}
+            disabled={isExportingReconciliation}
+            isLoading={isExportingReconciliation}
+            loadingLabel="Exportando..."
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+            title="Exporta a conciliação por doador respeitando os filtros (mês e status)."
+          >
+            Exportar conciliação CSV
+          </Button>
+        ) : null}
       </div>
     </div>
   );
