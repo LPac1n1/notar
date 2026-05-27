@@ -116,12 +116,28 @@ async function populateDonationNotesFromCsv({
           try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
         )`
       : `NULL`;
+  // Strips currency prefixes, whitespace, and stray control characters
+  // before the BR-format dance (`.` = thousand sep → drop, `,` = decimal
+  // → period). Without this strip, a single "R$ " prefix or non-breaking
+  // space in the cell would make try_cast return NULL, which then
+  // becomes 0 cents after backfill and silently misclassifies every
+  // matched nota as `divergent`.
   const doubleColumn = (columnName) =>
     columnName
-      ? `try_cast(replace(replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '.', ''), ',', '.') AS DOUBLE)`
+      ? `try_cast(replace(replace(regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g'), '.', ''), ',', '.') AS DOUBLE)`
       : `0`;
 
   const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
+  const cnpjExpr = digitsOnlyColumn(donationColumns.cnpjEstabelecimento);
+  const numeroExpr = digitsOnlyColumn(donationColumns.numeroNota);
+  const valorExpr = doubleColumn(donationColumns.valorNota);
+  // Composite match key — `<cnpj>|<numero>`. Stored as-is so reconciliation
+  // can index/lookup against credit_notes in O(log n). Mirrors
+  // `buildMatchKey` in src/utils/reconciliationKey.js.
+  const matchKeyExpr = `(${cnpjExpr}) || '|' || (${numeroExpr})`;
+  // Value as integer cents — sidesteps float drift in the strict equality
+  // check used for "matched" vs "divergent" classification.
+  const valorCentsExpr = `cast(round(coalesce(${valorExpr}, 0) * 100) AS BIGINT)`;
 
   await execute(`
     INSERT INTO donation_notes (
@@ -137,6 +153,8 @@ async function populateDonationNotesFromCsv({
       status_pedido,
       tipo_doacao,
       is_valid,
+      match_key,
+      valor_cents,
       created_at
     )
     SELECT
@@ -144,14 +162,16 @@ async function populateDonationNotesFromCsv({
       '${escapeSqlString(importId)}',
       ${normalizedCpfExpression},
       '${escapeSqlString(normalizedMonth)}',
-      ${digitsOnlyColumn(donationColumns.numeroNota)},
-      ${doubleColumn(donationColumns.valorNota)},
+      ${numeroExpr},
+      ${valorExpr},
       ${dateColumn(donationColumns.dataNota)},
       ${dateColumn(donationColumns.dataPedido)},
-      ${digitsOnlyColumn(donationColumns.cnpjEstabelecimento)},
+      ${cnpjExpr},
       ${textColumn(orderStatusColumn)},
       ${textColumn(donationColumns.tipoDoacao)},
       NOT ${invalidStatusExpression},
+      ${matchKeyExpr},
+      ${valorCentsExpr},
       CURRENT_TIMESTAMP
     FROM ${buildCsvSource(registeredFileName)}
     WHERE length(${normalizedCpfExpression}) = 11
@@ -161,11 +181,11 @@ async function populateDonationNotesFromCsv({
   // value (≥14 digits after stripping separators) and persist it on the
   // import row for auditing.
   if (donationColumns.cnpjEntidadeSocial) {
-    const cnpjExpr = digitsOnlyColumn(donationColumns.cnpjEntidadeSocial);
+    const entidadeCnpjExpr = digitsOnlyColumn(donationColumns.cnpjEntidadeSocial);
     const cnpjRows = await query(`
-      SELECT ${cnpjExpr} AS cnpj
+      SELECT ${entidadeCnpjExpr} AS cnpj
       FROM ${buildCsvSource(registeredFileName)}
-      WHERE length(${cnpjExpr}) >= 14
+      WHERE length(${entidadeCnpjExpr}) >= 14
       LIMIT 1
     `);
 
@@ -649,31 +669,16 @@ export async function deleteImport(importId) {
     WHERE import_id = '${escapeSqlString(importId)}'
   `);
 
-  const donationNoteRows = await query(`
-    SELECT
-      id,
-      import_id,
-      cpf,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      numero_nota,
-      valor_nota,
-      CAST(data_nota AS VARCHAR) AS data_nota,
-      CAST(data_pedido AS VARCHAR) AS data_pedido,
-      cnpj_estabelecimento,
-      status_pedido,
-      tipo_doacao,
-      is_valid,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM donation_notes
-    WHERE import_id = '${escapeSqlString(importId)}'
-  `);
-
   const trashItemId = nanoid();
 
   await runInTransaction(async () => {
-    // The payload JSON includes user-derived strings (file_name, donor_name,
-    // demand from imported rows). Bind via prepared parameters so the largest
-    // INSERT in this domain — by far — never touches the SQL boundary.
+    // Trash payload deliberately *excludes* `donation_notes`. With 30k+
+    // rows per import the JSON ballooned past DuckDB-WASM's prepared-
+    // statement bind size limit (manifest: "RuntimeError: index out of
+    // bounds"). Those rows are derived data that can be rebuilt by
+    // re-importing the original planilha, so we accept the (small) loss
+    // — the abatement statuses that the user actually cares about live
+    // in `monthly_donor_summary`, which we still snapshot.
     await executePrepared(
       `
         INSERT INTO trash_items (
@@ -694,7 +699,6 @@ export async function deleteImport(importId) {
           imports: importRows,
           importCpfSummary: importCpfSummaryRows,
           monthlyDonorSummary: monthlySummaryRows,
-          donationNotes: donationNoteRows,
         }),
       ],
     );
@@ -982,6 +986,18 @@ export async function applyReimport(previewData) {
     donationColumns,
     hasPerNoteFormat,
   } = previewData;
+
+  // Same diagnostic as `processImportedFile` so the re-import path is
+  // observable too. When the user reports that "matches only appear after a
+  // second re-import", we want to see whether the *first* re-import
+  // actually detected the columns correctly.
+  console.log("[ImportsPage.reimport] Detected columns for donations re-import:", {
+    importId,
+    cpfColumn,
+    orderStatusColumn,
+    donationColumns,
+    hasPerNoteFormat,
+  });
 
   try {
     // Wipe old donation_notes for this import — the new file is the source of

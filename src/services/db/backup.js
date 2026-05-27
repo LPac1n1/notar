@@ -155,6 +155,8 @@ export const RESTORE_TABLE_COLUMNS = {
     "status_pedido",
     "tipo_doacao",
     "is_valid",
+    "match_key",
+    "valor_cents",
     "created_at",
   ],
   credit_imports: [
@@ -180,6 +182,8 @@ export const RESTORE_TABLE_COLUMNS = {
     "credito",
     "situacao",
     "is_valid",
+    "match_key",
+    "valor_cents",
     "created_at",
   ],
   credit_reconciliation: [
@@ -388,6 +392,8 @@ export async function exportDatabaseSnapshot() {
       status_pedido,
       tipo_doacao,
       is_valid,
+      match_key,
+      valor_cents,
       CAST(created_at AS VARCHAR) AS created_at
     FROM donation_notes
     ORDER BY import_id ASC, id ASC
@@ -421,6 +427,8 @@ export async function exportDatabaseSnapshot() {
       credito,
       situacao,
       is_valid,
+      match_key,
+      valor_cents,
       CAST(created_at AS VARCHAR) AS created_at
     FROM credit_notes
     ORDER BY credit_import_id ASC, id ASC
@@ -586,6 +594,14 @@ function createBackupFileName() {
   return `notar-backup-${year}-${month}-${day}-${hours}${minutes}.json`;
 }
 
+// `JSON.stringify` replacer mirrored from `cloudStorage` — BIGINT columns
+// (e.g. `valor_cents`) come back as JS BigInt from DuckDB-WASM, which the
+// default serializer refuses. Cents fit safely in Number, so coercion is
+// loss-free.
+function bigintToNumberReplacer(_key, value) {
+  return typeof value === "bigint" ? Number(value) : value;
+}
+
 export async function exportDatabaseBackup() {
   await initDB();
 
@@ -594,7 +610,7 @@ export async function exportDatabaseBackup() {
 
   return {
     fileName: createBackupFileName(),
-    text: JSON.stringify(payload, null, 2),
+    text: JSON.stringify(payload, bigintToNumberReplacer, 2),
     exportedAt: payload.exportedAt,
     stats: buildSnapshotStats(payload.data),
   };

@@ -472,6 +472,32 @@ async function applyDataNormalizations(conn) {
       DROP TABLE IF EXISTS notar_monthly_status_backup
     `).catch(() => null);
   }
+
+  // Idempotent backfill of the v9 reconciliation key columns. Migration v9
+  // populated `match_key` / `valor_cents` for the rows that existed at the
+  // time it ran, but imports done before the parser was taught to write
+  // those columns at INSERT time leave them NULL. Re-running here on every
+  // boot mops up any row whose key is missing without forcing a re-import.
+  // Cheap because the WHERE clause hits the column directly.
+  await conn.query(`
+    UPDATE donation_notes
+    SET
+      match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+      valor_cents = cast(round(coalesce(valor_nota, 0) * 100) AS BIGINT)
+    WHERE match_key IS NULL
+       OR match_key = ''
+       OR valor_cents IS NULL
+  `).catch(() => null);
+
+  await conn.query(`
+    UPDATE credit_notes
+    SET
+      match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+      valor_cents = cast(round(coalesce(valor_nf, 0) * 100) AS BIGINT)
+    WHERE match_key IS NULL
+       OR match_key = ''
+       OR valor_cents IS NULL
+  `).catch(() => null);
 }
 
 export async function runSchemaBootstrap(conn, { structural = true } = {}) {

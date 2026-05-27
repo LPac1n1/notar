@@ -867,7 +867,38 @@ test("migration v8 creates credit_reconciliation table and indexes", async () =>
 // connection needs. Keep this in sync with
 // src/services/reconciliation/creditReconciliationService.js — if they
 // drift, the test stops validating the production code path.
+//
+// As of migration v9, matching pivots on `(match_key, valor_cents)` —
+// dates are stored but no longer participate. The completeKey factory
+// returns a qualified WHERE fragment for the given table alias so JOIN
+// queries with multiple notes tables don't trip an ambiguous reference.
+function completeKey(alias) {
+  return `
+    ${alias}.match_key IS NOT NULL
+    AND ${alias}.match_key <> ''
+    AND ${alias}.match_key NOT LIKE '%|'
+    AND ${alias}.match_key NOT LIKE '|%'
+  `;
+}
+
 async function runCreditReconciliation(conn) {
+  // Backfill match_key / valor_cents on whatever the test just inserted.
+  // Production code does this at INSERT time in the parser; tests skip the
+  // parser to keep their setup compact, so we mirror that derived state here
+  // before running the reconcile. Same SQL expression as the parser path.
+  await conn.query(`
+    UPDATE donation_notes
+    SET match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+        valor_cents = cast(round(coalesce(valor_nota, 0) * 100) AS BIGINT)
+    WHERE match_key IS NULL OR match_key = ''
+  `);
+  await conn.query(`
+    UPDATE credit_notes
+    SET match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+        valor_cents = cast(round(coalesce(valor_nf, 0) * 100) AS BIGINT)
+    WHERE match_key IS NULL OR match_key = ''
+  `);
+
   await conn.query(`DELETE FROM credit_reconciliation`);
 
   await conn.query(`
@@ -882,18 +913,13 @@ async function runCreditReconciliation(conn) {
       CURRENT_TIMESTAMP
     FROM donation_notes
     INNER JOIN (
-      SELECT cnpj_estabelecimento, numero_nota, data_nota
+      SELECT match_key
       FROM donation_notes
-      WHERE is_valid = TRUE
-        AND cnpj_estabelecimento <> ''
-        AND numero_nota <> ''
-        AND data_nota IS NOT NULL
-      GROUP BY cnpj_estabelecimento, numero_nota, data_nota
+      WHERE is_valid = TRUE AND ${completeKey("donation_notes")}
+      GROUP BY match_key
       HAVING count(*) > 1
     ) AS donation_duplicates
-      ON donation_duplicates.cnpj_estabelecimento = donation_notes.cnpj_estabelecimento
-      AND donation_duplicates.numero_nota = donation_notes.numero_nota
-      AND donation_duplicates.data_nota = donation_notes.data_nota
+      ON donation_duplicates.match_key = donation_notes.match_key
     WHERE donation_notes.is_valid = TRUE
   `);
 
@@ -909,18 +935,13 @@ async function runCreditReconciliation(conn) {
       CURRENT_TIMESTAMP
     FROM credit_notes
     INNER JOIN (
-      SELECT cnpj_estabelecimento, numero_nota, data_emissao
+      SELECT match_key
       FROM credit_notes
-      WHERE is_valid = TRUE
-        AND cnpj_estabelecimento <> ''
-        AND numero_nota <> ''
-        AND data_emissao IS NOT NULL
-      GROUP BY cnpj_estabelecimento, numero_nota, data_emissao
+      WHERE is_valid = TRUE AND ${completeKey("credit_notes")}
+      GROUP BY match_key
       HAVING count(*) > 1
     ) AS credit_duplicates
-      ON credit_duplicates.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
-      AND credit_duplicates.numero_nota = credit_notes.numero_nota
-      AND credit_duplicates.data_emissao = credit_notes.data_emissao
+      ON credit_duplicates.match_key = credit_notes.match_key
     WHERE credit_notes.is_valid = TRUE
   `);
 
@@ -936,14 +957,36 @@ async function runCreditReconciliation(conn) {
       CURRENT_TIMESTAMP
     FROM credit_notes
     INNER JOIN donation_notes
-      ON donation_notes.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
-      AND donation_notes.numero_nota = credit_notes.numero_nota
-      AND donation_notes.data_nota = credit_notes.data_emissao
+      ON donation_notes.match_key = credit_notes.match_key
+      AND donation_notes.valor_cents = credit_notes.valor_cents
     WHERE credit_notes.is_valid = TRUE
       AND donation_notes.is_valid = TRUE
-      AND credit_notes.cnpj_estabelecimento <> ''
-      AND credit_notes.numero_nota <> ''
-      AND credit_notes.data_emissao IS NOT NULL
+      AND ${completeKey("credit_notes")}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM credit_reconciliation
+        WHERE credit_reconciliation.credit_note_id = credit_notes.id
+          OR credit_reconciliation.donation_note_id = donation_notes.id
+      )
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (
+      id, credit_note_id, donation_note_id, match_status, created_at
+    )
+    SELECT
+      CAST(uuid() AS VARCHAR),
+      credit_notes.id,
+      donation_notes.id,
+      'divergent',
+      CURRENT_TIMESTAMP
+    FROM credit_notes
+    INNER JOIN donation_notes
+      ON donation_notes.match_key = credit_notes.match_key
+      AND donation_notes.valor_cents <> credit_notes.valor_cents
+    WHERE credit_notes.is_valid = TRUE
+      AND donation_notes.is_valid = TRUE
+      AND ${completeKey("credit_notes")}
       AND NOT EXISTS (
         SELECT 1
         FROM credit_reconciliation
@@ -1245,56 +1288,114 @@ test("credit is_valid survives BOM and NBSP in situacao values", async () => {
   }
 });
 
-test("credit_notes match key (cnpj, numero, data) joins donation_notes cleanly", async () => {
+test("migration v9 adds match_key and valor_cents to both note tables", async () => {
   const conn = await createTestConnection();
   try {
     await runMigrations(conn);
 
-    // Donation row that should match (same triple).
+    const donationColumns = (
+      await conn.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'donation_notes'`,
+      )
+    )
+      .toArray()
+      .map((row) => String(row.column_name));
+    const creditColumns = (
+      await conn.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'credit_notes'`,
+      )
+    )
+      .toArray()
+      .map((row) => String(row.column_name));
+
+    for (const column of ["match_key", "valor_cents"]) {
+      assert.ok(
+        donationColumns.includes(column),
+        `donation_notes missing ${column}`,
+      );
+      assert.ok(
+        creditColumns.includes(column),
+        `credit_notes missing ${column}`,
+      );
+    }
+  } finally {
+    conn.close();
+  }
+});
+
+test("reconciliation classifies same-key/different-value as divergent", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Same cnpj+numero, different valor — should land in 'divergent'.
     await conn.query(`
       INSERT INTO donation_notes (
-        id, import_id, cpf, reference_month,
-        numero_nota, data_nota, cnpj_estabelecimento,
-        is_valid, created_at
+        id, import_id, cpf, numero_nota, valor_nota,
+        cnpj_estabelecimento, is_valid, created_at
       )
       VALUES (
-        'd1', 'imp-1', '11111111111', DATE '2025-01-01',
-        '101', DATE '2025-01-15', '11111111000111',
-        TRUE, CURRENT_TIMESTAMP
+        'd1', 'imp-1', '11111111111', '101', 12.34,
+        '11111111000111', TRUE, CURRENT_TIMESTAMP
       )
     `);
-
-    // Credit row with the same match key + one without.
     await conn.query(`
       INSERT INTO credit_notes (
         id, credit_import_id, cnpj_estabelecimento, numero_nota,
-        data_emissao, credito, situacao, is_valid, created_at
+        valor_nf, credito, situacao, is_valid, created_at
       )
-      VALUES
-        ('c1', 'ci-1', '11111111000111', '101', DATE '2025-01-15', 0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP),
-        ('c2', 'ci-1', '99999999000199', '999', DATE '2025-09-30', 0.50, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+      VALUES (
+        'c1', 'ci-1', '11111111000111', '101',
+        99.99, 0.30, 'Calculado', TRUE, CURRENT_TIMESTAMP
+      )
     `);
 
-    // Project the join — this is the shape Fase 3 will rely on.
-    const joined = (
-      await conn.query(`
-        SELECT
-          donation_notes.cpf,
-          credit_notes.credito,
-          credit_notes.numero_nota
-        FROM credit_notes
-        INNER JOIN donation_notes
-          ON donation_notes.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
-          AND donation_notes.numero_nota = credit_notes.numero_nota
-          AND donation_notes.data_nota = credit_notes.data_emissao
-        WHERE credit_notes.is_valid = TRUE
-        ORDER BY credit_notes.numero_nota ASC
-      `)
-    ).toArray();
+    await runCreditReconciliation(conn);
+    const counts = await countReconciliationByStatus(conn);
 
-    assert.equal(joined.length, 1);
-    assert.equal(String(joined[0].cpf), "11111111111");
-    assert.equal(String(joined[0].numero_nota), "101");
+    assert.equal(counts.divergent, 1);
+    assert.equal(counts.matched ?? 0, 0);
+    assert.equal(counts.credit_only ?? 0, 0);
+    assert.equal(counts.donation_only ?? 0, 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("matched requires exact valor_cents — strict equality", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Same cnpj+numero AND identical valor → matched.
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, valor_nota,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES (
+        'd1', 'imp-1', '11111111111', '101', 50.00,
+        '11111111000111', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        valor_nf, credito, situacao, is_valid, created_at
+      )
+      VALUES (
+        'c1', 'ci-1', '11111111000111', '101',
+        50.00, 0.15, 'Calculado', TRUE, CURRENT_TIMESTAMP
+      )
+    `);
+
+    await runCreditReconciliation(conn);
+    const counts = await countReconciliationByStatus(conn);
+
+    assert.equal(counts.matched, 1);
+    assert.equal(counts.divergent ?? 0, 0);
   } finally {
     conn.close();
   }

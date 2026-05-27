@@ -120,16 +120,29 @@ export async function execute(sql, { domains, flush = true, source } = {}) {
  * statement is closed automatically once results are read, so callers don't
  * have to track the lifetime themselves.
  */
+// DuckDB-WASM's worker bridge JSON-stringifies bound parameters and throws
+// on JS BigInt values. BIGINT columns (e.g. `donation_notes.valor_cents`)
+// come back as BigInt, and we freely re-circulate those reads as next-query
+// params (notably in `diagnoseCreditImportMatching`). Coerce here once so
+// every prepared-statement caller is safe. Cents fit safely under
+// Number.MAX_SAFE_INTEGER, so the coercion is loss-free for our domain.
+function sanitizePreparedParams(params) {
+  return params.map((value) =>
+    typeof value === "bigint" ? Number(value) : value,
+  );
+}
+
 export async function queryPrepared(sql, params = [], { cacheTtl } = {}) {
+  const safeParams = sanitizePreparedParams(params);
   if (cacheTtl !== undefined) {
-    const key = `${sql}::${JSON.stringify(params)}`;
+    const key = `${sql}::${JSON.stringify(safeParams)}`;
     const hit = getCached(key);
     if (hit !== undefined) return hit;
-    const rows = await _runPrepared(sql, params);
+    const rows = await _runPrepared(sql, safeParams);
     setCached(key, rows, cacheTtl);
     return rows;
   }
-  return _runPrepared(sql, params);
+  return _runPrepared(sql, safeParams);
 }
 
 async function _runPrepared(sql, params) {
@@ -156,7 +169,7 @@ export async function executePrepared(
   const connection = await initDB();
   const stmt = await connection.prepare(sql);
   try {
-    await stmt.query(...params);
+    await stmt.query(...sanitizePreparedParams(params));
   } finally {
     await stmt.close().catch(() => null);
   }

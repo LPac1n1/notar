@@ -14,13 +14,19 @@ export { computeReconciliationStatus } from "./reconciliationStatus";
 /**
  * Rebuilds the `credit_reconciliation` table from scratch by joining
  * `donation_notes` against `credit_notes` on the canonical match key
- * (cnpj_estabelecimento, numero_nota, data_emissao | data_nota).
+ * `<cnpj_estabelecimento>|<numero_nota>` (digits-only) plus `valor_cents`
+ * for the strict-equality check.
  *
  * Output is one row per source note, never duplicated:
  *
- *   - `duplicate_donation` — same key appears multiple times in donations.
- *   - `duplicate_credit`   — same key appears multiple times in credits.
- *   - `matched`            — exactly one credit ↔ one donation by the key.
+ *   - `duplicate_donation` — same match_key appears multiple times on
+ *                            the donations side.
+ *   - `duplicate_credit`   — same match_key appears multiple times on the
+ *                            credits side.
+ *   - `matched`            — credit ↔ donation by match_key AND valor_cents.
+ *   - `divergent`          — same match_key on both sides, but valor_cents
+ *                            differs. Surfaced so the user can investigate
+ *                            an apparent same-nota inconsistency.
  *   - `credit_only`        — credit with no donation counterpart.
  *   - `donation_only`      — donation with no credit counterpart.
  *
@@ -35,18 +41,19 @@ export { computeReconciliationStatus } from "./reconciliationStatus";
  */
 export async function reconcileCredits({ emitChange = true } = {}) {
   // Diagnostic — when matches refuse to appear, we want to see exactly
-  // which side carries data. These two counts together explain most
-  // "0 matched" mysteries: an empty donations table after a credit
-  // import, or all-invalid donations vs valid credits.
+  // which side carries data. `matchable` counts rows whose match_key has
+  // both halves populated (cnpj + numero); empty halves disqualify the row
+  // from every bucket except orphans/duplicates of empty keys.
   const [donationStats] = await query(`
     SELECT
       count(*) AS total,
       count(*) FILTER (WHERE is_valid = TRUE) AS valid,
       count(*) FILTER (
         WHERE is_valid = TRUE
-          AND coalesce(cnpj_estabelecimento, '') <> ''
-          AND coalesce(numero_nota, '') <> ''
-          AND data_nota IS NOT NULL
+          AND match_key IS NOT NULL
+          AND match_key <> ''
+          AND match_key NOT LIKE '%|'
+          AND match_key NOT LIKE '|%'
       ) AS matchable
     FROM donation_notes
   `);
@@ -56,9 +63,10 @@ export async function reconcileCredits({ emitChange = true } = {}) {
       count(*) FILTER (WHERE is_valid = TRUE) AS valid,
       count(*) FILTER (
         WHERE is_valid = TRUE
-          AND coalesce(cnpj_estabelecimento, '') <> ''
-          AND coalesce(numero_nota, '') <> ''
-          AND data_emissao IS NOT NULL
+          AND match_key IS NOT NULL
+          AND match_key <> ''
+          AND match_key NOT LIKE '%|'
+          AND match_key NOT LIKE '|%'
       ) AS matchable
     FROM credit_notes
   `);
@@ -75,13 +83,24 @@ export async function reconcileCredits({ emitChange = true } = {}) {
     },
   });
 
+  // Match key is considered complete when both halves are non-empty.
+  // Empty either side keeps the row out of matched / divergent buckets.
+  // Function form so each call qualifies the column with the right table
+  // alias — interpolating an unqualified string breaks the multi-table
+  // JOINs where `match_key` would be ambiguous.
+  const completeKeyCondition = (alias) => `
+    ${alias}.match_key IS NOT NULL
+    AND ${alias}.match_key <> ''
+    AND ${alias}.match_key NOT LIKE '%|'
+    AND ${alias}.match_key NOT LIKE '|%'
+  `;
+
   await runInTransaction(
     async () => {
       await execute(`DELETE FROM credit_reconciliation`);
 
-      // Donation duplicates first — any donation whose triple appears more
-      // than once on the donations side is parked here, regardless of what
-      // the credits side looks like.
+      // Donation duplicates first — any donation whose match_key appears
+      // more than once on the donations side is parked here.
       await execute(`
         INSERT INTO credit_reconciliation (
           id, credit_note_id, donation_note_id, match_status, created_at
@@ -94,18 +113,13 @@ export async function reconcileCredits({ emitChange = true } = {}) {
           CURRENT_TIMESTAMP
         FROM donation_notes
         INNER JOIN (
-          SELECT cnpj_estabelecimento, numero_nota, data_nota
+          SELECT match_key
           FROM donation_notes
-          WHERE is_valid = TRUE
-            AND cnpj_estabelecimento <> ''
-            AND numero_nota <> ''
-            AND data_nota IS NOT NULL
-          GROUP BY cnpj_estabelecimento, numero_nota, data_nota
+          WHERE is_valid = TRUE AND ${completeKeyCondition("donation_notes")}
+          GROUP BY match_key
           HAVING count(*) > 1
         ) AS donation_duplicates
-          ON donation_duplicates.cnpj_estabelecimento = donation_notes.cnpj_estabelecimento
-          AND donation_duplicates.numero_nota = donation_notes.numero_nota
-          AND donation_duplicates.data_nota = donation_notes.data_nota
+          ON donation_duplicates.match_key = donation_notes.match_key
         WHERE donation_notes.is_valid = TRUE
       `);
 
@@ -122,24 +136,19 @@ export async function reconcileCredits({ emitChange = true } = {}) {
           CURRENT_TIMESTAMP
         FROM credit_notes
         INNER JOIN (
-          SELECT cnpj_estabelecimento, numero_nota, data_emissao
+          SELECT match_key
           FROM credit_notes
-          WHERE is_valid = TRUE
-            AND cnpj_estabelecimento <> ''
-            AND numero_nota <> ''
-            AND data_emissao IS NOT NULL
-          GROUP BY cnpj_estabelecimento, numero_nota, data_emissao
+          WHERE is_valid = TRUE AND ${completeKeyCondition("credit_notes")}
+          GROUP BY match_key
           HAVING count(*) > 1
         ) AS credit_duplicates
-          ON credit_duplicates.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
-          AND credit_duplicates.numero_nota = credit_notes.numero_nota
-          AND credit_duplicates.data_emissao = credit_notes.data_emissao
+          ON credit_duplicates.match_key = credit_notes.match_key
         WHERE credit_notes.is_valid = TRUE
       `);
 
-      // Matched pairs — excluding either side already claimed by a duplicate
-      // bucket above. The NOT EXISTS keeps the rebuild idempotent even when
-      // a note participates in both kinds of collisions across runs.
+      // Matched pairs — same match_key AND same valor_cents on both sides.
+      // The NOT EXISTS keeps the rebuild idempotent even when a note
+      // participates in a duplicate bucket above.
       await execute(`
         INSERT INTO credit_reconciliation (
           id, credit_note_id, donation_note_id, match_status, created_at
@@ -152,14 +161,11 @@ export async function reconcileCredits({ emitChange = true } = {}) {
           CURRENT_TIMESTAMP
         FROM credit_notes
         INNER JOIN donation_notes
-          ON donation_notes.cnpj_estabelecimento = credit_notes.cnpj_estabelecimento
-          AND donation_notes.numero_nota = credit_notes.numero_nota
-          AND donation_notes.data_nota = credit_notes.data_emissao
+          ON donation_notes.match_key = credit_notes.match_key
+          AND donation_notes.valor_cents = credit_notes.valor_cents
         WHERE credit_notes.is_valid = TRUE
           AND donation_notes.is_valid = TRUE
-          AND credit_notes.cnpj_estabelecimento <> ''
-          AND credit_notes.numero_nota <> ''
-          AND credit_notes.data_emissao IS NOT NULL
+          AND ${completeKeyCondition("credit_notes")}
           AND NOT EXISTS (
             SELECT 1
             FROM credit_reconciliation
@@ -168,8 +174,35 @@ export async function reconcileCredits({ emitChange = true } = {}) {
           )
       `);
 
-      // Credit orphans — valid credits that weren't matched and aren't
-      // already accounted for as duplicates.
+      // Divergent pairs — same match_key on both sides but different
+      // valor_cents. Surfaces "same nota, different declared value" so the
+      // user can investigate without losing the connection between rows.
+      await execute(`
+        INSERT INTO credit_reconciliation (
+          id, credit_note_id, donation_note_id, match_status, created_at
+        )
+        SELECT
+          CAST(uuid() AS VARCHAR),
+          credit_notes.id,
+          donation_notes.id,
+          'divergent',
+          CURRENT_TIMESTAMP
+        FROM credit_notes
+        INNER JOIN donation_notes
+          ON donation_notes.match_key = credit_notes.match_key
+          AND donation_notes.valor_cents <> credit_notes.valor_cents
+        WHERE credit_notes.is_valid = TRUE
+          AND donation_notes.is_valid = TRUE
+          AND ${completeKeyCondition("credit_notes")}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM credit_reconciliation
+            WHERE credit_reconciliation.credit_note_id = credit_notes.id
+              OR credit_reconciliation.donation_note_id = donation_notes.id
+          )
+      `);
+
+      // Credit orphans — valid credits not covered by any pairing above.
       await execute(`
         INSERT INTO credit_reconciliation (
           id, credit_note_id, donation_note_id, match_status, created_at
@@ -211,6 +244,20 @@ export async function reconcileCredits({ emitChange = true } = {}) {
     },
     { emitChange: false },
   );
+
+  // After-pass diagnostic — most informative single line for "why didn't
+  // it match?". If `matched === 0` while both sides are matchable on input,
+  // the keys differ between the two tables.
+  const breakdown = await query(`
+    SELECT match_status, count(*) AS total
+    FROM credit_reconciliation
+    GROUP BY match_status
+  `);
+  const counts = breakdown.reduce((acc, row) => {
+    acc[String(row.match_status)] = Number(row.total ?? 0);
+    return acc;
+  }, {});
+  console.log("[reconcileCredits] result:", counts);
 
   if (emitChange) {
     notifyDatabaseChanged({ source: "reconcile-credits" });
@@ -260,11 +307,13 @@ export async function getReconciliationStats({ referenceMonth = "" } = {}) {
 
   const stats = {
     matched: 0,
+    divergent: 0,
     creditOnly: 0,
     donationOnly: 0,
     duplicateCredit: 0,
     duplicateDonation: 0,
     matchedCreditValue: 0,
+    divergentCreditValue: 0,
     creditOnlyValue: 0,
   };
 
@@ -276,6 +325,9 @@ export async function getReconciliationStats({ referenceMonth = "" } = {}) {
     if (status === "matched") {
       stats.matched = total;
       stats.matchedCreditValue = creditValue;
+    } else if (status === "divergent") {
+      stats.divergent = total;
+      stats.divergentCreditValue = creditValue;
     } else if (status === "credit_only") {
       stats.creditOnly = total;
       stats.creditOnlyValue = creditValue;
@@ -288,7 +340,8 @@ export async function getReconciliationStats({ referenceMonth = "" } = {}) {
     }
   }
 
-  stats.totalCreditValue = stats.matchedCreditValue + stats.creditOnlyValue;
+  stats.totalCreditValue =
+    stats.matchedCreditValue + stats.divergentCreditValue + stats.creditOnlyValue;
   return stats;
 }
 
@@ -494,16 +547,18 @@ export async function diagnoseCreditImportMatching(
     [creditImportId],
   );
 
-  // Sample a few valid credit notes (largest credit values first so the user
-  // sees significant rows). Then for each sample, probe donations at each
-  // granularity.
+  // Sample a few valid credit notes (largest credit values first so the
+  // user sees significant rows). Probe each at three granularities:
+  // CNPJ, CNPJ+Numero (== match_key), CNPJ+Numero+Valor (== full match).
   const sampleCredits = await queryPrepared(
     `
       SELECT
         id,
         cnpj_estabelecimento,
         numero_nota,
-        CAST(data_emissao AS VARCHAR) AS data_emissao,
+        match_key,
+        valor_cents,
+        valor_nf,
         credito
       FROM credit_notes
       WHERE credit_import_id = ?
@@ -521,45 +576,40 @@ export async function diagnoseCreditImportMatching(
          WHERE cnpj_estabelecimento = ? AND is_valid = TRUE`,
       [credit.cnpj_estabelecimento],
     );
-    const [{ total: cnpjNumeroMatches } = { total: 0 }] = await queryPrepared(
+    const [{ total: matchKeyMatches } = { total: 0 }] = await queryPrepared(
       `SELECT count(*) AS total FROM donation_notes
-         WHERE cnpj_estabelecimento = ?
-           AND numero_nota = ?
+         WHERE match_key = ?
            AND is_valid = TRUE`,
-      [credit.cnpj_estabelecimento, credit.numero_nota],
+      [credit.match_key],
     );
     const [{ total: fullMatches } = { total: 0 }] = await queryPrepared(
       `SELECT count(*) AS total FROM donation_notes
-         WHERE cnpj_estabelecimento = ?
-           AND numero_nota = ?
-           AND data_nota = ?::DATE
+         WHERE match_key = ?
+           AND valor_cents = ?
            AND is_valid = TRUE`,
-      [
-        credit.cnpj_estabelecimento,
-        credit.numero_nota,
-        credit.data_emissao,
-      ],
+      [credit.match_key, credit.valor_cents],
     );
 
-    // Pull one matching-by-CNPJ donation so the user sees the actual values
-    // side-by-side. Most informative when the date or numero differs.
-    // Prefer rows with a non-empty `numero_nota` — when the donations
-    // parser fails to fill it, the first row is empty and hides the more
-    // informative neighbours with the same CNPJ.
+    // Pull one same-match_key donation so the user sees the values side
+    // by side. If the match_key matches but valor_cents differs, the user
+    // immediately sees the value divergence.
     const closestDonation = await queryPrepared(
       `
         SELECT
           cnpj_estabelecimento,
           numero_nota,
-          CAST(data_nota AS VARCHAR) AS data_nota
+          match_key,
+          valor_cents,
+          valor_nota
         FROM donation_notes
         WHERE cnpj_estabelecimento = ?
         ORDER BY
+          CASE WHEN match_key = ? THEN 0 ELSE 1 END,
           CASE WHEN coalesce(numero_nota, '') = '' THEN 1 ELSE 0 END,
           numero_nota ASC
         LIMIT 1
       `,
-      [credit.cnpj_estabelecimento],
+      [credit.cnpj_estabelecimento, credit.match_key],
     );
 
     // Diagnostic: how many of the same-CNPJ donations actually carry a
@@ -577,18 +627,22 @@ export async function diagnoseCreditImportMatching(
       credit: {
         cnpjEstabelecimento: credit.cnpj_estabelecimento,
         numeroNota: credit.numero_nota,
-        dataEmissao: credit.data_emissao,
+        matchKey: credit.match_key,
+        valorCents: toNumber(credit.valor_cents),
+        valorNf: toNumber(credit.valor_nf),
         credito: toNumber(credit.credito),
       },
       cnpjMatches: toNumber(cnpjMatches),
       cnpjMatchesWithNumero: toNumber(donationsWithNumeroRow?.total),
-      cnpjNumeroMatches: toNumber(cnpjNumeroMatches),
+      matchKeyMatches: toNumber(matchKeyMatches),
       fullMatches: toNumber(fullMatches),
       closestDonation: closestDonation[0]
         ? {
             cnpjEstabelecimento: closestDonation[0].cnpj_estabelecimento,
             numeroNota: closestDonation[0].numero_nota,
-            dataNota: closestDonation[0].data_nota,
+            matchKey: closestDonation[0].match_key,
+            valorCents: toNumber(closestDonation[0].valor_cents),
+            valorNota: toNumber(closestDonation[0].valor_nota),
           }
         : null,
     });
@@ -615,9 +669,11 @@ export async function getCreditImportMatchStats(creditImportId) {
       totalCreditNotes: 0,
       validCreditNotes: 0,
       matchedCount: 0,
+      divergentCount: 0,
       creditOnlyCount: 0,
       duplicateCreditCount: 0,
       matchedCreditValue: 0,
+      divergentCreditValue: 0,
     };
   }
 
@@ -652,9 +708,11 @@ export async function getCreditImportMatchStats(creditImportId) {
     totalCreditNotes: toNumber(totalRows[0]?.total),
     validCreditNotes: toNumber(totalRows[0]?.valid),
     matchedCount: 0,
+    divergentCount: 0,
     creditOnlyCount: 0,
     duplicateCreditCount: 0,
     matchedCreditValue: 0,
+    divergentCreditValue: 0,
   };
 
   for (const row of rows) {
@@ -663,6 +721,9 @@ export async function getCreditImportMatchStats(creditImportId) {
     if (status === "matched") {
       stats.matchedCount = total;
       stats.matchedCreditValue = toNumber(row.credit_value);
+    } else if (status === "divergent") {
+      stats.divergentCount = total;
+      stats.divergentCreditValue = toNumber(row.credit_value);
     } else if (status === "credit_only") {
       stats.creditOnlyCount = total;
     } else if (status === "duplicate_credit") {

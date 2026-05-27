@@ -47,6 +47,17 @@ function MatchStats({ creditImportId }) {
           {formatCurrency(stats.matchedCreditValue)}
         </span>
       </li>
+      {stats.divergentCount > 0 ? (
+        <li className="flex items-center justify-between gap-3">
+          <span className="text-[var(--warning)]">
+            Divergentes (mesma nota, valor diferente)
+          </span>
+          <span className="font-mono text-[var(--text-soft)]">
+            {formatInteger(stats.divergentCount)} ·{" "}
+            {formatCurrency(stats.divergentCreditValue)}
+          </span>
+        </li>
+      ) : null}
       <li className="flex items-center justify-between gap-3">
         <span className="text-[var(--warning)]">Sem doação correspondente</span>
         <span className="font-mono text-[var(--text-soft)]">
@@ -137,7 +148,7 @@ function MatchDiagnostic({ creditImportId }) {
                 preenchido
               </span>
               {" · "}
-              {formatInteger(sample.cnpjNumeroMatches)} com CNPJ + número ·{" "}
+              {formatInteger(sample.matchKeyMatches)} com CNPJ + número ·{" "}
               <span
                 className={
                   sample.fullMatches > 0
@@ -146,6 +157,7 @@ function MatchDiagnostic({ creditImportId }) {
                 }
               >
                 {formatInteger(sample.fullMatches)} com chave completa
+                (CNPJ + número + valor)
               </span>
               )
             </p>
@@ -162,7 +174,7 @@ function MatchDiagnostic({ creditImportId }) {
                   Nº: {sample.credit.numeroNota || "—"}
                 </p>
                 <p className="font-mono">
-                  Data: {sample.credit.dataEmissao || "—"}
+                  Valor NF: {formatCurrency(sample.credit.valorCents / 100)}
                 </p>
               </div>
               <div>
@@ -178,7 +190,7 @@ function MatchDiagnostic({ creditImportId }) {
                       Nº: {sample.closestDonation.numeroNota || "—"}
                     </p>
                     <p className="font-mono">
-                      Data: {sample.closestDonation.dataNota || "—"}
+                      Valor: {formatCurrency(sample.closestDonation.valorCents / 100)}
                     </p>
                   </>
                 ) : (

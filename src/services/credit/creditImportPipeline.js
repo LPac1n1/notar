@@ -133,9 +133,12 @@ async function populateCreditNotesFromCsv({
           try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
         )`
       : `NULL`;
+  // Same regex strip the donations parser uses: drop currency symbols,
+  // spaces and stray control characters before applying the BR-format
+  // decimal handling.
   const doubleColumn = (columnName) =>
     columnName
-      ? `try_cast(replace(replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '.', ''), ',', '.') AS DOUBLE)`
+      ? `try_cast(replace(replace(regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g'), '.', ''), ',', '.') AS DOUBLE)`
       : `0`;
 
   const situacaoExpression = textColumn(creditColumns.situacao);
@@ -143,6 +146,15 @@ async function populateCreditNotesFromCsv({
   // exported as UTF-16 sometimes carry a BOM (U+FEFF) or non-breaking space
   // (U+00A0) inside the value, which would defeat a plain equality check.
   const isValidExpression = `lower(trim(replace(replace(${situacaoExpression}, CHR(65279), ''), CHR(160), ' '))) = 'calculado'`;
+
+  const cnpjExpr = digitsOnlyColumn(creditColumns.cnpjEmit);
+  const numeroExpr = digitsOnlyColumn(creditColumns.numero);
+  const valorExpr = doubleColumn(creditColumns.valorNf);
+  // Composite match key + integer cents — same expressions used in the
+  // donations parser so a credit and a donation land on identical key /
+  // valor_cents when they describe the same nota fiscal.
+  const matchKeyExpr = `(${cnpjExpr}) || '|' || (${numeroExpr})`;
+  const valorCentsExpr = `cast(round(coalesce(${valorExpr}, 0) * 100) AS BIGINT)`;
 
   await execute(`
     INSERT INTO credit_notes (
@@ -157,25 +169,29 @@ async function populateCreditNotesFromCsv({
       credito,
       situacao,
       is_valid,
+      match_key,
+      valor_cents,
       created_at
     )
     SELECT
       CAST(uuid() AS VARCHAR),
       '${escapeSqlString(creditImportId)}',
-      ${digitsOnlyColumn(creditColumns.cnpjEmit)},
+      ${cnpjExpr},
       ${textColumn(creditColumns.emitente)},
-      ${digitsOnlyColumn(creditColumns.numero)},
+      ${numeroExpr},
       ${dateColumn(creditColumns.dataEmissao)},
-      ${doubleColumn(creditColumns.valorNf)},
+      ${valorExpr},
       ${dateColumn(creditColumns.dataRegistro)},
       ${doubleColumn(creditColumns.credito)},
       ${situacaoExpression},
       ${isValidExpression},
+      ${matchKeyExpr},
+      ${valorCentsExpr},
       CURRENT_TIMESTAMP
     FROM ${buildCsvSource(registeredFileName)}
     WHERE
-      length(${digitsOnlyColumn(creditColumns.cnpjEmit)}) >= 14
-      OR ${digitsOnlyColumn(creditColumns.numero)} <> ''
+      length(${cnpjExpr}) >= 14
+      OR ${numeroExpr} <> ''
   `);
 }
 
@@ -572,7 +588,7 @@ export async function prepareReimportCreditPreview(creditImportId, file) {
         try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
       )`;
     const doubleColumn = (columnName) =>
-      `try_cast(replace(replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '.', ''), ',', '.') AS DOUBLE)`;
+      `try_cast(replace(replace(regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g'), '.', ''), ',', '.') AS DOUBLE)`;
 
     const newRows = await query(`
       SELECT

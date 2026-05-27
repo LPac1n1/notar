@@ -37,6 +37,15 @@ import { logError } from "../logger.js";
 
 const FLUSH_DEBOUNCE_MS = 2000;
 
+// `JSON.stringify` replacer that downgrades JS BigInt to Number. DuckDB-WASM
+// returns BIGINT columns (e.g. `donation_notes.valor_cents`) as BigInt,
+// which the default JSON serializer can't handle. Cents always fit under
+// `Number.MAX_SAFE_INTEGER` (R$ 90+ trillion in cents), so coercion is loss-
+// free for this domain.
+function bigintToNumberReplacer(_key, value) {
+  return typeof value === "bigint" ? Number(value) : value;
+}
+
 let activeUserId = null;
 let pendingTimer = null;
 let pendingPromise = null;
@@ -309,8 +318,12 @@ async function uploadSnapshotImmediate(userId) {
       const snapshot = await exportDatabaseSnapshot();
       const payload = createSnapshotPayload(snapshot);
       const path = getUserStorageObjectPath(userId);
+      // BIGINT columns (e.g. `valor_cents`) come back as JS BigInt from
+      // DuckDB-WASM, which `JSON.stringify` refuses to serialize. Convert
+      // them to Number here — cents always fit comfortably under
+      // Number.MAX_SAFE_INTEGER, so the precision loss is non-existent.
       const { blob: body, contentType } = await compressPayload(
-        JSON.stringify(payload),
+        JSON.stringify(payload, bigintToNumberReplacer),
       );
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)

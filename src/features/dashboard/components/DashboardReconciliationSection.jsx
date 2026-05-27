@@ -31,6 +31,7 @@ export default function DashboardReconciliationSection({
 
   const hasAnyData =
     reconciliation.matched > 0 ||
+    reconciliation.divergent > 0 ||
     reconciliation.creditOnly > 0 ||
     reconciliation.donationOnly > 0 ||
     reconciliation.duplicateCredit > 0 ||
@@ -47,11 +48,17 @@ export default function DashboardReconciliationSection({
           cruzamento aqui.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard
             label="Notas conciliadas"
             value={formatInteger(reconciliation.matched)}
             helper={`${formatCurrency(reconciliation.matchedCreditValue)} em crédito real casado`}
+            onClick={() => navigate("/creditos")}
+          />
+          <MetricCard
+            label="Divergentes"
+            value={formatInteger(reconciliation.divergent)}
+            helper={`Mesma nota, valor diferente · ${formatCurrency(reconciliation.divergentCreditValue)}`}
             onClick={() => navigate("/creditos")}
           />
           <MetricCard

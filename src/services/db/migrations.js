@@ -752,6 +752,84 @@ export const MIGRATIONS = [
       }
     },
   },
+  {
+    id: 9,
+    name: "match-key-and-valor-cents",
+    up: async (conn) => {
+      // New reconciliation key: (cnpj_estabelecimento, numero_nota, valor).
+      // `data_emissao`/`data_nota` are kept as display columns but no longer
+      // participate in matching — too many subtle format mismatches between
+      // the two NFP exports were producing zero hits.
+      //
+      // Stored derivative columns:
+      //   match_key    — "<cnpj>|<numero>" (digits-only). Composite index
+      //                  below makes the join O(log n) at 30k+ rows.
+      //   valor_cents  — integer cents (round(valor * 100)), to sidestep
+      //                  float-precision drift when checking value equality.
+      //
+      // Backfill runs on every fresh boot of an older DB so existing data
+      // works without re-import (assuming the source fields are populated).
+      await conn.query(`
+        ALTER TABLE donation_notes
+        ADD COLUMN IF NOT EXISTS match_key TEXT
+      `);
+      await conn.query(`
+        ALTER TABLE donation_notes
+        ADD COLUMN IF NOT EXISTS valor_cents BIGINT
+      `);
+      await conn.query(`
+        UPDATE donation_notes
+        SET
+          match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+          valor_cents = cast(round(coalesce(valor_nota, 0) * 100) AS BIGINT)
+      `);
+
+      await conn.query(`
+        ALTER TABLE credit_notes
+        ADD COLUMN IF NOT EXISTS match_key TEXT
+      `);
+      await conn.query(`
+        ALTER TABLE credit_notes
+        ADD COLUMN IF NOT EXISTS valor_cents BIGINT
+      `);
+      await conn.query(`
+        UPDATE credit_notes
+        SET
+          match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+          valor_cents = cast(round(coalesce(valor_nf, 0) * 100) AS BIGINT)
+      `);
+
+      const matchKeyIndexes = [
+        [
+          "idx_donation_notes_match_key_v2",
+          "donation_notes(match_key)",
+        ],
+        [
+          "idx_donation_notes_match_full",
+          "donation_notes(match_key, valor_cents)",
+        ],
+        [
+          "idx_credit_notes_match_key_v2",
+          "credit_notes(match_key)",
+        ],
+        [
+          "idx_credit_notes_match_full",
+          "credit_notes(match_key, valor_cents)",
+        ],
+      ];
+
+      for (const [indexName, columns] of matchKeyIndexes) {
+        await conn
+          .query(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${columns}`)
+          .catch((error) => {
+            console.warn(
+              `Migration v9: skipping ${indexName} on ${columns}.`,
+              error,
+            );
+          });
+      }
+    },
+  },
 ];
 
 export async function runMigrations(conn) {
