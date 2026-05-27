@@ -1,13 +1,10 @@
 import { listDemands } from "../../../services/demandService";
 import { listMonthlySummaries } from "../../../services/monthlyService";
 import { formatMonthYear, hasDonationStartConflict } from "../../../utils/date";
-import {
-  DEFAULT_DEMAND_COLOR,
-  getContrastTextColor,
-  normalizeDemandColor,
-} from "../../../utils/demandColor";
+import { getContrastTextColor } from "../../../utils/demandColor";
 import { formatInteger } from "../../../utils/format";
 import { estimateTextWidth, wrapText } from "../pdf/simplePdf";
+import { mapDemandGroups } from "../utils/donationReportGroups";
 
 const PAGE_MARGIN = 42;
 const PAGE_BOTTOM = 800;
@@ -17,10 +14,6 @@ const LINE = "#D8DEE8";
 const SOFT_LINE = "#E8ECF2";
 const SURFACE = "#F7F8FA";
 const FOOTER_Y = 820;
-
-function normalizeDemandKey(value) {
-  return String(value ?? "").trim().toLowerCase();
-}
 
 function buildSlug(value) {
   return String(value ?? "")
@@ -46,104 +39,6 @@ function getPeriodLabel(referenceMonth) {
   return referenceMonth
     ? formatMonthYear(referenceMonth)
     : "Histórico completo";
-}
-
-function addPersonToDemandGroup(group, summary) {
-  const target =
-    summary.donorType === "auxiliary" ? group.auxiliaries : group.holders;
-  const currentPerson = target.get(summary.donorId) ?? {
-    id: summary.donorId,
-    name: summary.donorName,
-    cpf: summary.cpf,
-    holderName: summary.holderName ?? "",
-    donationStartDate: summary.donationStartDate ?? "",
-    notesCount: 0,
-    monthNotesCount: 0,
-    adjustmentNotesCount: 0,
-    adjustmentDescription: "",
-    adjustmentRangeStartMonth: "",
-    adjustmentRangeEndMonth: "",
-    adjustmentSubsumesMonth: false,
-  };
-
-  currentPerson.notesCount += Number(summary.notesCount ?? 0);
-
-  if (summary.hasAdjustment && summary.adjustment) {
-    if (summary.adjustmentSubsumesMonth) {
-      // The adjustment range already covers this reference month, so the row
-      // total IS the adjustment total. No additive breakdown to expose.
-      currentPerson.adjustmentSubsumesMonth = true;
-      currentPerson.adjustmentNotesCount += Number(
-        summary.adjustment.notesCount ?? 0,
-      );
-    } else {
-      currentPerson.monthNotesCount += Number(summary.monthNotesCount ?? 0);
-      currentPerson.adjustmentNotesCount += Number(
-        summary.adjustment.notesCount ?? 0,
-      );
-    }
-
-    if (!currentPerson.adjustmentDescription) {
-      currentPerson.adjustmentDescription = summary.adjustment.description ?? "";
-    }
-    if (!currentPerson.adjustmentRangeStartMonth) {
-      currentPerson.adjustmentRangeStartMonth =
-        summary.adjustment.rangeStartMonth ?? "";
-    }
-    if (!currentPerson.adjustmentRangeEndMonth) {
-      currentPerson.adjustmentRangeEndMonth =
-        summary.adjustment.rangeEndMonth ?? "";
-    }
-  } else {
-    currentPerson.monthNotesCount += Number(summary.notesCount ?? 0);
-  }
-
-  target.set(summary.donorId, currentPerson);
-}
-
-function mapDemandGroups({ demands, summaries }) {
-  const demandByName = new Map(
-    demands.map((demand) => [
-      normalizeDemandKey(demand.name),
-      {
-        name: demand.name,
-        color: normalizeDemandColor(demand.color),
-      },
-    ]),
-  );
-  const groupsByDemand = new Map();
-
-  for (const summary of summaries) {
-    const demandName = summary.demand || "Sem demanda";
-    const demandKey = normalizeDemandKey(demandName);
-    const demand = demandByName.get(demandKey) ?? {
-      name: demandName,
-      color: DEFAULT_DEMAND_COLOR,
-    };
-
-    if (!groupsByDemand.has(demandKey)) {
-      groupsByDemand.set(demandKey, {
-        name: demand.name,
-        color: demand.color,
-        holders: new Map(),
-        auxiliaries: new Map(),
-      });
-    }
-
-    addPersonToDemandGroup(groupsByDemand.get(demandKey), summary);
-  }
-
-  return Array.from(groupsByDemand.values())
-    .map((group) => ({
-      ...group,
-      holders: Array.from(group.holders.values()).sort((a, b) =>
-        a.name.localeCompare(b.name, "pt-BR"),
-      ),
-      auxiliaries: Array.from(group.auxiliaries.values()).sort((a, b) =>
-        a.name.localeCompare(b.name, "pt-BR"),
-      ),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 
 export async function buildDonationReportData(filters = {}) {
