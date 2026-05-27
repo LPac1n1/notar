@@ -26,6 +26,7 @@ export {
   listImports,
   listImportCpfSummary,
   searchImportedCpfs,
+  hasDonationImportForMonth,
 } from "./import/importQueries";
 
 export {

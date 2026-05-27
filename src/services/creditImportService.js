@@ -20,4 +20,6 @@ export {
 export {
   getCreditImportMatchStats,
   diagnoseCreditImportMatching,
+  reconcileCredits,
+  getReconciliationStats,
 } from "./reconciliation/creditReconciliationService";

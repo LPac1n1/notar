@@ -6,6 +6,7 @@ import {
   DONATION_ACTIVITY_OPTIONS,
   DONATION_START_DATE_OPTIONS,
   DONOR_TYPE_OPTIONS,
+  RECONCILIATION_STATUS_OPTIONS,
 } from "../constants";
 
 export default function MonthlyFiltersBar({
@@ -70,6 +71,15 @@ export default function MonthlyFiltersBar({
           onChange={onChange}
           options={ABATEMENT_SORT_OPTIONS}
           placeholder="Ordenar por abatimento"
+        />
+
+        <SelectInput
+          label="Conciliação"
+          name="reconciliationStatus"
+          value={filters.reconciliationStatus}
+          onChange={onChange}
+          options={RECONCILIATION_STATUS_OPTIONS}
+          placeholder="Toda a conciliação"
         />
       </div>
 

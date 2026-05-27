@@ -13,6 +13,7 @@ export const INITIAL_MONTHLY_FILTERS = {
   abatementStatus: "all",
   abatementSort: "",
   donationStartDate: "all",
+  reconciliationStatus: "all",
 };
 
 export const ICON_TONE_CLASS_NAMES = {
@@ -40,4 +41,12 @@ export const ABATEMENT_SORT_OPTIONS = [
   { value: "", label: "Sem ordenação por abatimento" },
   { value: "desc", label: "Maior abatimento primeiro" },
   { value: "asc", label: "Menor abatimento primeiro" },
+];
+
+export const RECONCILIATION_STATUS_OPTIONS = [
+  { value: "all", label: "Toda a conciliação" },
+  { value: "ok", label: "Dentro do limite", tone: "success" },
+  { value: "exceeded", label: "Abatimento excedido", tone: "danger" },
+  { value: "incomplete", label: "Crédito disponível", tone: "warning" },
+  { value: "no-credit", label: "Sem crédito conciliado", tone: "default" },
 ];

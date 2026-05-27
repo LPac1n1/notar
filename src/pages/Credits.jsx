@@ -23,15 +23,18 @@ import {
   cancelReimportCreditPreview,
   deleteCreditImport,
   getCreditImportMatchStats,
+  getReconciliationStats,
   listCreditImports,
   prepareCreditImportPreview,
   prepareReimportCreditPreview,
   processCreditImport,
+  reconcileCredits,
 } from "../services/creditImportService";
 import {
   exportReconciliationByDonorCsv,
   exportReconciliationPairsCsv,
 } from "../services/exportService";
+import { hasDonationImportForMonth } from "../services/importService";
 import { logError } from "../services/logger";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -52,6 +55,7 @@ export default function Credits() {
   const [isReimportApplying, setIsReimportApplying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportKind, setExportKind] = useState("");
+  const [isReconciling, setIsReconciling] = useState(false);
   const [deletingCreditImportId, setDeletingCreditImportId] = useState("");
   const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -183,6 +187,28 @@ export default function Credits() {
       return;
     }
 
+    // Guardrail: importing credits for a month with no donations on file
+    // produces 100% credit_only rows. Surface the issue before the user
+    // commits to a 30k+ row INSERT they'd have to undo. `window.confirm`
+    // keeps the disclosure cheap — a dedicated modal would be heavier than
+    // the rare scenario warrants.
+    try {
+      const hasDonations = await hasDonationImportForMonth(
+        uploadForm.referenceMonth,
+      );
+      if (!hasDonations) {
+        const proceed = window.confirm(
+          "Não há doações importadas para o mês selecionado. A conciliação não vai encontrar pares. Deseja continuar mesmo assim?",
+        );
+        if (!proceed) {
+          return;
+        }
+      }
+    } catch (err) {
+      logError("CreditsPage.donationCheck", err);
+      // Non-fatal — if the check itself errors, fall through to the import.
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -260,6 +286,32 @@ export default function Credits() {
       exportReconciliationPairsCsv,
       "Pareamentos exportados",
     );
+
+  const handleRerunReconciliation = async () => {
+    if (isReconciling) return;
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsReconciling(true);
+      await reconcileCredits();
+      const stats = await getReconciliationStats().catch(() => null);
+      await reload();
+      setSuccessMessage(
+        stats
+          ? `Conciliação atualizada. ${formatInteger(stats.matched)} casada(s), ` +
+              `${formatInteger(stats.divergent)} divergente(s), ` +
+              `${formatInteger(stats.creditOnly)} sem doação, ` +
+              `${formatInteger(stats.donationOnly)} sem crédito.`
+          : "Conciliação atualizada.",
+      );
+    } catch (err) {
+      logError("CreditsPage.reconcile", err);
+      setError(getErrorMessage(err, "Não foi possível re-rodar a conciliação."));
+    } finally {
+      setIsReconciling(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!removeModal.value) return;
@@ -422,6 +474,15 @@ export default function Credits() {
           leftIcon={<DownloadIcon className="h-4 w-4" />}
         >
           Exportar pareamentos
+        </Button>
+        <Button
+          variant="subtle"
+          onClick={handleRerunReconciliation}
+          disabled={isReconciling}
+          isLoading={isReconciling}
+          loadingLabel="Conciliando..."
+        >
+          Re-rodar conciliação
         </Button>
       </div>
 

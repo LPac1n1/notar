@@ -39,6 +39,7 @@ import {
   prepareReimportPreview,
   processImportedFile,
 } from "../services/importService";
+import { getReconciliationStats } from "../services/reconciliation/creditReconciliationService";
 import { restoreTrashItem } from "../services/trashService";
 import { useDataResource } from "../hooks/useDataResource";
 import { useAsync } from "../hooks/useAsync";
@@ -424,7 +425,21 @@ export default function Imports() {
       });
       setUploadFormErrors({});
       importModal.close();
-      setSuccessMessage("Importação processada com sucesso.");
+
+      // Surface the reconciliation impact in the same toast — the donations
+      // import always re-runs reconcileCredits at the tail of the pipeline,
+      // so we just read the new stats. Most informative single line for
+      // "did importing this planilha actually move the needle?".
+      const stats = await getReconciliationStats().catch(() => null);
+      if (stats && (stats.matched > 0 || stats.divergent > 0)) {
+        setSuccessMessage(
+          `Importação processada. Conciliação: ${formatInteger(stats.matched)} casada(s), ` +
+            `${formatInteger(stats.divergent)} divergente(s), ` +
+            `${formatInteger(stats.donationOnly)} sem crédito correspondente.`,
+        );
+      } else {
+        setSuccessMessage("Importação processada com sucesso.");
+      }
     } catch (err) {
       logError("ImportsPage.process", err);
       setError(getErrorMessage(err, "Não foi possível processar a importação."));

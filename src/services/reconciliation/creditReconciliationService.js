@@ -592,21 +592,29 @@ export async function diagnoseCreditImportMatching(
 
     // Pull one same-match_key donation so the user sees the values side
     // by side. If the match_key matches but valor_cents differs, the user
-    // immediately sees the value divergence.
+    // immediately sees the value divergence. Join through donor_cpf_links
+    // so the row can be a deep-link into the donor profile.
     const closestDonation = await queryPrepared(
       `
         SELECT
-          cnpj_estabelecimento,
-          numero_nota,
-          match_key,
-          valor_cents,
-          valor_nota
+          donation_notes.cnpj_estabelecimento,
+          donation_notes.numero_nota,
+          donation_notes.match_key,
+          donation_notes.valor_cents,
+          donation_notes.valor_nota,
+          donors.id AS donor_id,
+          donors.name AS donor_name
         FROM donation_notes
-        WHERE cnpj_estabelecimento = ?
+        LEFT JOIN donor_cpf_links
+          ON donor_cpf_links.cpf = donation_notes.cpf
+          AND donor_cpf_links.is_active = TRUE
+        LEFT JOIN donors
+          ON donors.id = donor_cpf_links.donor_id
+        WHERE donation_notes.cnpj_estabelecimento = ?
         ORDER BY
-          CASE WHEN match_key = ? THEN 0 ELSE 1 END,
-          CASE WHEN coalesce(numero_nota, '') = '' THEN 1 ELSE 0 END,
-          numero_nota ASC
+          CASE WHEN donation_notes.match_key = ? THEN 0 ELSE 1 END,
+          CASE WHEN coalesce(donation_notes.numero_nota, '') = '' THEN 1 ELSE 0 END,
+          donation_notes.numero_nota ASC
         LIMIT 1
       `,
       [credit.cnpj_estabelecimento, credit.match_key],
@@ -643,6 +651,8 @@ export async function diagnoseCreditImportMatching(
             matchKey: closestDonation[0].match_key,
             valorCents: toNumber(closestDonation[0].valor_cents),
             valorNota: toNumber(closestDonation[0].valor_nota),
+            donorId: closestDonation[0].donor_id ?? "",
+            donorName: closestDonation[0].donor_name ?? "",
           }
         : null,
     });
@@ -767,6 +777,24 @@ export async function listOrphanedCredits({ limit = 100 } = {}) {
     credito: toNumber(row.credito),
     referenceMonth: row.reference_month,
   }));
+}
+
+/**
+ * Cheap counter for the navigation badge — how many active donors are
+ * currently in a state that demands the user's attention (abatement
+ * exceeded the real credit, or credit available beyond what was abated).
+ * "No-credit" donors are excluded because they typically just need an
+ * import, not action on the donor themselves.
+ */
+export async function countDonorReconciliationIssues() {
+  const statuses = await listDonorReconciliationStatuses();
+  let count = 0;
+  for (const entry of statuses.values()) {
+    if (entry.status === "exceeded" || entry.status === "incomplete") {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /**

@@ -1,8 +1,14 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { AUDIT_NAV_ITEMS, CONFIG_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
+import { countDonorReconciliationIssues } from "../../services/reconciliation/creditReconciliationService";
+import { useDatabaseChangeEffect } from "../../hooks/useDatabaseChangeEffect";
+import { logError } from "../../services/logger";
+import { formatInteger } from "../../utils/format";
 
-function NavItem({ item, compact = false }) {
+function NavItem({ item, compact = false, badgeCount = 0 }) {
   const Icon = item.icon;
+  const hasBadge = badgeCount > 0;
 
   if (compact) {
     return (
@@ -60,9 +66,26 @@ function NavItem({ item, compact = false }) {
           >
             <Icon className="h-5 w-5" />
           </div>
-          <div className="hidden min-w-0 lg:block">
+          <div className="hidden min-w-0 lg:flex lg:flex-1 lg:items-center lg:justify-between lg:gap-2">
             <p className="font-semibold">{item.label}</p>
+            {hasBadge ? (
+              <span
+                className="rounded-full border border-[var(--warning-line)] bg-[var(--warning-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]"
+                title={`${badgeCount} doador(es) com conciliação fora do limite`}
+              >
+                {formatInteger(badgeCount)}
+              </span>
+            ) : null}
           </div>
+          {/* Compact (mobile/tablet) marker: a single dot in the icon
+              corner. Keeps the badge readable even when the label is
+              hidden by the lg breakpoint. */}
+          {hasBadge ? (
+            <span
+              aria-hidden="true"
+              className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[var(--surface)] bg-[var(--warning)] lg:hidden"
+            />
+          ) : null}
         </div>
       )}
     </NavLink>
@@ -104,6 +127,38 @@ function FooterNavItem({ item }) {
 }
 
 export default function Sidebar() {
+  const [reconciliationIssueCount, setReconciliationIssueCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    countDonorReconciliationIssues()
+      .then((count) => {
+        if (!cancelled) setReconciliationIssueCount(count);
+      })
+      .catch((err) => logError("Sidebar.reconciliationIssues", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Refresh the badge whenever the reconciliation table moves. Listening
+  // to `monthly` too because flipping abatement_status changes the
+  // exceeded/incomplete classification even without a fresh reconcile.
+  useDatabaseChangeEffect(
+    async () => {
+      try {
+        const count = await countDonorReconciliationIssues();
+        setReconciliationIssueCount(count);
+      } catch (err) {
+        logError("Sidebar.reconciliationIssues", err);
+      }
+    },
+    { domains: ["credits", "monthly", "donors", "imports"] },
+  );
+
+  const badgeFor = (item) =>
+    item.to === "/doadores" ? reconciliationIssueCount : 0;
+
   return (
     <>
       <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 md:hidden">
@@ -136,7 +191,7 @@ export default function Sidebar() {
 
           <nav className="mt-5 flex flex-1 flex-col gap-2 overflow-y-auto">
             {MAIN_NAV_ITEMS.map((item) => (
-              <NavItem key={item.to} item={item} />
+              <NavItem key={item.to} item={item} badgeCount={badgeFor(item)} />
             ))}
           </nav>
 

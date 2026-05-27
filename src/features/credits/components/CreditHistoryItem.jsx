@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Button from "../../../components/ui/Button";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { LoadingIcon, TrashIcon } from "../../../components/ui/icons";
@@ -77,6 +78,7 @@ function MatchStats({ creditImportId }) {
 }
 
 function MatchDiagnostic({ creditImportId }) {
+  const navigate = useNavigate();
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
 
@@ -183,6 +185,21 @@ function MatchDiagnostic({ creditImportId }) {
                 </p>
                 {sample.closestDonation ? (
                   <>
+                    {sample.closestDonation.donorId ? (
+                      <p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `/doadores/${encodeURIComponent(sample.closestDonation.donorId)}`,
+                            )
+                          }
+                          className="text-left text-sm font-semibold text-[var(--accent)] underline-offset-2 hover:underline"
+                        >
+                          {sample.closestDonation.donorName || "Doador"}
+                        </button>
+                      </p>
+                    ) : null}
                     <p className="font-mono">
                       CNPJ: {sample.closestDonation.cnpjEstabelecimento || "—"}
                     </p>

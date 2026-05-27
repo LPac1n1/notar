@@ -272,6 +272,30 @@ export async function listImportCpfSummary({
     });
 }
 
+/**
+ * Returns `true` when at least one processed donation import exists for
+ * the given reference_month. Used by the credits import UI to warn the
+ * user that a credit upload without a matching donation upload won't
+ * produce any pairings.
+ */
+export async function hasDonationImportForMonth(referenceMonth) {
+  const normalizedMonth = startOfMonth(referenceMonth);
+  if (!normalizedMonth) {
+    return false;
+  }
+  const rows = await queryPrepared(
+    `
+      SELECT 1
+      FROM imports
+      WHERE reference_month = ?
+        AND status = 'processed'
+      LIMIT 1
+    `,
+    [normalizedMonth],
+  );
+  return rows.length > 0;
+}
+
 export async function searchImportedCpfs(rawCpfs = []) {
   const seenCpfs = new Set();
   const normalizedCpfs = [];

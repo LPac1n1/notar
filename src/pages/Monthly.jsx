@@ -479,7 +479,25 @@ export default function Monthly() {
   const delayedRefreshingMonthlyData = useDelayedLoading(isRefreshingMonthlyData);
   const showRefreshingMonthlyData =
     isDataSyncRefreshLoading || delayedRefreshingMonthlyData;
-  const monthlyPagination = usePagination(summaries, {
+  // Client-side filter by reconciliation status. Applied here (before
+  // pagination) so page counters and the empty state reflect the user's
+  // chosen subset. `reconciliationByDonor` is loaded async; rows whose
+  // donor isn't in the map yet get "no-credit" as their effective status.
+  const filteredSummaries = useMemo(() => {
+    if (
+      !filters.reconciliationStatus ||
+      filters.reconciliationStatus === "all"
+    ) {
+      return summaries;
+    }
+    return summaries.filter((summary) => {
+      const status =
+        reconciliationByDonor.get(summary.donorId)?.status ?? "no-credit";
+      return status === filters.reconciliationStatus;
+    });
+  }, [summaries, reconciliationByDonor, filters.reconciliationStatus]);
+
+  const monthlyPagination = usePagination(filteredSummaries, {
     initialPageSize: 25,
   });
   const visibleDonatedSummaries = useMemo(

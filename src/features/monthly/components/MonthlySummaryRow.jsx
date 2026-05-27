@@ -267,7 +267,9 @@ export default function MonthlySummaryRow({
 
           <div
             className={`grid gap-x-5 gap-y-3 ${
-              showReferenceMonth ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"
+              showReferenceMonth
+                ? "grid-cols-2 sm:grid-cols-3"
+                : "grid-cols-2 sm:grid-cols-3 md:grid-cols-5"
             }`}
           >
             {showReferenceMonth ? (
@@ -312,6 +314,51 @@ export default function MonthlySummaryRow({
                     ? "Total acumulado"
                     : `${formatCurrency(summary.monthAbatementAmount ?? 0)} mês + ${formatCurrency(summary.adjustment.abatementAmount)} acumulado`
                   : undefined
+              }
+            />
+
+            {/* Reconciliation columns — only meaningful when the donor has
+                some credit/abatement activity. Show "—" for the no-credit
+                case so the column doesn't disappear and pull other rows
+                out of grid alignment. */}
+            <MetricField
+              label="Crédito real"
+              value={
+                reconciliation
+                  ? formatCurrency(reconciliation.totalCredit)
+                  : "—"
+              }
+              helper={
+                reconciliation && reconciliation.matchedNoteCount > 0
+                  ? `${formatInteger(reconciliation.matchedNoteCount)} nota(s) casada(s)`
+                  : undefined
+              }
+            />
+
+            <MetricField
+              label="Saldo"
+              value={
+                reconciliation
+                  ? formatCurrency(-reconciliation.difference)
+                  : "—"
+              }
+              valueClassName={
+                reconciliation
+                  ? reconciliation.status === "exceeded"
+                    ? "text-[var(--danger)]"
+                    : reconciliation.status === "incomplete"
+                      ? "text-[var(--warning)]"
+                      : reconciliation.status === "ok"
+                        ? "text-[var(--success)]"
+                        : ""
+                  : ""
+              }
+              helper={
+                reconciliation && reconciliation.status === "exceeded"
+                  ? "Abatido > crédito real"
+                  : reconciliation && reconciliation.status === "incomplete"
+                    ? "Crédito ainda disponível"
+                    : undefined
               }
             />
           </div>
