@@ -163,17 +163,82 @@ Usuário pediu poder usar o sistema em máquinas diferentes sem ter que ficar pa
 
 **Estado atual:** 58/58 testes (suíte de migrations não cobre o cloud layer ainda — é tudo browser-only via fetch). Lint 0 erros, build OK. Persistência local-only foi removida; tudo passa pelo Supabase. Backup/import JSON continuam como recurso offline. `.env` no gitignore, anon key segura no frontend (policies do bucket são o gate de verdade).
 
+### Fase 17–19 — Conciliação Doações × Créditos NFP ✅ CONCLUÍDA
+
+Usuário pediu casar a planilha de doações (NFP) com a planilha de créditos. Match key originalmente era (CNPJ, Número, Data), depois refatorado para (CNPJ, Número, Valor em centavos) — datas são instáveis e geravam falsos divergentes.
+
+**Modelo de dados** (migrations v5–v9):
+- v5: `donation_notes` (uma linha por nota), `imports.cnpj_entidade_social`.
+- v6: `credit_imports` + `credit_notes`.
+- v7: `credit_imports.reference_month`.
+- v8: `credit_reconciliation` (id, credit_note_id, donation_note_id, match_status, created_at).
+- v9: `donation_notes.match_key`, `donation_notes.valor_cents`, `credit_notes.match_key`, `credit_notes.valor_cents` + índices. Backfill idempotente em `applyDataNormalizations`.
+
+**Helpers de normalização** (`src/utils/reconciliationKey.js`):
+- `normalizeCnpj`, `normalizeNumeroNota`, `normalizeValor` (retorna inteiro em centavos), `buildMatchKey`, `isCompleteMatchKey`. Testes em `tests/reconciliationKey.test.js`.
+
+**Pipeline de doações** (`src/services/import/importPipeline.js`):
+- Parser BR-format hardened: `regexp_replace('[^0-9,.\\-]', '', 'g')` antes do BR-format dance, senão prefixos `R$ ` e non-breaking spaces zeravam `valor_cents` → tudo virava divergente.
+- Detecta `donationColumns` (CNPJ Estab., Nº Nota, Valor, Data, CNPJ Entidade, Data Pedido, Tipo) + `orderStatusColumn`. Pre-detecção exposta no preview pro `DetectedColumnsChecklist` (Sprint 1).
+
+**Pipeline de créditos** (`src/services/credit/creditImportPipeline.js`):
+- Mesmo modelo. Strict equality `lower(trim(replace BOM/NBSP)) = 'calculado'` para `is_valid`.
+- `deleteCreditImport` pula `trash_items` (volumes 30k+ estouravam o bind limit do prepared statement). Donations idem.
+
+**Service de conciliação** (`src/services/reconciliation/creditReconciliationService.js`):
+- `reconcileCredits()`: rebuild full do `credit_reconciliation` por bucket: `duplicate_*` → `matched` → `divergent` → `credit_only` → `donation_only`.
+- `completeKeyCondition(alias)`: factory pra evitar SQL ambiguity entre `donation_notes.match_key` e `credit_notes.match_key`.
+- Helpers de consulta: `getCreditImportMatchStats`, `diagnoseCreditImportMatching`, `getDonorReconciliationSummary`, `listDonorReconciliationStatuses`, `countDonorReconciliationIssues`, `listReconciliationByDonor`, `listReconciliationPairs`.
+
+**UI**:
+- Página dedicada `pages/Credits.jsx` + nav.
+- Colunas "Crédito real" + "Saldo" em `MonthlySummaryRow` + filtro de status de conciliação em Monthly (overlay no `summaries`).
+- Cards de conciliação no Dashboard + linha de % casadas + `reconciliationLatestMonth`.
+- Painel de conciliação por doador (`DashboardReconciliationSection`).
+- Badge de inconsistências em Donors no Sidebar (`countDonorReconciliationIssues`).
+- CSVs de conciliação por doador e pareamentos (com filtros respeitados).
+
+**Estado:** 116/116 testes. Lint 0 erros.
+
+### Fase 20 — UX audit + 3 sprints ✅ CONCLUÍDA (commits 142-151)
+
+Auditoria de UX gerou 14+ pontos, priorizados em 3 sprints. Tudo entregue.
+
+**Sprint 1 — Quick wins** [commits 142-146]:
+- **P2.1**: toast pós-import de doações com stats de conciliação (matched/divergent/donation_only).
+- **P3.1/P3.3**: colunas "Crédito real" e "Saldo" em `MonthlySummaryRow`. Saldo colorido por status (success/warning/danger).
+- **P3.2**: filtro de status de conciliação em `MonthlyFiltersBar` (overlay client-side via `reconciliationByDonor.get(donorId).status`).
+- **P7.1**: `hasDonationImportForMonth` checa antes de processar crédito; modal de confirmação se não houver doação do mês.
+- **P2.2**: botão "Re-rodar conciliação" em Credits (chama `reconcileCredits` + toast de stats).
+- **P10.2**: badge em "Doadores" no Sidebar com count de doadores com inconsistência. Refresh via `useDatabaseChangeEffect`.
+- **P4.2**: link clicável no diagnose (clicar no nome do doador navega pro perfil).
+- **P10.1**: cards "Última conciliação" no Dashboard.
+
+**Sprint 2 — Estruturais** [commits 147-149]:
+- **P1.2**: `DetectedColumnsChecklist` reutilizável; `prepareImportPreview` expõe `donationColumns` + `orderStatusColumn`; usado em `ImportUploadModal` e `CreditUploadModal`.
+- **P5.1**: exports CSV de conciliação por doador e pareamentos respeitam filtros (`{ referenceMonth, statusFilter }`); filename inclui sufixo do filtro.
+
+**Sprint 3 — Maior valor entregue** [commit 150-151]:
+- **P8.1**: `restoreDatabaseSnapshot` emite `{ phase, currentTable, restoredRows, totalRows }`; `CloudSyncGate` renderiza barra de progresso real com tradução amigável dos nomes das tabelas ("Restaurando notas de doação (8.500 de 30.000 linhas)…").
+- **P1.3**: progresso real em imports grandes. 4 pipelines (`processImportedFile`, `applyReimport`, `processCreditImport`, `applyReimportCredit`) aceitam `onProgress` e emitem etapas: `validating` → `inserting-notes` → `aggregating` → `reconciling-donors` → `reconciling-credits` → `finalizing` → `done`. Novo `ImportProgressIndicator` exibe label do step dentro dos 4 modais (upload + reimport, doações + créditos).
+- **P4.1**: listagem filtrável de notas em Créditos. Novos `listCreditNotes` + `countCreditNotes` server-side. `buildCreditNotesFilters` whitelisteia opções de status. Nova `CreditNotesSection` com filtros (mês, status, busca CNPJ/nº), paginação server-side via `usePaginatedResource`, link clicável pro perfil do doador.
+- **P1.1**: página unificada de importação por mês. `getMonthlyImportsOverview` faz 3 queries paralelas + merge em JS (1 row por mês). Nova `MonthlyImportsOverviewSection` no topo de Importações: tabela mostrando planilha de doações + planilha de créditos + estado da conciliação side-by-side.
+- Bugfix [commit 151]: TDZ em `Credits.jsx` — `useMemo` para `creditNotesMonthOptions` lia `creditImports` antes do `useDataResource` declarar. Movido pra depois.
+
+**Estado:** 116/116 testes, lint 0 erros, build OK. Cloud sync, conciliação, imports e UX de feedback todos em estado polido.
+
 ### O que ficou para uma futura fase (re-revisado)
 
-- Migração para paginação server-side (infra pronta desde Fase 4, sem ROI até ~5k linhas).
+- Migração para paginação server-side (infra pronta desde Fase 4, sem ROI até ~5k linhas — exceto `CreditNotesSection` que já usa).
 - Extração de `useNoteAutoSave` (precisa de testes E2E antes).
 - TypeScript incremental.
 - Testes automatizados do fluxo de cloud sync (envolve mockar Supabase ou usar a [local CLI](https://supabase.com/docs/guides/cli/local-development) — escopo separado).
 - Compressão do JSON antes do upload (se um dia o snapshot ficar grande; hoje é desprezível).
+- Testes de integração para os pipelines de import com `onProgress` (hoje só lint+build cobrem).
 
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 138**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 151**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
