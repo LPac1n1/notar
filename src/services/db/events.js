@@ -8,6 +8,50 @@ export const DEFAULT_STORAGE_INFO = {
   description: "O banco de dados ainda não foi carregado.",
 };
 
+/**
+ * Domain identifiers used by `notifyDatabaseChanged` and consumed by
+ * `useDatabaseChangeEffect`. Kept as a frozen object so call sites get
+ * IDE autocomplete and typos surface as undefined values (caught by lint
+ * `no-undef` once we move to TypeScript) instead of silent string drift.
+ *
+ * Add a new domain here before using it. Existing string literals across
+ * the codebase remain compatible — this is opt-in.
+ */
+export const DOMAIN = Object.freeze({
+  CREDITS: "credits",
+  DATABASE: "database",
+  DEMANDS: "demands",
+  DONORS: "donors",
+  HISTORY: "history",
+  IMPORTS: "imports",
+  MONTHLY: "monthly",
+  NOTES: "notes",
+  PEOPLE: "people",
+});
+
+/**
+ * Canonical source identifiers emitted via `notifyDatabaseChanged({ source })`.
+ * Used to filter subscribers via `useDatabaseChangeEffect({ sources })`.
+ * Mirrors the keys of `SOURCE_DOMAIN_MAP` below.
+ */
+export const CHANGE_SOURCE = Object.freeze({
+  BACKUP_IMPORT: "backup-import",
+  CLOUD_HYDRATE: "cloud-hydrate",
+  CPF_RECONCILE: "cpf-reconcile",
+  CREDIT_IMPORT: "credit-import",
+  CREDIT_REIMPORT: "credit-reimport",
+  DATABASE_FILE_OPENED: "database-file-opened",
+  HISTORY: "history",
+  IMPORT: "import",
+  MONTHLY_ACTION_HISTORY: "monthly-action-history",
+  NOTES: "notes",
+  RECONCILE_ALL_IMPORTS: "reconcile-all-imports",
+  RECONCILE_CREDITS: "reconcile-credits",
+  RECONCILE_IMPORT: "reconcile-import",
+  REIMPORT: "reimport",
+  RESTORE: "restore",
+});
+
 let storageInfo = { ...DEFAULT_STORAGE_INFO };
 let dataChangeVersion = 0;
 

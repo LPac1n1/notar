@@ -11,6 +11,16 @@ const INITIAL_STATE = {
   status: "idle",
 };
 
+/**
+ * @deprecated Use `useMutationAction` (`hooks/useMutationAction.js`) for
+ * CRUD mutations and `useDataResource` (`hooks/useDataResource.js`) for
+ * filter-driven loads. `useAsync` predates both and remains here for
+ * existing call sites (Monthly, Imports) that still rely on its
+ * `importOperation.run(...)` shape with the GlobalAsyncFeedback bridge.
+ *
+ * New code should not adopt this hook — pick one of the two replacements
+ * to keep the surface consistent across pages.
+ */
 export function useAsync({
   errorMessage = "A operação não foi concluída.",
   loadingMessage = "Processando",

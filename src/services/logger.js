@@ -74,6 +74,29 @@ export function logError(scope, error, context = {}) {
 }
 
 /**
+ * Non-fatal warning. Routes through the same buffer as `logError` so it
+ * shows up in the diagnostic download from Settings, but does NOT persist
+ * to `action_history` (avoids polluting the audit trail with operational
+ * warnings).
+ */
+export function logWarn(scope, message, context = {}) {
+  const safeMessage = typeof message === "string" ? message : String(message);
+
+  if (typeof console !== "undefined") {
+    console.warn(`[${scope}]`, safeMessage);
+  }
+
+  appendLogEntry({
+    timestamp: new Date().toISOString(),
+    scope,
+    message: safeMessage,
+    name: "warning",
+    stack: "",
+    context: context && typeof context === "object" ? context : {},
+  });
+}
+
+/**
  * Installs window-level error handlers. Call once at application startup.
  *
  * Captures errors that escaped local try/catch blocks (uncaught exceptions

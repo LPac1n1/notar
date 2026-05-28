@@ -16,6 +16,8 @@ import { startOfMonth } from "../utils/date.js";
 export {
   STORAGE_INFO_EVENT,
   DATA_CHANGED_EVENT,
+  CHANGE_SOURCE,
+  DOMAIN,
   notifyDatabaseChanged,
   getStorageInfoSnapshot,
 } from "./db/events.js";
