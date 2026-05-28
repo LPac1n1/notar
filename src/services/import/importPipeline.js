@@ -4,7 +4,6 @@ import {
   execute,
   executePrepared,
   normalizeCpf,
-  notifyDatabaseChanged,
   query,
   queryPrepared,
   releaseRegisteredFile,
@@ -610,90 +609,104 @@ export async function processImportedFile({
       hasPerNoteFormat,
     });
 
-    let cpfCounts;
+    // Wrap the heavy work in a single transaction so DuckDB-WASM does ONE
+    // OPFS commit at the end instead of one per top-level statement, and so
+    // the debounced cloud-sync flush only triggers once. The
+    // `createImportRecord` write above intentionally lives OUTSIDE this
+    // wrap so the catch block can still flip its `status` to 'error' if
+    // something blows up — that final UPDATE wouldn't be visible if we
+    // were inside a rolled-back transaction.
+    await runInTransaction(
+      async () => {
+        let cpfCounts;
 
-    if (hasPerNoteFormat) {
-      reportProgress({
-        step: "inserting-notes",
-        label: "Inserindo notas no banco...",
-      });
-      await populateDonationNotesFromCsv({
-        importId,
-        registeredFileName,
-        cpfColumn,
-        orderStatusColumn,
-        donationColumns,
-        normalizedMonth,
-      });
+        if (hasPerNoteFormat) {
+          reportProgress({
+            step: "inserting-notes",
+            label: "Inserindo notas no banco...",
+          });
+          await populateDonationNotesFromCsv({
+            importId,
+            registeredFileName,
+            cpfColumn,
+            orderStatusColumn,
+            donationColumns,
+            normalizedMonth,
+          });
 
-      reportProgress({
-        step: "aggregating",
-        label: "Agregando contagem por CPF...",
-      });
-      cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
-    } else {
-      reportProgress({
-        step: "aggregating",
-        label: "Lendo planilha e agregando CPFs...",
-      });
-      const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
+          reportProgress({
+            step: "aggregating",
+            label: "Agregando contagem por CPF...",
+          });
+          cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
+        } else {
+          reportProgress({
+            step: "aggregating",
+            label: "Lendo planilha e agregando CPFs...",
+          });
+          const invalidStatusExpression =
+            buildInvalidStatusExpression(orderStatusColumn);
 
-      const cpfCountsRaw = await query(`
-        SELECT
-          ${normalizedCpfExpression} AS cpf,
-          count(*) FILTER (WHERE NOT ${invalidStatusExpression}) AS notes_count,
-          count(*) FILTER (WHERE ${invalidStatusExpression}) AS invalid_notes_count
-        FROM ${buildCsvSource(registeredFileName)}
-        WHERE length(${normalizedCpfExpression}) = 11
-        GROUP BY 1
-        ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
-      `);
+          const cpfCountsRaw = await query(`
+            SELECT
+              ${normalizedCpfExpression} AS cpf,
+              count(*) FILTER (WHERE NOT ${invalidStatusExpression}) AS notes_count,
+              count(*) FILTER (WHERE ${invalidStatusExpression}) AS invalid_notes_count
+            FROM ${buildCsvSource(registeredFileName)}
+            WHERE length(${normalizedCpfExpression}) = 11
+            GROUP BY 1
+            ORDER BY notes_count DESC, invalid_notes_count DESC, cpf ASC
+          `);
 
-      cpfCounts = cpfCountsRaw.map((row) => ({
-        cpf: row.cpf,
-        notesCount: Number(row.notes_count ?? 0),
-        invalidNotesCount: Number(row.invalid_notes_count ?? 0),
-      }));
-    }
+          cpfCounts = cpfCountsRaw.map((row) => ({
+            cpf: row.cpf,
+            notesCount: Number(row.notes_count ?? 0),
+            invalidNotesCount: Number(row.invalid_notes_count ?? 0),
+          }));
+        }
 
-    reportProgress({
-      step: "reconciling-donors",
-      label: "Conciliando CPFs com doadores cadastrados...",
-    });
-    await saveImportCpfSummary({
-      importId,
-      referenceMonth: normalizedMonth,
-      cpfCounts,
-    }, { emitChange: false });
+        reportProgress({
+          step: "reconciling-donors",
+          label: "Conciliando CPFs com doadores cadastrados...",
+        });
+        await saveImportCpfSummary(
+          {
+            importId,
+            referenceMonth: normalizedMonth,
+            cpfCounts,
+          },
+          { emitChange: false },
+        );
 
-    reportProgress({
-      step: "reconciling-credits",
-      label: "Conciliando doações com créditos...",
-    });
-    await reconcileCredits({ emitChange: false });
+        reportProgress({
+          step: "reconciling-credits",
+          label: "Conciliando doações com créditos...",
+        });
+        await reconcileCredits({ emitChange: false });
 
-    notifyDatabaseChanged({ source: "import" });
-
-    reportProgress({
-      step: "finalizing",
-      label: "Salvando histórico da importação...",
-    });
-    await createActionHistoryEntry({
-      actionType: "import",
-      entityType: "import",
-      entityId: importId,
-      label: originalFileName,
-      description: `Planilha ${originalFileName} importada.`,
-      payload: {
-        cpfColumn,
-        fileName: originalFileName,
-        referenceMonth: normalizedMonth,
-        rowCount: cpfCounts.reduce(
-          (total, row) => total + Number(row.notes_count ?? 0),
-          0,
-        ),
+        reportProgress({
+          step: "finalizing",
+          label: "Salvando histórico da importação...",
+        });
+        await createActionHistoryEntry({
+          actionType: "import",
+          entityType: "import",
+          entityId: importId,
+          label: originalFileName,
+          description: `Planilha ${originalFileName} importada.`,
+          payload: {
+            cpfColumn,
+            fileName: originalFileName,
+            referenceMonth: normalizedMonth,
+            rowCount: cpfCounts.reduce(
+              (total, row) => total + Number(row.notes_count ?? 0),
+              0,
+            ),
+          },
+        });
       },
-    });
+      { changeSource: "import" },
+    );
 
     reportProgress({ step: "done" });
 
@@ -1118,106 +1131,127 @@ export async function applyReimport(previewData, { onProgress } = {}) {
   });
 
   try {
-    reportProgress({
-      step: "validating",
-      label: "Limpando notas anteriores...",
-    });
-    // Wipe old donation_notes for this import — the new file is the source of
-    // truth from this point. `saveImportCpfSummary` handles the corresponding
-    // wipe-and-reinsert of `import_cpf_summary`; the chained `reconcileImport`
-    // call inside it preserves abatement_status from the existing
-    // monthly_donor_summary rows before deleting them.
-    await execute(`
-      DELETE FROM donation_notes
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
+    // Wrap the whole reimport in a single outer transaction. Inner
+    // `runInTransaction` calls (saveImportCpfSummary, reconcileImport,
+    // reconcileCredits) early-return into "no-op transaction" mode because
+    // `transactionDepth > 0`, so the work runs inline against the open
+    // transaction. Two big wins:
+    //
+    //   - One OPFS commit instead of ~5. DuckDB-WASM fsyncs to the OPFS
+    //     backend on every COMMIT; reducing them is the cheapest way to
+    //     calm down the disk during a reimport.
+    //   - One cloud-sync flush trigger instead of several. `flushAfterTransaction`
+    //     fires once per outer COMMIT; with five commits at >2s intervals
+    //     the debounced upload could fire multiple times, each re-reading
+    //     the entire database and re-uploading it to Supabase.
+    //
+    // Atomic semantics are a happy side effect: if anything blows up midway
+    // (reconcile error, etc.) nothing got written, instead of leaving
+    // half-applied state behind.
+    await runInTransaction(
+      async () => {
+        reportProgress({
+          step: "validating",
+          label: "Limpando notas anteriores...",
+        });
+        // Wipe old donation_notes for this import — the new file is the
+        // source of truth from this point. `saveImportCpfSummary` handles
+        // the corresponding wipe-and-reinsert of `import_cpf_summary`;
+        // the chained `reconcileImport` call inside it preserves
+        // abatement_status from the existing monthly_donor_summary rows
+        // before deleting them.
+        await execute(`
+          DELETE FROM donation_notes
+          WHERE import_id = '${escapeSqlString(importId)}'
+        `);
 
-    let cpfCounts;
+        let cpfCounts;
 
-    if (hasPerNoteFormat) {
-      reportProgress({
-        step: "inserting-notes",
-        label: "Inserindo notas no banco...",
-      });
-      await populateDonationNotesFromCsv({
-        importId,
-        registeredFileName,
-        cpfColumn,
-        orderStatusColumn,
-        donationColumns,
-        normalizedMonth: referenceMonth,
-      });
+        if (hasPerNoteFormat) {
+          reportProgress({
+            step: "inserting-notes",
+            label: "Inserindo notas no banco...",
+          });
+          await populateDonationNotesFromCsv({
+            importId,
+            registeredFileName,
+            cpfColumn,
+            orderStatusColumn,
+            donationColumns,
+            normalizedMonth: referenceMonth,
+          });
 
-      reportProgress({
-        step: "aggregating",
-        label: "Agregando contagem por CPF...",
-      });
-      cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
-    } else {
-      reportProgress({
-        step: "aggregating",
-        label: "Lendo planilha e agregando CPFs...",
-      });
-      cpfCounts = await parseCpfCountsFromCsv({
-        registeredFileName,
-        cpfColumn,
-        orderStatusColumn,
-      });
-    }
+          reportProgress({
+            step: "aggregating",
+            label: "Agregando contagem por CPF...",
+          });
+          cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
+        } else {
+          reportProgress({
+            step: "aggregating",
+            label: "Lendo planilha e agregando CPFs...",
+          });
+          cpfCounts = await parseCpfCountsFromCsv({
+            registeredFileName,
+            cpfColumn,
+            orderStatusColumn,
+          });
+        }
 
-    await executePrepared(
-      `
-        UPDATE imports
-        SET
-          file_name = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `,
-      [originalFileName, importId],
-    );
+        await executePrepared(
+          `
+            UPDATE imports
+            SET
+              file_name = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [originalFileName, importId],
+        );
 
-    reportProgress({
-      step: "reconciling-donors",
-      label: "Conciliando CPFs com doadores cadastrados...",
-    });
-    await saveImportCpfSummary(
-      {
-        importId,
-        referenceMonth,
-        cpfCounts,
+        reportProgress({
+          step: "reconciling-donors",
+          label: "Conciliando CPFs com doadores cadastrados...",
+        });
+        await saveImportCpfSummary(
+          {
+            importId,
+            referenceMonth,
+            cpfCounts,
+          },
+          { emitChange: false },
+        );
+
+        reportProgress({
+          step: "reconciling-credits",
+          label: "Conciliando doações com créditos...",
+        });
+        await reconcileCredits({ emitChange: false });
+
+        reportProgress({
+          step: "finalizing",
+          label: "Salvando histórico da reimportação...",
+        });
+        await createActionHistoryEntry({
+          actionType: "import",
+          entityType: "import",
+          entityId: importId,
+          label: originalFileName,
+          description: `Planilha ${originalFileName} reimportada.`,
+          payload: {
+            cpfColumn,
+            fileName: originalFileName,
+            referenceMonth,
+            reimport: true,
+            rowCount: cpfCounts.reduce(
+              (total, row) => total + Number(row.notesCount ?? 0),
+              0,
+            ),
+          },
+        });
       },
-      { emitChange: false },
+      { changeSource: "reimport" },
     );
-
-    reportProgress({
-      step: "reconciling-credits",
-      label: "Conciliando doações com créditos...",
-    });
-    await reconcileCredits({ emitChange: false });
-
-    notifyDatabaseChanged({ source: "reimport" });
-
-    reportProgress({
-      step: "finalizing",
-      label: "Salvando histórico da reimportação...",
-    });
-    await createActionHistoryEntry({
-      actionType: "import",
-      entityType: "import",
-      entityId: importId,
-      label: originalFileName,
-      description: `Planilha ${originalFileName} reimportada.`,
-      payload: {
-        cpfColumn,
-        fileName: originalFileName,
-        referenceMonth,
-        reimport: true,
-        rowCount: cpfCounts.reduce(
-          (total, row) => total + Number(row.notesCount ?? 0),
-          0,
-        ),
-      },
-    });
 
     reportProgress({ step: "done" });
 

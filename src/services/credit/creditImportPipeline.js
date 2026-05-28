@@ -3,7 +3,6 @@ import {
   escapeSqlString,
   execute,
   executePrepared,
-  notifyDatabaseChanged,
   query,
   queryPrepared,
   releaseRegisteredFile,
@@ -376,61 +375,62 @@ export async function processCreditImport({
       { emitChange: false },
     );
 
-    reportProgress({
-      step: "inserting-notes",
-      label: "Inserindo créditos no banco...",
-    });
+    // Same single-transaction wrap as the donations side — see
+    // applyReimport in import/importPipeline.js for the rationale. One
+    // OPFS commit, one cloud-sync trigger, atomic rollback on failure.
     await runInTransaction(
       async () => {
+        reportProgress({
+          step: "inserting-notes",
+          label: "Inserindo créditos no banco...",
+        });
         await populateCreditNotesFromCsv({
           creditImportId,
           registeredFileName,
           creditColumns,
         });
+
+        reportProgress({
+          step: "aggregating",
+          label: "Calculando totais da importação...",
+        });
+        const totals = await aggregateCreditImportTotals(creditImportId);
+
+        await execute(`
+          UPDATE credit_imports
+          SET
+            total_rows = ${totals.totalRows},
+            valid_rows = ${totals.validRows},
+            status = 'processed',
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = '${escapeSqlString(creditImportId)}'
+        `);
+
+        reportProgress({
+          step: "reconciling-credits",
+          label: "Conciliando créditos com doações...",
+        });
+        await reconcileCredits({ emitChange: false });
+
+        reportProgress({
+          step: "finalizing",
+          label: "Salvando histórico da importação...",
+        });
+        await createActionHistoryEntry({
+          actionType: "import",
+          entityType: "credit_import",
+          entityId: creditImportId,
+          label: originalFileName,
+          description: `Planilha de créditos ${originalFileName} importada.`,
+          payload: {
+            fileName: originalFileName,
+            totalRows: totals.totalRows,
+            validRows: totals.validRows,
+          },
+        });
       },
-      { emitChange: false },
+      { changeSource: "credit-import" },
     );
-
-    reportProgress({
-      step: "aggregating",
-      label: "Calculando totais da importação...",
-    });
-    const totals = await aggregateCreditImportTotals(creditImportId);
-
-    await execute(`
-      UPDATE credit_imports
-      SET
-        total_rows = ${totals.totalRows},
-        valid_rows = ${totals.validRows},
-        status = 'processed',
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(creditImportId)}'
-    `);
-
-    reportProgress({
-      step: "reconciling-credits",
-      label: "Conciliando créditos com doações...",
-    });
-    await reconcileCredits({ emitChange: false });
-
-    notifyDatabaseChanged({ source: "credit-import" });
-
-    reportProgress({
-      step: "finalizing",
-      label: "Salvando histórico da importação...",
-    });
-    await createActionHistoryEntry({
-      actionType: "import",
-      entityType: "credit_import",
-      entityId: creditImportId,
-      label: originalFileName,
-      description: `Planilha de créditos ${originalFileName} importada.`,
-      payload: {
-        fileName: originalFileName,
-        totalRows: totals.totalRows,
-        validRows: totals.validRows,
-      },
-    });
 
     reportProgress({ step: "done" });
 
@@ -948,12 +948,15 @@ export async function applyReimportCredit(previewData, { onProgress } = {}) {
   } = previewData;
 
   try {
-    reportProgress({
-      step: "inserting-notes",
-      label: "Substituindo créditos anteriores...",
-    });
+    // Single transaction wraps the whole credit reimport — same rationale
+    // as applyReimport (donations) and processCreditImport: one OPFS
+    // commit, one cloud-sync trigger, atomic rollback on failure.
     await runInTransaction(
       async () => {
+        reportProgress({
+          step: "inserting-notes",
+          label: "Substituindo créditos anteriores...",
+        });
         await execute(`
           DELETE FROM credit_notes
           WHERE credit_import_id = '${escapeSqlString(creditImportId)}'
@@ -964,55 +967,53 @@ export async function applyReimportCredit(previewData, { onProgress } = {}) {
           registeredFileName,
           creditColumns,
         });
+
+        reportProgress({
+          step: "aggregating",
+          label: "Calculando totais da importação...",
+        });
+        const totals = await aggregateCreditImportTotals(creditImportId);
+
+        await executePrepared(
+          `
+            UPDATE credit_imports
+            SET
+              file_name = ?,
+              total_rows = ?,
+              valid_rows = ?,
+              status = 'processed',
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [originalFileName, totals.totalRows, totals.validRows, creditImportId],
+        );
+
+        reportProgress({
+          step: "reconciling-credits",
+          label: "Conciliando créditos com doações...",
+        });
+        await reconcileCredits({ emitChange: false });
+
+        reportProgress({
+          step: "finalizing",
+          label: "Salvando histórico da reimportação...",
+        });
+        await createActionHistoryEntry({
+          actionType: "import",
+          entityType: "credit_import",
+          entityId: creditImportId,
+          label: originalFileName,
+          description: `Planilha de créditos ${originalFileName} reimportada.`,
+          payload: {
+            fileName: originalFileName,
+            reimport: true,
+            totalRows: totals.totalRows,
+            validRows: totals.validRows,
+          },
+        });
       },
-      { emitChange: false },
+      { changeSource: "credit-reimport" },
     );
-
-    reportProgress({
-      step: "aggregating",
-      label: "Calculando totais da importação...",
-    });
-    const totals = await aggregateCreditImportTotals(creditImportId);
-
-    await executePrepared(
-      `
-        UPDATE credit_imports
-        SET
-          file_name = ?,
-          total_rows = ?,
-          valid_rows = ?,
-          status = 'processed',
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `,
-      [originalFileName, totals.totalRows, totals.validRows, creditImportId],
-    );
-
-    reportProgress({
-      step: "reconciling-credits",
-      label: "Conciliando créditos com doações...",
-    });
-    await reconcileCredits({ emitChange: false });
-
-    notifyDatabaseChanged({ source: "credit-reimport" });
-
-    reportProgress({
-      step: "finalizing",
-      label: "Salvando histórico da reimportação...",
-    });
-    await createActionHistoryEntry({
-      actionType: "import",
-      entityType: "credit_import",
-      entityId: creditImportId,
-      label: originalFileName,
-      description: `Planilha de créditos ${originalFileName} reimportada.`,
-      payload: {
-        fileName: originalFileName,
-        reimport: true,
-        totalRows: totals.totalRows,
-        validRows: totals.validRows,
-      },
-    });
 
     reportProgress({ step: "done" });
 
