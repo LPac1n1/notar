@@ -871,6 +871,43 @@ export const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: 11,
+    name: "accept-liberado-as-valid-credit-situacao",
+    up: async (conn) => {
+      // Pre-Jan-2026 NFP exports use "Liberado" for credits that are final
+      // and usable; from Jan 2026 onwards they switched to "Calculado".
+      // Both mean the same thing for our reconciliation purposes. The
+      // original parser only accepted "calculado", so every credit
+      // imported from older spreadsheets has `is_valid = FALSE` and gets
+      // excluded from matching — explaining the "0 casadas" the user saw
+      // for Nov/Dec 2025.
+      //
+      // Recompute `is_valid` for every credit_note from its stored
+      // `situacao` (defensive trim + BOM/NBSP strip mirrors the insert
+      // expression). Idempotent: re-running produces the same end state.
+      await conn.query(`
+        UPDATE credit_notes
+        SET is_valid = (
+          lower(trim(replace(replace(coalesce(situacao, ''), CHR(65279), ''), CHR(160), ' ')))
+          IN ('calculado', 'liberado')
+        )
+      `);
+
+      // `credit_imports.valid_rows` is the cached count used by the
+      // history panel ("Créditos calculados"). After flipping is_valid we
+      // need to recompute or the UI keeps showing the old (zero) value.
+      await conn.query(`
+        UPDATE credit_imports
+        SET valid_rows = COALESCE((
+          SELECT count(*)
+          FROM credit_notes
+          WHERE credit_notes.credit_import_id = credit_imports.id
+            AND credit_notes.is_valid = TRUE
+        ), 0)
+      `);
+    },
+  },
 ];
 
 export async function runMigrations(conn) {

@@ -1379,6 +1379,100 @@ test("migration v10 strips leading zeros from numero_nota and rebuilds match_key
   }
 });
 
+test("migration v11 accepts 'Liberado' as a valid credit situacao", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Insert credit_notes carrying the pre-Jan-2026 NFP situacao "Liberado"
+    // and the post-Jan-2026 "Calculado". The original parser only accepted
+    // "calculado" exactly, so the "Liberado" rows arrived with is_valid =
+    // FALSE. Migration v11 has to flip them.
+    await conn.query(`
+      INSERT INTO credit_imports (
+        id, reference_month, file_name, total_rows, valid_rows,
+        status, notes, imported_at, updated_at
+      )
+      VALUES (
+        'ci-old',
+        DATE '2025-12-01',
+        'Consulta 12.25.csv',
+        2,
+        0,
+        'processed',
+        '',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `);
+
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        valor_nf, credito, situacao, is_valid,
+        match_key, valor_cents, created_at
+      )
+      VALUES
+        ('cn-liberado', 'ci-old', '12345678000190', '111',
+         100.0, 50.0, 'Liberado', FALSE,
+         '12345678000190|111', 10000, CURRENT_TIMESTAMP),
+        ('cn-calculado', 'ci-old', '12345678000190', '222',
+         100.0, 50.0, 'Calculado', TRUE,
+         '12345678000190|222', 10000, CURRENT_TIMESTAMP),
+        ('cn-pendente', 'ci-old', '12345678000190', '333',
+         100.0, 50.0, 'Pendente', FALSE,
+         '12345678000190|333', 10000, CURRENT_TIMESTAMP)
+    `);
+
+    // Re-apply the v11 SQL directly — the migration already ran on the
+    // empty tables during runMigrations() above. Asserts the SQL itself.
+    await conn.query(`
+      UPDATE credit_notes
+      SET is_valid = (
+        lower(trim(replace(replace(coalesce(situacao, ''), CHR(65279), ''), CHR(160), ' ')))
+        IN ('calculado', 'liberado')
+      )
+    `);
+    await conn.query(`
+      UPDATE credit_imports
+      SET valid_rows = COALESCE((
+        SELECT count(*)
+        FROM credit_notes
+        WHERE credit_notes.credit_import_id = credit_imports.id
+          AND credit_notes.is_valid = TRUE
+      ), 0)
+    `);
+
+    const liberado = (
+      await conn.query(
+        `SELECT is_valid FROM credit_notes WHERE id = 'cn-liberado'`,
+      )
+    ).toArray()[0];
+    const calculado = (
+      await conn.query(
+        `SELECT is_valid FROM credit_notes WHERE id = 'cn-calculado'`,
+      )
+    ).toArray()[0];
+    const pendente = (
+      await conn.query(
+        `SELECT is_valid FROM credit_notes WHERE id = 'cn-pendente'`,
+      )
+    ).toArray()[0];
+    const importRow = (
+      await conn.query(
+        `SELECT valid_rows FROM credit_imports WHERE id = 'ci-old'`,
+      )
+    ).toArray()[0];
+
+    assert.equal(Boolean(liberado.is_valid), true);
+    assert.equal(Boolean(calculado.is_valid), true);
+    assert.equal(Boolean(pendente.is_valid), false);
+    assert.equal(Number(importRow.valid_rows), 2);
+  } finally {
+    conn.close();
+  }
+});
+
 test("migration v9 adds match_key and valor_cents to both note tables", async () => {
   const conn = await createTestConnection();
   try {

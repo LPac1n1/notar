@@ -138,8 +138,9 @@ function assertCreditColumnsPresent(creditColumns) {
  * Inserts one row per credit note into `credit_notes` directly from the
  * registered CSV/XLSX. Mirrors `populateDonationNotesFromCsv` in shape: SQL
  * expressions handle all normalization (digits-only CNPJ, dd/mm/aa dates,
- * Brazilian-formatted numbers). `is_valid = lower(trim(situacao)) =
- * 'calculado'` — strict, since the user established it.
+ * Brazilian-formatted numbers). `is_valid` is TRUE when the trimmed,
+ * lowercased Situação column is either "calculado" (post-Jan 2026 NFP
+ * exports) or "liberado" (pre-Jan 2026 exports).
  */
 async function populateCreditNotesFromCsv({
   creditImportId,
@@ -169,7 +170,13 @@ async function populateCreditNotesFromCsv({
   // Defensive against invisible characters that survive `trim()` — NFP CSVs
   // exported as UTF-16 sometimes carry a BOM (U+FEFF) or non-breaking space
   // (U+00A0) inside the value, which would defeat a plain equality check.
-  const isValidExpression = `lower(trim(replace(replace(${situacaoExpression}, CHR(65279), ''), CHR(160), ' '))) = 'calculado'`;
+  //
+  // Both "Calculado" (post-Jan 2026) and "Liberado" (pre-Jan 2026 exports)
+  // mean the credit is final and usable — NFP changed the wording in the
+  // middle of the season, leaving older exports with no rows that the
+  // strict "calculado" check accepted. Accepting both keeps reconciliation
+  // working across the boundary.
+  const isValidExpression = `lower(trim(replace(replace(${situacaoExpression}, CHR(65279), ''), CHR(160), ' '))) IN ('calculado', 'liberado')`;
 
   const cnpjExpr = digitsOnlyColumn(creditColumns.cnpjEmit);
   const numeroExpr = numeroNotaSqlExpression(creditColumns.numero);
@@ -844,7 +851,7 @@ export async function prepareReimportCreditPreview(creditImportId, file) {
         ${numeroNotaSqlExpression(creditColumns.numero)} AS numero_nota,
         CAST(${dateColumn(creditColumns.dataEmissao)} AS VARCHAR) AS data_emissao,
         ${brOrUsDoubleSqlExpression(creditColumns.credito)} AS credito,
-        lower(${textColumn(creditColumns.situacao)}) = 'calculado' AS is_valid
+        lower(${textColumn(creditColumns.situacao)}) IN ('calculado', 'liberado') AS is_valid
       FROM ${buildCsvSource(registeredFileName)}
       WHERE
         length(${digitsOnlyColumn(creditColumns.cnpjEmit)}) >= 14
