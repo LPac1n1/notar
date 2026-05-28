@@ -9,13 +9,22 @@ import {
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileAllImports } from "./importService";
 import { createTrashItem } from "./trashService";
+import { withCache } from "./queryCache.js";
 import {
   DEFAULT_DEMAND_COLOR,
   normalizeDemandColor,
 } from "../utils/demandColor";
 import { normalizeDemandName } from "../utils/normalize";
 
-export async function listDemands(filters = {}) {
+// 30s TTL — demands rarely change, but Donors / People / DonorProfile
+// each call listDemands() on mount to build dropdown options. The cache
+// avoids re-querying the same 5-15 row table across navigation. Every
+// write through executePrepared invalidates the cache globally, so the
+// dropdowns refresh immediately when the user creates / edits / deletes
+// a demand.
+const LIST_DEMANDS_TTL_MS = 30_000;
+
+async function _listDemandsUncached(filters = {}) {
   const { demandId = "" } = filters;
   const conditions = [];
   const params = [];
@@ -45,6 +54,12 @@ export async function listDemands(filters = {}) {
     isActive: Boolean(row.is_active),
   }));
 }
+
+export const listDemands = withCache(
+  (filters = {}) => `listDemands:${filters?.demandId ?? ""}`,
+  _listDemandsUncached,
+  LIST_DEMANDS_TTL_MS,
+);
 
 export async function createDemand({
   id = nanoid(),

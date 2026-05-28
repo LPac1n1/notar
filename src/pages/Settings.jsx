@@ -299,6 +299,8 @@ export default function Settings() {
         icon={SunIcon}
         description="Tema da interface. A escolha é salva no navegador."
         className="mb-6"
+        collapsible
+        defaultOpen
       >
         <div
           role="group"
@@ -335,6 +337,8 @@ export default function Settings() {
           icon={CloudIcon}
           description="Sessão ativa e estado da sincronização com o Supabase."
           className="mb-6"
+          collapsible
+          defaultOpen
         >
           {isLoadingStorage ? (
             <LoadingScreen compact title="Verificando o armazenamento" description="" />
@@ -399,6 +403,8 @@ export default function Settings() {
         icon={BackupExportIcon}
         description="Arquivo JSON com todos os dados. Use para transferir entre contas ou recuperar dados."
         className="mb-6"
+        collapsible
+        defaultOpen={false}
       >
         <div className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -465,6 +471,8 @@ export default function Settings() {
         icon={KeyboardIcon}
         description="Pressione g seguido de uma letra para navegar rapidamente entre páginas."
         className="mb-6"
+        collapsible
+        defaultOpen={false}
       >
         <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 md:grid-cols-4">
           {KEYBOARD_SHORTCUTS.map(({ key, to }) => (
@@ -491,6 +499,8 @@ export default function Settings() {
         icon={BugIcon}
         description="Ferramentas para investigar problemas durante o uso."
         className="mb-6"
+        collapsible
+        defaultOpen={false}
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Button

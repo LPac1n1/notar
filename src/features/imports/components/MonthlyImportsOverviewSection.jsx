@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import Button from "../../../components/ui/Button";
 import EmptyState from "../../../components/ui/EmptyState";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
@@ -178,6 +178,13 @@ function ReconciliationCell({ reconciliation }) {
  * in read-only contexts (e.g. dashboard widgets) without dragging in the
  * modal plumbing.
  */
+// Light pagination — the overview rarely grows past ~60 months even
+// after years of use, but rendering 100+ rows in a single table with
+// inline actions starts to feel heavy on lower-end machines. Show the
+// most recent N by default and let the user expand from there.
+const INITIAL_VISIBLE_MONTHS = 24;
+const VISIBLE_INCREMENT = 24;
+
 export default function MonthlyImportsOverviewSection({
   onImportNewDonation,
   onImportNewCredit,
@@ -189,6 +196,7 @@ export default function MonthlyImportsOverviewSection({
   deletingCreditId = "",
 }) {
   const loader = useCallback(() => getMonthlyImportsOverview(), []);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MONTHS);
 
   const { data, isLoading, isRefreshing, error, reload } = useDataResource({
     loader,
@@ -208,6 +216,8 @@ export default function MonthlyImportsOverviewSection({
   });
 
   const rows = data ?? [];
+  const visibleRows = rows.slice(0, visibleCount);
+  const hasMore = rows.length > visibleRows.length;
 
   return (
     <SectionCard className="mb-5">
@@ -259,7 +269,7 @@ export default function MonthlyImportsOverviewSection({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)] bg-[var(--surface-elevated)]">
-              {rows.map((row) => (
+              {visibleRows.map((row) => (
                 <tr key={row.referenceMonth} className="align-top">
                   <td className="px-3 py-3">
                     <p className="font-semibold text-[var(--text-main)]">
@@ -308,6 +318,17 @@ export default function MonthlyImportsOverviewSection({
               ))}
             </tbody>
           </table>
+          {hasMore ? (
+            <div className="mt-3 flex items-center justify-center">
+              <Button
+                variant="subtle"
+                className="min-h-8 px-3 py-1.5 text-xs"
+                onClick={() => setVisibleCount((c) => c + VISIBLE_INCREMENT)}
+              >
+                Mostrar mais {Math.min(VISIBLE_INCREMENT, rows.length - visibleRows.length)} mês(es)
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </SectionCard>
