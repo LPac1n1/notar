@@ -442,6 +442,22 @@ export async function saveImportCpfSummary({
     throw new Error("Importação e mês de referência são obrigatórios.");
   }
 
+  // Filter + normalize once outside the SQL hot path so the bulk INSERT
+  // below builds its VALUES list directly from the cleaned data.
+  const validEntries = [];
+  let totalRows = 0;
+  for (const item of cpfCounts) {
+    const normalizedCpf = normalizeCpf(item.cpf);
+    const notesCount = toPositiveInteger(item.notesCount);
+    const invalidNotesCount = toPositiveInteger(item.invalidNotesCount);
+
+    if (normalizedCpf.length !== 11) continue;
+    if (notesCount === 0 && invalidNotesCount === 0) continue;
+
+    totalRows += notesCount;
+    validEntries.push({ normalizedCpf, notesCount, invalidNotesCount });
+  }
+
   await runInTransaction(
     async () => {
       await execute(`
@@ -449,45 +465,54 @@ export async function saveImportCpfSummary({
         WHERE import_id = '${escapeSqlString(importId)}'
       `);
 
-      let totalRows = 0;
-
-      for (const item of cpfCounts) {
-        const normalizedCpf = normalizeCpf(item.cpf);
-        const notesCount = toPositiveInteger(item.notesCount);
-        const invalidNotesCount = toPositiveInteger(item.invalidNotesCount);
-
-        if (normalizedCpf.length !== 11) {
-          continue;
-        }
-
-        if (notesCount === 0 && invalidNotesCount === 0) {
-          continue;
-        }
-
-        totalRows += notesCount;
-
-        await execute(`
-          INSERT INTO import_cpf_summary (
-            id,
-            import_id,
-            reference_month,
-            cpf,
-            notes_count,
-            invalid_notes_count,
-            is_registered_donor,
-            updated_at
-          )
-          VALUES (
+      // Chunked multi-row INSERT — single-row INSERT in a loop costs one
+      // SQL parse + plan + execute roundtrip per CPF, which on a 10k+
+      // entry planilha pegged the CPU for tens of seconds (each
+      // statement went through DuckDB-WASM's single-threaded executor).
+      // Packing 200 rows per statement collapses that into ~50 SQL calls
+      // instead of 10k, while keeping each statement comfortably under
+      // DuckDB's parsed-SQL size limit.
+      if (validEntries.length > 0) {
+        const BULK_INSERT_CHUNK_SIZE = 200;
+        const importIdLiteral = `'${escapeSqlString(importId)}'`;
+        const monthLiteral = `'${escapeSqlString(normalizedMonth)}'`;
+        const buildValuesClause = (entry) =>
+          `(
             '${escapeSqlString(nanoid())}',
-            '${escapeSqlString(importId)}',
-            '${escapeSqlString(normalizedMonth)}',
-            '${escapeSqlString(normalizedCpf)}',
-            ${notesCount},
-            ${invalidNotesCount},
+            ${importIdLiteral},
+            ${monthLiteral},
+            '${escapeSqlString(entry.normalizedCpf)}',
+            ${entry.notesCount},
+            ${entry.invalidNotesCount},
             FALSE,
             CURRENT_TIMESTAMP
-          )
-        `);
+          )`;
+
+        for (
+          let chunkStart = 0;
+          chunkStart < validEntries.length;
+          chunkStart += BULK_INSERT_CHUNK_SIZE
+        ) {
+          const chunk = validEntries.slice(
+            chunkStart,
+            chunkStart + BULK_INSERT_CHUNK_SIZE,
+          );
+          const valuesSql = chunk.map(buildValuesClause).join(",\n");
+
+          await execute(`
+            INSERT INTO import_cpf_summary (
+              id,
+              import_id,
+              reference_month,
+              cpf,
+              notes_count,
+              invalid_notes_count,
+              is_registered_donor,
+              updated_at
+            )
+            VALUES ${valuesSql}
+          `);
+        }
       }
 
       await execute(`
