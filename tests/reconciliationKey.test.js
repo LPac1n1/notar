@@ -16,11 +16,17 @@ test("normalizeCnpj strips formatting and accepts blank input", () => {
   assert.equal(normalizeCnpj(undefined), "");
 });
 
-test("normalizeNumeroNota keeps only digits — handles XLSX numeric coercion", () => {
+test("normalizeNumeroNota keeps only digits and strips leading zeros", () => {
   assert.equal(normalizeNumeroNota("25211"), "25211");
   assert.equal(normalizeNumeroNota("25211.0"), "252110");
   assert.equal(normalizeNumeroNota(" 25,211 "), "25211");
-  assert.equal(normalizeNumeroNota("01234"), "01234");
+  // Leading-zero padding from some NFP exports collapses to the same key
+  // as the unpadded form. Internal zeros are preserved.
+  assert.equal(normalizeNumeroNota("01234"), "1234");
+  assert.equal(normalizeNumeroNota("0012345"), "12345");
+  assert.equal(normalizeNumeroNota("12300"), "12300");
+  assert.equal(normalizeNumeroNota("0"), "");
+  assert.equal(normalizeNumeroNota("0000"), "");
   assert.equal(normalizeNumeroNota(""), "");
 });
 
@@ -37,6 +43,21 @@ test("normalizeValor returns integer cents for various Brazilian formats", () =>
   assert.equal(normalizeValor(0), 0);
   assert.equal(normalizeValor(""), 0);
   assert.equal(normalizeValor(null), 0);
+});
+
+test("normalizeValor auto-detects US-format strings (1-2 digits after .)", () => {
+  // ExcelJS occasionally hands back the cell's raw value as a US-format
+  // string ("1234.56" instead of "1.234,56"). Previous parser treated the
+  // dot as a thousand separator and produced 12,345,600 cents instead of
+  // 123,456 — 100× too large — which silently killed all matching.
+  assert.equal(normalizeValor("1234.56"), 123456);
+  assert.equal(normalizeValor("12.34"), 1234);
+  assert.equal(normalizeValor("0.99"), 99);
+  assert.equal(normalizeValor("-12.34"), -1234);
+  // No decimals but multiple dots still treated as BR thousand separators.
+  assert.equal(normalizeValor("1.234.567"), 123456700);
+  // Plain integers unchanged.
+  assert.equal(normalizeValor("1234"), 123400);
 });
 
 test("normalizeValor avoids float drift via integer cents", () => {

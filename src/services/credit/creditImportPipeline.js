@@ -41,6 +41,37 @@ function buildCsvSource(fileName) {
   return `read_csv_auto('${escapeSqlString(fileName)}', all_varchar = true)`;
 }
 
+/**
+ * Same numero_nota normalizer used in the donations pipeline — must stay
+ * in sync so both sides produce identical match keys for the same nota.
+ * Strips non-digits AND leading zeros.
+ */
+function numeroNotaSqlExpression(columnName) {
+  if (!columnName) return `''`;
+  const id = escapeIdentifier(columnName);
+  return `ltrim(regexp_replace(coalesce(CAST(${id} AS VARCHAR), ''), '[^0-9]', '', 'g'), '0')`;
+}
+
+/**
+ * Same BR/US auto-detect currency parser as the donations pipeline.
+ * Critical for `valor_cents` to agree across both sides; see the donation
+ * pipeline for the full rationale.
+ */
+function brOrUsDoubleSqlExpression(columnName) {
+  if (!columnName) return `0`;
+  const id = escapeIdentifier(columnName);
+  const stripped = `regexp_replace(coalesce(CAST(${id} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g')`;
+  return `(
+    CASE
+      WHEN ${stripped} LIKE '%,%'
+        THEN try_cast(replace(replace(${stripped}, '.', ''), ',', '.') AS DOUBLE)
+      WHEN regexp_full_match(${stripped}, '-?[0-9]+\\.[0-9]{1,2}')
+        THEN try_cast(${stripped} AS DOUBLE)
+      ELSE try_cast(replace(${stripped}, '.', '') AS DOUBLE)
+    END
+  )`;
+}
+
 async function registerSpreadsheetPreviewFile(file, registeredFileName) {
   const fileExtension = getImportFileExtension(file.name);
 
@@ -133,13 +164,6 @@ async function populateCreditNotesFromCsv({
           try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
         )`
       : `NULL`;
-  // Same regex strip the donations parser uses: drop currency symbols,
-  // spaces and stray control characters before applying the BR-format
-  // decimal handling.
-  const doubleColumn = (columnName) =>
-    columnName
-      ? `try_cast(replace(replace(regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g'), '.', ''), ',', '.') AS DOUBLE)`
-      : `0`;
 
   const situacaoExpression = textColumn(creditColumns.situacao);
   // Defensive against invisible characters that survive `trim()` — NFP CSVs
@@ -148,8 +172,8 @@ async function populateCreditNotesFromCsv({
   const isValidExpression = `lower(trim(replace(replace(${situacaoExpression}, CHR(65279), ''), CHR(160), ' '))) = 'calculado'`;
 
   const cnpjExpr = digitsOnlyColumn(creditColumns.cnpjEmit);
-  const numeroExpr = digitsOnlyColumn(creditColumns.numero);
-  const valorExpr = doubleColumn(creditColumns.valorNf);
+  const numeroExpr = numeroNotaSqlExpression(creditColumns.numero);
+  const valorExpr = brOrUsDoubleSqlExpression(creditColumns.valorNf);
   // Composite match key + integer cents — same expressions used in the
   // donations parser so a credit and a donation land on identical key /
   // valor_cents when they describe the same nota fiscal.
@@ -182,7 +206,7 @@ async function populateCreditNotesFromCsv({
       ${dateColumn(creditColumns.dataEmissao)},
       ${valorExpr},
       ${dateColumn(creditColumns.dataRegistro)},
-      ${doubleColumn(creditColumns.credito)},
+      ${brOrUsDoubleSqlExpression(creditColumns.credito)},
       ${situacaoExpression},
       ${isValidExpression},
       ${matchKeyExpr},
@@ -813,15 +837,13 @@ export async function prepareReimportCreditPreview(creditImportId, file) {
         try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%Y')::DATE,
         try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
       )`;
-    const doubleColumn = (columnName) =>
-      `try_cast(replace(replace(regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g'), '.', ''), ',', '.') AS DOUBLE)`;
 
     const newRows = await query(`
       SELECT
         ${digitsOnlyColumn(creditColumns.cnpjEmit)} AS cnpj_estabelecimento,
-        ${digitsOnlyColumn(creditColumns.numero)} AS numero_nota,
+        ${numeroNotaSqlExpression(creditColumns.numero)} AS numero_nota,
         CAST(${dateColumn(creditColumns.dataEmissao)} AS VARCHAR) AS data_emissao,
-        ${doubleColumn(creditColumns.credito)} AS credito,
+        ${brOrUsDoubleSqlExpression(creditColumns.credito)} AS credito,
         lower(${textColumn(creditColumns.situacao)}) = 'calculado' AS is_valid
       FROM ${buildCsvSource(registeredFileName)}
       WHERE

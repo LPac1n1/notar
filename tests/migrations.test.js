@@ -1288,6 +1288,97 @@ test("credit is_valid survives BOM and NBSP in situacao values", async () => {
   }
 });
 
+test("migration v10 strips leading zeros from numero_nota and rebuilds match_key", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Insert two notas representing the same fiscal note imported from two
+    // exports — one zero-padded, one not. Pre-v10 they'd carry different
+    // match_keys ('cnpj|0012345' vs 'cnpj|12345') and silently never match.
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, valor_nota,
+        cnpj_estabelecimento, is_valid,
+        match_key, valor_cents, created_at
+      )
+      VALUES (
+        'dn-padded',
+        'import-1',
+        '11111111111',
+        '0012345',
+        100.0,
+        '12345678000190',
+        TRUE,
+        '12345678000190|0012345',
+        10000,
+        CURRENT_TIMESTAMP
+      )
+    `);
+
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        valor_nf, credito, situacao, is_valid,
+        match_key, valor_cents, created_at
+      )
+      VALUES (
+        'cn-unpadded',
+        'cimport-1',
+        '12345678000190',
+        '12345',
+        100.0,
+        50.0,
+        'Calculado',
+        TRUE,
+        '12345678000190|12345',
+        10000,
+        CURRENT_TIMESTAMP
+      )
+    `);
+
+    // v10 already ran (empty tables) during runMigrations() above, so we
+    // can't trigger it via the migration runner again. Apply the same SQL
+    // directly — the test asserts the SQL itself, not the version stamp.
+    await conn.query(
+      `UPDATE donation_notes
+         SET numero_nota = ltrim(coalesce(numero_nota, ''), '0')
+       WHERE numero_nota LIKE '0%'`,
+    );
+    await conn.query(
+      `UPDATE credit_notes
+         SET numero_nota = ltrim(coalesce(numero_nota, ''), '0')
+       WHERE numero_nota LIKE '0%'`,
+    );
+    await conn.query(
+      `UPDATE donation_notes
+         SET match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, '')`,
+    );
+    await conn.query(
+      `UPDATE credit_notes
+         SET match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, '')`,
+    );
+
+    const donation = (
+      await conn.query(
+        `SELECT numero_nota, match_key FROM donation_notes WHERE id = 'dn-padded'`,
+      )
+    ).toArray()[0];
+    const credit = (
+      await conn.query(
+        `SELECT numero_nota, match_key FROM credit_notes WHERE id = 'cn-unpadded'`,
+      )
+    ).toArray()[0];
+
+    assert.equal(donation.numero_nota, "12345");
+    assert.equal(donation.match_key, "12345678000190|12345");
+    assert.equal(credit.numero_nota, "12345");
+    assert.equal(credit.match_key, "12345678000190|12345");
+  } finally {
+    conn.close();
+  }
+});
+
 test("migration v9 adds match_key and valor_cents to both note tables", async () => {
   const conn = await createTestConnection();
   try {

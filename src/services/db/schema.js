@@ -479,10 +479,13 @@ async function applyDataNormalizations(conn) {
   // those columns at INSERT time leave them NULL. Re-running here on every
   // boot mops up any row whose key is missing without forcing a re-import.
   // Cheap because the WHERE clause hits the column directly.
+  // Fallback also uses `ltrim('0')` on numero_nota so the rebuilt match_key
+  // matches whatever migration v10 produced for older rows. Keeps insert,
+  // backfill and fallback in lockstep.
   await conn.query(`
     UPDATE donation_notes
     SET
-      match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+      match_key = coalesce(cnpj_estabelecimento, '') || '|' || ltrim(coalesce(numero_nota, ''), '0'),
       valor_cents = cast(round(coalesce(valor_nota, 0) * 100) AS BIGINT)
     WHERE match_key IS NULL
        OR match_key = ''
@@ -492,7 +495,7 @@ async function applyDataNormalizations(conn) {
   await conn.query(`
     UPDATE credit_notes
     SET
-      match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, ''),
+      match_key = coalesce(cnpj_estabelecimento, '') || '|' || ltrim(coalesce(numero_nota, ''), '0'),
       valor_cents = cast(round(coalesce(valor_nf, 0) * 100) AS BIGINT)
     WHERE match_key IS NULL
        OR match_key = ''
@@ -501,10 +504,15 @@ async function applyDataNormalizations(conn) {
 }
 
 export async function runSchemaBootstrap(conn, { structural = true } = {}) {
+  // Propagates the applied-ids list out to the caller so post-migration side
+  // effects (e.g., rebuilding `credit_reconciliation` after v10 changed every
+  // match_key) can run exactly once per device.
+  let migrationResult = { appliedIds: [] };
   if (structural) {
-    await runMigrations(conn);
+    migrationResult = (await runMigrations(conn)) ?? { appliedIds: [] };
   }
 
   await applyDataNormalizations(conn);
+  return migrationResult;
 }
 

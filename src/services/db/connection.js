@@ -80,7 +80,27 @@ export async function initDB() {
 
     conn = await db.connect();
 
-    await runSchemaBootstrap(conn);
+    const { appliedIds = [] } = await runSchemaBootstrap(conn);
+
+    // Migration v10 strips leading zeros from `numero_nota` and rebuilds
+    // every `match_key`. The existing `credit_reconciliation` rows are now
+    // keyed against the OLD `match_key` values and are stale. Kick off one
+    // fresh reconcile so the user sees correct buckets without having to
+    // click "Re-rodar conciliação" manually. Dynamic import breaks the
+    // module cycle (reconciliation → db barrel → connection).
+    if (appliedIds.includes(10)) {
+      try {
+        const { reconcileCredits } = await import(
+          "../reconciliation/creditReconciliationService.js"
+        );
+        await reconcileCredits({ emitChange: false });
+      } catch (error) {
+        console.warn(
+          "Post-migration reconcile after v10 failed; the user can run it manually from Credits → 'Re-rodar conciliação'.",
+          error,
+        );
+      }
+    }
 
     return conn;
   })();

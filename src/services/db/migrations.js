@@ -830,6 +830,47 @@ export const MIGRATIONS = [
       }
     },
   },
+  {
+    id: 10,
+    name: "strip-leading-zeros-from-numero-nota",
+    up: async (conn) => {
+      // The match key is `<cnpj>|<numero>` (digits-only). NFP exports
+      // occasionally zero-pad "Número da Nota" ('0012345'), and occasionally
+      // don't ('12345') — both refer to the same nota fiscal. Without this
+      // backfill, the same note imported across two exports lands on two
+      // different match keys and reconciliation silently produces zero
+      // matches for an entire month.
+      //
+      // We strip the padding from the stored `numero_nota` and rebuild
+      // `match_key` from scratch using the cleaned value. Idempotent: a
+      // second run finds no leading zeros to strip and the rebuild
+      // produces the same key.
+      //
+      // `valor_cents` is left untouched — it doesn't depend on numero, and
+      // re-deriving it would require re-parsing the original spreadsheet
+      // (which is no longer on disk). Users hitting US-format number
+      // issues must reimport; the parser fix prevents recurrence.
+      await conn.query(`
+        UPDATE donation_notes
+        SET numero_nota = ltrim(coalesce(numero_nota, ''), '0')
+        WHERE numero_nota LIKE '0%'
+      `);
+      await conn.query(`
+        UPDATE credit_notes
+        SET numero_nota = ltrim(coalesce(numero_nota, ''), '0')
+        WHERE numero_nota LIKE '0%'
+      `);
+
+      await conn.query(`
+        UPDATE donation_notes
+        SET match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, '')
+      `);
+      await conn.query(`
+        UPDATE credit_notes
+        SET match_key = coalesce(cnpj_estabelecimento, '') || '|' || coalesce(numero_nota, '')
+      `);
+    },
+  },
 ];
 
 export async function runMigrations(conn) {
@@ -846,6 +887,7 @@ export async function runMigrations(conn) {
   `);
   const currentVersion = Number(result.toArray()[0]?.current ?? 0);
 
+  const appliedIds = [];
   for (const migration of MIGRATIONS) {
     if (migration.id <= currentVersion) {
       continue;
@@ -856,5 +898,11 @@ export async function runMigrations(conn) {
       INSERT INTO schema_version (id, name, applied_at)
       VALUES (${migration.id}, '${escapeSqlString(migration.name)}', CURRENT_TIMESTAMP)
     `);
+    appliedIds.push(migration.id);
   }
+
+  // The caller (connection.js) inspects this to decide whether to trigger
+  // post-migration side effects — e.g. rebuilding `credit_reconciliation`
+  // after v10 changed every row's `match_key`.
+  return { appliedIds };
 }

@@ -45,6 +45,57 @@ function buildCsvSource(fileName) {
   return `read_csv_auto('${escapeSqlString(fileName)}', all_varchar = true)`;
 }
 
+/**
+ * SQL expression that yields the "número da nota" with non-digits stripped
+ * AND leading zeros removed. The leading-zero strip is critical for the
+ * match key: NFP exports sometimes zero-pad ('0012345'), sometimes don't
+ * ('12345'); without `ltrim` the same nota would carry two different
+ * match_keys depending on which export it came from. Mirrors JS
+ * `normalizeNumeroNota` in `utils/reconciliationKey.js`.
+ */
+function numeroNotaSqlExpression(columnName) {
+  if (!columnName) return `''`;
+  const id = escapeIdentifier(columnName);
+  return `ltrim(regexp_replace(coalesce(CAST(${id} AS VARCHAR), ''), '[^0-9]', '', 'g'), '0')`;
+}
+
+/**
+ * SQL expression that parses a currency value as DOUBLE, auto-detecting
+ * BR vs US format. Why both:
+ *
+ *   - BR ("1.234,56"): `.` is thousand separator, `,` is decimal. NFP's
+ *     human-readable export.
+ *   - US ("1234.56"): `.` is decimal. Raw XLSX cell values sometimes
+ *     come through ExcelJS in this form, regardless of the file's
+ *     display format.
+ *
+ * If we always assumed BR (the previous behaviour), US-format inputs got
+ * read as "drop all dots, treat as integer" → 1234.56 ended up as
+ * 123,456.00, then `valor_cents` = 12,345,600 — 100× too large. The
+ * match would then go to the `divergent` bucket (or to no bucket at all
+ * if BOTH sides drifted differently), silently breaking reconciliation
+ * for entire months.
+ *
+ * Heuristic:
+ *   1. Comma present → BR.
+ *   2. Single dot followed by 1–2 digits, no comma → US decimal.
+ *   3. Otherwise (no dot, or dots used as thousand seps) → integer.
+ */
+function brOrUsDoubleSqlExpression(columnName) {
+  if (!columnName) return `0`;
+  const id = escapeIdentifier(columnName);
+  const stripped = `regexp_replace(coalesce(CAST(${id} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g')`;
+  return `(
+    CASE
+      WHEN ${stripped} LIKE '%,%'
+        THEN try_cast(replace(replace(${stripped}, '.', ''), ',', '.') AS DOUBLE)
+      WHEN regexp_full_match(${stripped}, '-?[0-9]+\\.[0-9]{1,2}')
+        THEN try_cast(${stripped} AS DOUBLE)
+      ELSE try_cast(replace(${stripped}, '.', '') AS DOUBLE)
+    END
+  )`;
+}
+
 function normalizeCpfSqlExpression(expression) {
   return `
     replace(
@@ -116,21 +167,13 @@ async function populateDonationNotesFromCsv({
           try_strptime(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '%d/%m/%y')::DATE
         )`
       : `NULL`;
-  // Strips currency prefixes, whitespace, and stray control characters
-  // before the BR-format dance (`.` = thousand sep → drop, `,` = decimal
-  // → period). Without this strip, a single "R$ " prefix or non-breaking
-  // space in the cell would make try_cast return NULL, which then
-  // becomes 0 cents after backfill and silently misclassifies every
-  // matched nota as `divergent`.
-  const doubleColumn = (columnName) =>
-    columnName
-      ? `try_cast(replace(replace(regexp_replace(coalesce(CAST(${escapeIdentifier(columnName)} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g'), '.', ''), ',', '.') AS DOUBLE)`
-      : `0`;
-
   const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
   const cnpjExpr = digitsOnlyColumn(donationColumns.cnpjEstabelecimento);
-  const numeroExpr = digitsOnlyColumn(donationColumns.numeroNota);
-  const valorExpr = doubleColumn(donationColumns.valorNota);
+  // Number column gets the extra ltrim('0') so '0012345' and '12345' from
+  // different NFP exports collapse onto the same match key. Mirrors the JS
+  // `normalizeNumeroNota`.
+  const numeroExpr = numeroNotaSqlExpression(donationColumns.numeroNota);
+  const valorExpr = brOrUsDoubleSqlExpression(donationColumns.valorNota);
   // Composite match key — `<cnpj>|<numero>`. Stored as-is so reconciliation
   // can index/lookup against credit_notes in O(log n). Mirrors
   // `buildMatchKey` in src/utils/reconciliationKey.js.
