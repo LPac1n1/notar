@@ -70,18 +70,20 @@ export async function reconcileCredits({ emitChange = true } = {}) {
       ) AS matchable
     FROM credit_notes
   `);
-  console.log("[reconcileCredits] inputs:", {
-    donations: {
-      total: Number(donationStats?.total ?? 0),
-      valid: Number(donationStats?.valid ?? 0),
-      matchable: Number(donationStats?.matchable ?? 0),
-    },
-    credits: {
-      total: Number(creditStats?.total ?? 0),
-      valid: Number(creditStats?.valid ?? 0),
-      matchable: Number(creditStats?.matchable ?? 0),
-    },
-  });
+  if (import.meta.env.DEV) {
+    console.log("[reconcileCredits] inputs:", {
+      donations: {
+        total: Number(donationStats?.total ?? 0),
+        valid: Number(donationStats?.valid ?? 0),
+        matchable: Number(donationStats?.matchable ?? 0),
+      },
+      credits: {
+        total: Number(creditStats?.total ?? 0),
+        valid: Number(creditStats?.valid ?? 0),
+        matchable: Number(creditStats?.matchable ?? 0),
+      },
+    });
+  }
 
   // Match key is considered complete when both halves are non-empty.
   // Empty either side keeps the row out of matched / divergent buckets.
@@ -257,7 +259,9 @@ export async function reconcileCredits({ emitChange = true } = {}) {
     acc[String(row.match_status)] = Number(row.total ?? 0);
     return acc;
   }, {});
-  console.log("[reconcileCredits] result:", counts);
+  if (import.meta.env.DEV) {
+    console.log("[reconcileCredits] result:", counts);
+  }
 
   if (emitChange) {
     notifyDatabaseChanged({ source: "reconcile-credits" });

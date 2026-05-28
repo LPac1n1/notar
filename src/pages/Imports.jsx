@@ -859,26 +859,38 @@ export default function Imports() {
           >
             Re-rodar conciliação
           </Button>
-          <Button
-            variant="subtle"
-            onClick={handleExportDonorCsv}
-            disabled={isExporting}
-            isLoading={isExporting && exportKind === "donor"}
-            loadingLabel="Exportando..."
-            leftIcon={<DownloadIcon className="h-4 w-4" />}
-          >
-            Exportar conciliação (doadores)
-          </Button>
-          <Button
-            variant="subtle"
-            onClick={handleExportPairsCsv}
-            disabled={isExporting}
-            isLoading={isExporting && exportKind === "pairs"}
-            loadingLabel="Exportando..."
-            leftIcon={<DownloadIcon className="h-4 w-4" />}
-          >
-            Exportar pareamentos
-          </Button>
+          {/* Exports are secondary actions — collapsed into a single details
+              panel so the toolbar stays a single line on common breakpoints.
+              Open state is uncontrolled; users who export often can leave
+              it expanded without re-clicking. */}
+          <details className="ml-auto group">
+            <summary className="inline-flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] transition-colors hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)]">
+              <DownloadIcon className="h-4 w-4" />
+              Exportar conciliação
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                variant="subtle"
+                onClick={handleExportDonorCsv}
+                disabled={isExporting}
+                isLoading={isExporting && exportKind === "donor"}
+                loadingLabel="Exportando..."
+                leftIcon={<DownloadIcon className="h-4 w-4" />}
+              >
+                Por doador (CSV)
+              </Button>
+              <Button
+                variant="subtle"
+                onClick={handleExportPairsCsv}
+                disabled={isExporting}
+                isLoading={isExporting && exportKind === "pairs"}
+                loadingLabel="Exportando..."
+                leftIcon={<DownloadIcon className="h-4 w-4" />}
+              >
+                Pareamentos (CSV)
+              </Button>
+            </div>
+          </details>
         </div>
       </SectionCard>
 

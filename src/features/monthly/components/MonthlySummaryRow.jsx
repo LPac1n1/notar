@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { ChevronDownIcon, WarningIcon } from "../../../components/ui/icons";
@@ -24,7 +24,7 @@ const RECONCILIATION_BADGE = {
   },
 };
 
-export default function MonthlySummaryRow({
+function MonthlySummaryRowBase({
   summary,
   isUpdating = false,
   onNavigate,
@@ -395,3 +395,12 @@ export default function MonthlySummaryRow({
     </article>
   );
 }
+
+// Memoized so flipping one row's `isUpdating` (during the StatusToggle
+// round-trip) doesn't re-render the other 999 rows in a large month.
+// Default shallow comparison is enough — every prop here is either a
+// primitive or a stable callback/object from the parent's useCallback /
+// useMemo chains.
+const MonthlySummaryRow = memo(MonthlySummaryRowBase);
+
+export default MonthlySummaryRow;

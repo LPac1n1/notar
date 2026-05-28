@@ -274,10 +274,15 @@ export async function prepareCreditImportPreview(file) {
     // the donations side log — open DevTools → Console after upload preview
     // to verify the column mapping. An empty value for `numero` or
     // `dataEmissao` here forces the match key to fall back to "".
-    console.log("[CreditsPage.preview] Detected columns for credit import:", {
-      fileColumns: columnNames,
-      creditColumns,
-    });
+    if (import.meta.env.DEV) {
+      console.log(
+        "[CreditsPage.preview] Detected columns for credit import:",
+        {
+          fileColumns: columnNames,
+          creditColumns,
+        },
+      );
+    }
 
     // Validate up front so the modal can show a clear error instead of
     // silently importing zero rows.

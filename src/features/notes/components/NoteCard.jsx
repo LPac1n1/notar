@@ -1,9 +1,10 @@
+import { memo } from "react";
 import Button from "../../../components/ui/Button";
 import { EditIcon, TrashIcon } from "../../../components/ui/icons";
 import { formatDateTimePtBR } from "../../../utils/date";
 import NoteContentPreview from "./NoteContentPreview";
 
-export default function NoteCard({ note, onEdit, onDelete }) {
+function NoteCardBase({ note, onEdit, onDelete }) {
   return (
     <article className="flex min-h-64 min-w-0 flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface-elevated)]">
       <div
@@ -51,3 +52,7 @@ export default function NoteCard({ note, onEdit, onDelete }) {
     </article>
   );
 }
+
+const NoteCard = memo(NoteCardBase);
+
+export default NoteCard;

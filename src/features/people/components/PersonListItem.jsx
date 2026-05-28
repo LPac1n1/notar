@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Button from "../../../components/ui/Button";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
@@ -9,7 +10,7 @@ import {
 import { formatDateTimePtBR } from "../../../utils/date";
 import { formatInteger } from "../../../utils/format";
 
-export default function PersonListItem({
+function PersonListItemBase({
   onConvert,
   onEdit,
   onRemove,
@@ -75,3 +76,7 @@ export default function PersonListItem({
     </li>
   );
 }
+
+const PersonListItem = memo(PersonListItemBase);
+
+export default PersonListItem;

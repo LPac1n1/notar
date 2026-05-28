@@ -1,10 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { AUDIT_NAV_ITEMS, CONFIG_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
 import { countDonorReconciliationIssues } from "../../services/reconciliation/creditReconciliationService";
 import { useDatabaseChangeEffect } from "../../hooks/useDatabaseChangeEffect";
 import { logError } from "../../services/logger";
 import { formatInteger } from "../../utils/format";
+
+// Debounce window for the reconciliation badge recount. The badge listens
+// to four domains (credits, monthly, donors, imports) so flows that emit
+// several events back-to-back (reimport runs end-to-end, bulk abatement)
+// would otherwise re-query every time. 400ms is long enough to coalesce
+// those bursts without making the badge feel stale on single edits.
+const RECONCILIATION_RECOUNT_DEBOUNCE_MS = 400;
 
 function NavItem({ item, compact = false, badgeCount = 0 }) {
   const Icon = item.icon;
@@ -128,6 +135,7 @@ function FooterNavItem({ item }) {
 
 export default function Sidebar() {
   const [reconciliationIssueCount, setReconciliationIssueCount] = useState(0);
+  const recountTimerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,20 +146,33 @@ export default function Sidebar() {
       .catch((err) => logError("Sidebar.reconciliationIssues", err));
     return () => {
       cancelled = true;
+      if (recountTimerRef.current) {
+        clearTimeout(recountTimerRef.current);
+        recountTimerRef.current = null;
+      }
     };
   }, []);
 
   // Refresh the badge whenever the reconciliation table moves. Listening
   // to `monthly` too because flipping abatement_status can move a donor
   // into the `exceeded` bucket even without a fresh reconcile.
+  //
+  // Debounced so bursts of events (e.g. reimport, which fires 4 domains in
+  // quick succession) collapse into one recount instead of four.
   useDatabaseChangeEffect(
-    async () => {
-      try {
-        const count = await countDonorReconciliationIssues();
-        setReconciliationIssueCount(count);
-      } catch (err) {
-        logError("Sidebar.reconciliationIssues", err);
+    () => {
+      if (recountTimerRef.current) {
+        clearTimeout(recountTimerRef.current);
       }
+      recountTimerRef.current = setTimeout(async () => {
+        recountTimerRef.current = null;
+        try {
+          const count = await countDonorReconciliationIssues();
+          setReconciliationIssueCount(count);
+        } catch (err) {
+          logError("Sidebar.reconciliationIssues", err);
+        }
+      }, RECONCILIATION_RECOUNT_DEBOUNCE_MS);
     },
     { domains: ["credits", "monthly", "donors", "imports"] },
   );

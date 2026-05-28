@@ -25,8 +25,18 @@ import {
   exportMonthlySummariesCsv,
   exportReconciliationByDonorCsv,
 } from "../services/exportService";
-import { exportDonationReportPdf } from "../features/reports/services/donationPdfReportService";
-import { exportDonationReportJpeg } from "../features/reports/services/donationJpegReportService";
+// PDF + JPEG report modules pull a large dependency chain (custom PDF
+// writer, zip archiver, JPEG canvas pipeline). Dynamic-import them at the
+// point of use so a user who never exports a report doesn't pay the cost
+// in the initial bundle.
+const loadPdfReportExporter = () =>
+  import("../features/reports/services/donationPdfReportService").then(
+    (mod) => mod.exportDonationReportPdf,
+  );
+const loadJpegReportExporter = () =>
+  import("../features/reports/services/donationJpegReportService").then(
+    (mod) => mod.exportDonationReportJpeg,
+  );
 import { listImports } from "../services/importService";
 import { listMonthlySummaries } from "../services/monthlyService";
 import { listDonorReconciliationStatuses } from "../services/reconciliation/creditReconciliationService";
@@ -397,6 +407,7 @@ export default function Monthly() {
       setSuccessMessage("");
       setSuccessAction(null);
       setIsExportingPdf(true);
+      const exportDonationReportPdf = await loadPdfReportExporter();
       const result = await monthlyOperation.run(
         () => exportDonationReportPdf(filters),
         {
@@ -451,6 +462,7 @@ export default function Monthly() {
       setSuccessMessage("");
       setSuccessAction(null);
       setIsExportingJpeg(true);
+      const exportDonationReportJpeg = await loadJpegReportExporter();
       const result = await monthlyOperation.run(
         () => exportDonationReportJpeg(filters),
         {

@@ -240,12 +240,22 @@ export default function MonthlyImportsOverviewSection({
       ) : (
         <div aria-busy={isRefreshing} className="overflow-x-auto">
           <table className="min-w-full divide-y divide-[var(--line)] text-left text-sm">
+            <caption className="sr-only">
+              Visão por mês de planilhas de doações, planilhas de créditos e
+              estado da conciliação para cada mês importado.
+            </caption>
             <thead className="bg-[var(--surface-strong)] text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
-                <th className="px-3 py-2">Mês</th>
-                <th className="px-3 py-2 min-w-[260px]">Planilha de doações</th>
-                <th className="px-3 py-2 min-w-[260px]">Planilha de créditos</th>
-                <th className="px-3 py-2 min-w-[260px]">Conciliação</th>
+                <th scope="col" className="px-3 py-2">Mês</th>
+                <th scope="col" className="px-3 py-2 min-w-[260px]">
+                  Planilha de doações
+                </th>
+                <th scope="col" className="px-3 py-2 min-w-[260px]">
+                  Planilha de créditos
+                </th>
+                <th scope="col" className="px-3 py-2 min-w-[260px]">
+                  Conciliação
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)] bg-[var(--surface-elevated)]">

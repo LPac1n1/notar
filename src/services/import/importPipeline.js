@@ -601,13 +601,18 @@ export async function processImportedFile({
     // claimed by each schema field. Open DevTools → Console after an import
     // to confirm the parser detected the columns you expect; an empty value
     // here is exactly why the reconciliation match key falls back to "".
-    console.log("[ImportsPage.process] Detected columns for donations import:", {
-      fileColumns: fileColumnNames,
-      cpfColumn,
-      orderStatusColumn,
-      donationColumns,
-      hasPerNoteFormat,
-    });
+    if (import.meta.env.DEV) {
+      console.log(
+        "[ImportsPage.process] Detected columns for donations import:",
+        {
+          fileColumns: fileColumnNames,
+          cpfColumn,
+          orderStatusColumn,
+          donationColumns,
+          hasPerNoteFormat,
+        },
+      );
+    }
 
     // Wrap the heavy work in a single transaction so DuckDB-WASM does ONE
     // OPFS commit at the end instead of one per top-level statement, and so
@@ -1122,13 +1127,18 @@ export async function applyReimport(previewData, { onProgress } = {}) {
   // observable too. When the user reports that "matches only appear after a
   // second re-import", we want to see whether the *first* re-import
   // actually detected the columns correctly.
-  console.log("[ImportsPage.reimport] Detected columns for donations re-import:", {
-    importId,
-    cpfColumn,
-    orderStatusColumn,
-    donationColumns,
-    hasPerNoteFormat,
-  });
+  if (import.meta.env.DEV) {
+    console.log(
+      "[ImportsPage.reimport] Detected columns for donations re-import:",
+      {
+        importId,
+        cpfColumn,
+        orderStatusColumn,
+        donationColumns,
+        hasPerNoteFormat,
+      },
+    );
+  }
 
   try {
     // Wrap the whole reimport in a single outer transaction. Inner

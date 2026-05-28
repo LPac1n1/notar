@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import Button from "../../../components/ui/Button";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
@@ -132,7 +132,7 @@ function DonorActionMenu({
   );
 }
 
-export default function DonorListItem({
+function DonorListItemBase({
   donor,
   onDeactivate,
   onEdit,
@@ -307,3 +307,9 @@ export default function DonorListItem({
     </li>
   );
 }
+
+// Memoized — Donors page can render 500-2k rows, and parent state churn
+// (filters typing, pagination changes) was re-rendering every row.
+const DonorListItem = memo(DonorListItemBase);
+
+export default DonorListItem;
