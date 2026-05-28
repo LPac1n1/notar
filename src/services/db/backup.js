@@ -467,7 +467,7 @@ export async function exportDatabaseSnapshot() {
 
 export async function restoreDatabaseSnapshot(
   snapshot,
-  { allowEmpty = false, emitChange = true } = {},
+  { allowEmpty = false, emitChange = true, onProgress } = {},
 ) {
   const normalizedSnapshot = normalizeSnapshotPayload(snapshot);
 
@@ -526,6 +526,25 @@ export async function restoreDatabaseSnapshot(
   // SQL size limit even for the widest table here (donation_notes, 13 cols).
   const BULK_INSERT_CHUNK_SIZE = 500;
 
+  // Pre-compute the per-table row count so the progress callback can
+  // report a meaningful "X / Y rows" indicator. Costs an extra pass over
+  // the snapshot but it's all in-memory JS arrays — negligible compared
+  // to the actual INSERTs.
+  const totalRowsToInsert = tableEntriesToInsert.reduce(
+    (sum, [, rows]) => sum + (rows?.length ?? 0),
+    0,
+  );
+  let restoredRows = 0;
+  const notifyProgress = (tableName) => {
+    if (typeof onProgress !== "function") return;
+    onProgress({
+      phase: "restore",
+      currentTable: tableName,
+      restoredRows,
+      totalRows: totalRowsToInsert,
+    });
+  };
+
   await runInTransaction(
     async () => {
       for (const tableName of tableOrderToClear) {
@@ -537,6 +556,8 @@ export async function restoreDatabaseSnapshot(
 
         const allowedColumns = RESTORE_TABLE_COLUMNS[tableName] ?? [];
         if (allowedColumns.length === 0) continue;
+
+        notifyProgress(tableName);
 
         // Decide the column set ONCE per table — taken from the union of
         // allowed columns and what the first row carries. All subsequent
@@ -570,6 +591,8 @@ export async function restoreDatabaseSnapshot(
             INSERT INTO ${tableName} (${sampleColumns.join(", ")})
             VALUES ${valuesSql}
           `);
+          restoredRows += chunk.length;
+          notifyProgress(tableName);
         }
       }
     },

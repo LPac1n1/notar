@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import Button from "../../../components/ui/Button";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
+import ImportProgressIndicator from "../../../components/ui/ImportProgressIndicator";
 import Modal from "../../../components/ui/Modal";
 import { LoadingIcon } from "../../../components/ui/icons";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -68,6 +69,7 @@ export default function CreditReimportModal({
   errorMessage = "",
   isApplying,
   isPreviewLoading,
+  reimportStep = null,
   onCancel,
   onClose,
   onConfirm,
@@ -180,6 +182,8 @@ export default function CreditReimportModal({
           />
         </div>
       )}
+
+      {isApplying ? <ImportProgressIndicator step={reimportStep} /> : null}
 
       <div className="mt-5 flex flex-wrap justify-end gap-3">
         {preview ? (

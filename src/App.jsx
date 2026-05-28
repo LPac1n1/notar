@@ -15,6 +15,85 @@ const HYDRATION_STEP_LABELS = {
   restore: "Carregando dados no banco…",
 };
 
+const RESTORE_TABLE_LABELS = {
+  demands: "demandas",
+  people: "pessoas",
+  donors: "doadores",
+  donor_cpf_links: "vínculos de CPF",
+  imports: "importações de doações",
+  donation_notes: "notas de doação",
+  import_cpf_summary: "resumo de CPFs por importação",
+  monthly_donor_summary: "resumo mensal por doador",
+  notes: "anotações",
+  action_history: "histórico de ações",
+  donor_activity_history: "histórico de atividade dos doadores",
+  abatement_adjustments: "ajustes de abatimento",
+  credit_imports: "importações de crédito",
+  credit_notes: "notas de crédito",
+  credit_reconciliation: "conciliação de créditos",
+  trash_items: "lixeira",
+};
+
+const ROW_FORMATTER = new Intl.NumberFormat("pt-BR");
+
+function formatProgressDescription(step) {
+  if (!step) return "Preparando o Notar…";
+  const baseLabel = HYDRATION_STEP_LABELS[step.step] ?? "Preparando o Notar…";
+
+  if (step.step !== "restore" || !step.totalRows) {
+    return baseLabel;
+  }
+
+  const friendlyTable = step.currentTable
+    ? (RESTORE_TABLE_LABELS[step.currentTable] ?? step.currentTable)
+    : null;
+  const restored = ROW_FORMATTER.format(step.restoredRows ?? 0);
+  const total = ROW_FORMATTER.format(step.totalRows);
+
+  if (friendlyTable) {
+    return `Restaurando ${friendlyTable} (${restored} de ${total} linhas)…`;
+  }
+  return `Restaurando dados (${restored} de ${total} linhas)…`;
+}
+
+function HydrationProgressBar({ step }) {
+  if (
+    !step ||
+    step.step !== "restore" ||
+    typeof step.totalRows !== "number" ||
+    step.totalRows <= 0
+  ) {
+    return null;
+  }
+
+  const restored = Math.max(0, Math.min(step.restoredRows ?? 0, step.totalRows));
+  const percent = Math.round((restored / step.totalRows) * 100);
+
+  return (
+    <div className="mt-4 w-full max-w-md">
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-label="Progresso da restauração"
+        className="h-2 w-full overflow-hidden rounded-full bg-[color:var(--surface-muted)]"
+      >
+        <div
+          className="h-full rounded-full bg-[color:var(--accent-strong)] transition-[width] duration-200 ease-out"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-[var(--muted)]">
+        <span>{percent}%</span>
+        <span>
+          {ROW_FORMATTER.format(restored)} / {ROW_FORMATTER.format(step.totalRows)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function CloudSyncGate() {
   const { hydrationStatus, hydrationStep, hydrationError } = useCloudSync();
   const { signOut } = useAuth();
@@ -60,12 +139,13 @@ function CloudSyncGate() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] p-6">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--surface)] p-6">
       <div className="w-full max-w-md">
         <LoadingScreen
           title="Carregando seus dados"
-          description={HYDRATION_STEP_LABELS[hydrationStep] ?? "Preparando o Notar…"}
+          description={formatProgressDescription(hydrationStep)}
         />
+        <HydrationProgressBar step={hydrationStep} />
       </div>
     </div>
   );

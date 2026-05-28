@@ -468,8 +468,14 @@ export async function processImportedFile({
   referenceMonth,
   cpfColumn,
   valuePerNote,
+  onProgress,
 }) {
   const normalizedMonth = startOfMonth(referenceMonth);
+  const reportProgress = (event) => {
+    if (typeof onProgress === "function") {
+      onProgress(event);
+    }
+  };
 
   if (!registeredFileName || !originalFileName) {
     throw new Error("Arquivo de importação inválido.");
@@ -486,6 +492,10 @@ export async function processImportedFile({
   let importId = "";
 
   try {
+    reportProgress({
+      step: "validating",
+      label: "Validando colunas da planilha...",
+    });
     importId = await createImportRecord({
       referenceMonth: normalizedMonth,
       fileName: originalFileName,
@@ -535,6 +545,10 @@ export async function processImportedFile({
     let cpfCounts;
 
     if (hasPerNoteFormat) {
+      reportProgress({
+        step: "inserting-notes",
+        label: "Inserindo notas no banco...",
+      });
       await populateDonationNotesFromCsv({
         importId,
         registeredFileName,
@@ -544,8 +558,16 @@ export async function processImportedFile({
         normalizedMonth,
       });
 
+      reportProgress({
+        step: "aggregating",
+        label: "Agregando contagem por CPF...",
+      });
       cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
     } else {
+      reportProgress({
+        step: "aggregating",
+        label: "Lendo planilha e agregando CPFs...",
+      });
       const invalidStatusExpression = buildInvalidStatusExpression(orderStatusColumn);
 
       const cpfCountsRaw = await query(`
@@ -566,16 +588,28 @@ export async function processImportedFile({
       }));
     }
 
+    reportProgress({
+      step: "reconciling-donors",
+      label: "Conciliando CPFs com doadores cadastrados...",
+    });
     await saveImportCpfSummary({
       importId,
       referenceMonth: normalizedMonth,
       cpfCounts,
     }, { emitChange: false });
 
+    reportProgress({
+      step: "reconciling-credits",
+      label: "Conciliando doações com créditos...",
+    });
     await reconcileCredits({ emitChange: false });
 
     notifyDatabaseChanged({ source: "import" });
 
+    reportProgress({
+      step: "finalizing",
+      label: "Salvando histórico da importação...",
+    });
     await createActionHistoryEntry({
       actionType: "import",
       entityType: "import",
@@ -592,6 +626,8 @@ export async function processImportedFile({
         ),
       },
     });
+
+    reportProgress({ step: "done" });
 
     return importId;
   } catch (error) {
@@ -979,10 +1015,16 @@ export async function cancelReimportPreview(previewData) {
  * rebuilding `monthly_donor_summary`, so re-imports never lose progress for
  * CPFs that remain in the new file.
  */
-export async function applyReimport(previewData) {
+export async function applyReimport(previewData, { onProgress } = {}) {
   if (!previewData?.importId || !previewData?.registeredFileName) {
     throw new Error("Pré-visualização da reimportação inválida.");
   }
+
+  const reportProgress = (event) => {
+    if (typeof onProgress === "function") {
+      onProgress(event);
+    }
+  };
 
   const {
     importId,
@@ -1008,6 +1050,10 @@ export async function applyReimport(previewData) {
   });
 
   try {
+    reportProgress({
+      step: "validating",
+      label: "Limpando notas anteriores...",
+    });
     // Wipe old donation_notes for this import — the new file is the source of
     // truth from this point. `saveImportCpfSummary` handles the corresponding
     // wipe-and-reinsert of `import_cpf_summary`; the chained `reconcileImport`
@@ -1021,6 +1067,10 @@ export async function applyReimport(previewData) {
     let cpfCounts;
 
     if (hasPerNoteFormat) {
+      reportProgress({
+        step: "inserting-notes",
+        label: "Inserindo notas no banco...",
+      });
       await populateDonationNotesFromCsv({
         importId,
         registeredFileName,
@@ -1030,8 +1080,16 @@ export async function applyReimport(previewData) {
         normalizedMonth: referenceMonth,
       });
 
+      reportProgress({
+        step: "aggregating",
+        label: "Agregando contagem por CPF...",
+      });
       cpfCounts = await aggregateCpfCountsFromDonationNotes(importId);
     } else {
+      reportProgress({
+        step: "aggregating",
+        label: "Lendo planilha e agregando CPFs...",
+      });
       cpfCounts = await parseCpfCountsFromCsv({
         registeredFileName,
         cpfColumn,
@@ -1050,6 +1108,10 @@ export async function applyReimport(previewData) {
       [originalFileName, importId],
     );
 
+    reportProgress({
+      step: "reconciling-donors",
+      label: "Conciliando CPFs com doadores cadastrados...",
+    });
     await saveImportCpfSummary(
       {
         importId,
@@ -1059,10 +1121,18 @@ export async function applyReimport(previewData) {
       { emitChange: false },
     );
 
+    reportProgress({
+      step: "reconciling-credits",
+      label: "Conciliando doações com créditos...",
+    });
     await reconcileCredits({ emitChange: false });
 
     notifyDatabaseChanged({ source: "reimport" });
 
+    reportProgress({
+      step: "finalizing",
+      label: "Salvando histórico da reimportação...",
+    });
     await createActionHistoryEntry({
       actionType: "import",
       entityType: "import",
@@ -1080,6 +1150,8 @@ export async function applyReimport(previewData) {
         ),
       },
     });
+
+    reportProgress({ step: "done" });
 
     return importId;
   } finally {

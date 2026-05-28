@@ -425,6 +425,13 @@ export async function hydrateFromCloud(userId, { onProgress } = {}) {
       await restoreDatabaseSnapshot(effectiveSnapshot, {
         allowEmpty: true,
         emitChange: false,
+        // Forward per-table progress to the same callback so the
+        // CloudSyncGate can show "Restaurando donation_notes (8.500 /
+        // 30.000)" instead of a flat "Restaurando…". String key keeps
+        // the public API back-compatible for callers that only care
+        // about the phase.
+        onProgress: (progress) =>
+          onProgress?.({ step: "restore", ...progress }),
       });
       return {
         hydrated: true,

@@ -12,6 +12,7 @@ import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDet
 import CpfSummarySection from "../features/imports/components/CpfSummarySection";
 import ImportHistorySection from "../features/imports/components/ImportHistorySection";
 import ImportUploadModal from "../features/imports/components/ImportUploadModal";
+import MonthlyImportsOverviewSection from "../features/imports/components/MonthlyImportsOverviewSection";
 import ReimportModal from "../features/imports/components/ReimportModal";
 import {
   CPF_REGISTRATION_FILTER_OPTIONS,
@@ -97,6 +98,7 @@ export default function Imports() {
   const [successAction, setSuccessAction] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importStep, setImportStep] = useState(null);
   const importModal = useModalState(false);
   const removeModal = useModalState(null);
   const detailsModal = useModalState(null);
@@ -107,6 +109,7 @@ export default function Imports() {
   const [reimportPreview, setReimportPreview] = useState(null);
   const [isReimportPreviewLoading, setIsReimportPreviewLoading] = useState(false);
   const [isReimportApplying, setIsReimportApplying] = useState(false);
+  const [reimportStep, setReimportStep] = useState(null);
   const [reimportError, setReimportError] = useState("");
   const navigate = useNavigate();
 
@@ -403,6 +406,7 @@ export default function Imports() {
       setSuccessMessage("");
       setSuccessAction(null);
       setIsImporting(true);
+      setImportStep({ step: "starting", label: "Preparando importação..." });
       await importOperation.run(
         () =>
           processImportedFile({
@@ -411,6 +415,7 @@ export default function Imports() {
             referenceMonth: uploadForm.referenceMonth,
             valuePerNote: uploadForm.valuePerNote,
             cpfColumn: uploadForm.cpfColumn,
+            onProgress: (event) => setImportStep(event),
           }),
         {
           loadingMessage: "Processando importação e conciliando CPFs...",
@@ -445,6 +450,7 @@ export default function Imports() {
       setError(getErrorMessage(err, "Não foi possível processar a importação."));
     } finally {
       setIsImporting(false);
+      setImportStep(null);
     }
   };
 
@@ -607,10 +613,17 @@ export default function Imports() {
 
     setIsReimportApplying(true);
     setReimportError("");
+    setReimportStep({ step: "starting", label: "Preparando reimportação..." });
     try {
-      await importOperation.run(() => applyReimport(reimportPreview), {
-        loadingMessage: "Aplicando reimportação...",
-      });
+      await importOperation.run(
+        () =>
+          applyReimport(reimportPreview, {
+            onProgress: (event) => setReimportStep(event),
+          }),
+        {
+          loadingMessage: "Aplicando reimportação...",
+        },
+      );
       setReimportPreview(null);
       reimportModal.close();
       await refreshImports();
@@ -622,6 +635,7 @@ export default function Imports() {
       );
     } finally {
       setIsReimportApplying(false);
+      setReimportStep(null);
     }
   };
 
@@ -688,6 +702,7 @@ export default function Imports() {
             errorMessage={error}
             fileInputKey={fileInputKey}
             isImporting={isImporting}
+            importStep={importStep}
             isPreviewLoading={isPreviewLoading}
             onChange={handleUploadChange}
             onClose={handleCloseImportModal}
@@ -700,6 +715,8 @@ export default function Imports() {
           />
         ) : null}
       </AnimatePresence>
+
+      <MonthlyImportsOverviewSection />
 
       <ImportHistorySection
         deletingImportId={deletingImportId}
@@ -770,6 +787,7 @@ export default function Imports() {
             importItem={reimportModal.value}
             isPreviewLoading={isReimportPreviewLoading}
             isApplying={isReimportApplying}
+            reimportStep={reimportStep}
             onCancel={handleCancelReimportPreview}
             onClose={handleCloseReimportModal}
             onConfirm={handleConfirmReimport}

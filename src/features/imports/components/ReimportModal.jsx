@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import Button from "../../../components/ui/Button";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
+import ImportProgressIndicator from "../../../components/ui/ImportProgressIndicator";
 import Modal from "../../../components/ui/Modal";
 import { LoadingIcon } from "../../../components/ui/icons";
 import { formatCpf } from "../../../utils/cpf";
@@ -66,6 +67,7 @@ export default function ReimportModal({
   importItem,
   isPreviewLoading,
   isApplying,
+  reimportStep = null,
   onCancel,
   onClose,
   onConfirm,
@@ -216,6 +218,8 @@ export default function ReimportModal({
           />
         </div>
       )}
+
+      {isApplying ? <ImportProgressIndicator step={reimportStep} /> : null}
 
       <div className="mt-5 flex flex-wrap justify-end gap-3">
         {preview ? (

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import EmptyState from "../components/ui/EmptyState";
@@ -10,8 +11,10 @@ import SectionCard from "../components/ui/SectionCard";
 import { SkeletonRows } from "../components/ui/Skeleton";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import CreditHistoryItem from "../features/credits/components/CreditHistoryItem";
+import CreditNotesSection from "../features/credits/components/CreditNotesSection";
 import CreditReimportModal from "../features/credits/components/CreditReimportModal";
 import CreditUploadModal from "../features/credits/components/CreditUploadModal";
+import { formatMonthYear } from "../utils/date";
 import { useDataResource } from "../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
@@ -41,6 +44,12 @@ import { formatInteger } from "../utils/format";
 
 const INITIAL_UPLOAD_FORM = { referenceMonth: "" };
 
+const INITIAL_CREDIT_NOTES_FILTERS = {
+  referenceMonth: "",
+  status: "",
+  search: "",
+};
+
 export default function Credits() {
   const [uploadPreview, setUploadPreview] = useState(null);
   const [uploadForm, setUploadForm] = useState({ ...INITIAL_UPLOAD_FORM });
@@ -52,7 +61,9 @@ export default function Credits() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isReimportPreviewLoading, setIsReimportPreviewLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importStep, setImportStep] = useState(null);
   const [isReimportApplying, setIsReimportApplying] = useState(false);
+  const [reimportStep, setReimportStep] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportKind, setExportKind] = useState("");
   const [isReconciling, setIsReconciling] = useState(false);
@@ -60,10 +71,45 @@ export default function Credits() {
   const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
+  const [creditNotesFilters, setCreditNotesFilters] = useState({
+    ...INITIAL_CREDIT_NOTES_FILTERS,
+  });
 
   const uploadModal = useModalState(false);
   const reimportModal = useModalState(null);
   const removeModal = useModalState(null);
+  const navigate = useNavigate();
+
+  const handleCreditNotesFilterChange = useCallback((event) => {
+    const { name, value } = event.target;
+    setCreditNotesFilters((current) => ({ ...current, [name]: value }));
+  }, []);
+
+  const handleClearCreditNotesFilters = useCallback(() => {
+    setCreditNotesFilters({ ...INITIAL_CREDIT_NOTES_FILTERS });
+  }, []);
+
+  const handleOpenDonorProfile = useCallback(
+    (donorId) => {
+      if (!donorId) return;
+      navigate(`/doadores/${encodeURIComponent(donorId)}`);
+    },
+    [navigate],
+  );
+
+  const creditNotesMonthOptions = useMemo(() => {
+    const months = new Map();
+    for (const item of creditImports ?? []) {
+      if (!item.referenceMonth) continue;
+      if (!months.has(item.referenceMonth)) {
+        months.set(item.referenceMonth, formatMonthYear(item.referenceMonth));
+      }
+    }
+    return [
+      { value: "", label: "Todos os meses" },
+      ...Array.from(months, ([value, label]) => ({ value, label })),
+    ];
+  }, [creditImports]);
 
   const {
     data: creditImports,
@@ -214,11 +260,13 @@ export default function Credits() {
       setSuccessMessage("");
       setSuccessAction(null);
       setIsImporting(true);
+      setImportStep({ step: "starting", label: "Preparando importação..." });
       const createdImportId = await processCreditImport({
         registeredFileName: uploadPreview.registeredFileName,
         originalFileName: uploadPreview.originalFileName,
         creditColumns: uploadPreview.creditColumns,
         referenceMonth: uploadForm.referenceMonth,
+        onProgress: (event) => setImportStep(event),
       });
       setUploadPreview(null);
       setUploadForm({ ...INITIAL_UPLOAD_FORM });
@@ -251,6 +299,7 @@ export default function Credits() {
       );
     } finally {
       setIsImporting(false);
+      setImportStep(null);
     }
   };
 
@@ -393,7 +442,10 @@ export default function Credits() {
     try {
       setReimportError("");
       setIsReimportApplying(true);
-      await applyReimportCredit(reimportPreview);
+      setReimportStep({ step: "starting", label: "Preparando reimportação..." });
+      await applyReimportCredit(reimportPreview, {
+        onProgress: (event) => setReimportStep(event),
+      });
       setReimportPreview(null);
       setReimportTarget(null);
       reimportModal.close();
@@ -406,6 +458,7 @@ export default function Credits() {
       );
     } finally {
       setIsReimportApplying(false);
+      setReimportStep(null);
     }
   };
 
@@ -493,6 +546,7 @@ export default function Credits() {
             errors={uploadFormErrors}
             fileInputKey={fileInputKey}
             isImporting={isImporting}
+            importStep={importStep}
             onChange={handleUploadFormChange}
             onClose={handleCloseUpload}
             onPreviewImport={handlePreviewUpload}
@@ -540,6 +594,14 @@ export default function Credits() {
         )}
       </SectionCard>
 
+      <CreditNotesSection
+        filters={creditNotesFilters}
+        onFilterChange={handleCreditNotesFilterChange}
+        onClearFilters={handleClearCreditNotesFilters}
+        onOpenDonorProfile={handleOpenDonorProfile}
+        referenceMonthOptions={creditNotesMonthOptions}
+      />
+
       <AnimatePresence>
         {reimportModal.isOpen && reimportTarget ? (
           <CreditReimportModal
@@ -547,6 +609,7 @@ export default function Credits() {
             errorMessage={reimportError}
             isApplying={isReimportApplying}
             isPreviewLoading={isReimportPreviewLoading}
+            reimportStep={reimportStep}
             onCancel={handleResetReimportFile}
             onClose={handleCloseReimport}
             onConfirm={handleConfirmReimport}

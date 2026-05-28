@@ -286,7 +286,14 @@ export async function processCreditImport({
   originalFileName,
   creditColumns,
   referenceMonth,
+  onProgress,
 }) {
+  const reportProgress = (event) => {
+    if (typeof onProgress === "function") {
+      onProgress(event);
+    }
+  };
+
   if (!registeredFileName || !originalFileName) {
     throw new Error("Arquivo de importação inválido.");
   }
@@ -296,6 +303,10 @@ export async function processCreditImport({
     throw new Error("Informe o mês de referência da planilha de créditos.");
   }
 
+  reportProgress({
+    step: "validating",
+    label: "Validando colunas da planilha de créditos...",
+  });
   assertCreditColumnsPresent(creditColumns);
 
   const existingImport = await query(`
@@ -334,6 +345,10 @@ export async function processCreditImport({
       { emitChange: false },
     );
 
+    reportProgress({
+      step: "inserting-notes",
+      label: "Inserindo créditos no banco...",
+    });
     await runInTransaction(
       async () => {
         await populateCreditNotesFromCsv({
@@ -345,6 +360,10 @@ export async function processCreditImport({
       { emitChange: false },
     );
 
+    reportProgress({
+      step: "aggregating",
+      label: "Calculando totais da importação...",
+    });
     const totals = await aggregateCreditImportTotals(creditImportId);
 
     await execute(`
@@ -357,10 +376,18 @@ export async function processCreditImport({
       WHERE id = '${escapeSqlString(creditImportId)}'
     `);
 
+    reportProgress({
+      step: "reconciling-credits",
+      label: "Conciliando créditos com doações...",
+    });
     await reconcileCredits({ emitChange: false });
 
     notifyDatabaseChanged({ source: "credit-import" });
 
+    reportProgress({
+      step: "finalizing",
+      label: "Salvando histórico da importação...",
+    });
     await createActionHistoryEntry({
       actionType: "import",
       entityType: "credit_import",
@@ -373,6 +400,8 @@ export async function processCreditImport({
         validRows: totals.validRows,
       },
     });
+
+    reportProgress({ step: "done" });
 
     return creditImportId;
   } catch (error) {
@@ -394,6 +423,203 @@ export async function processCreditImport({
   } finally {
     await releaseRegisteredFile(registeredFileName);
   }
+}
+
+/**
+ * Builds the WHERE-clause fragments shared by `listCreditNotes` and
+ * `countCreditNotes`. Returns `{ conditions, params }` so both callers
+ * splice the same SQL into different shapes (SELECT vs COUNT). All filters
+ * are optional — empty values short-circuit so the caller just lists
+ * everything.
+ *
+ * Status filter values map to columns the UI can show together:
+ *   - "valid" / "invalid"           → credit_notes.is_valid
+ *   - "matched" / "divergent" /
+ *     "credit_only" /
+ *     "duplicate_credit"            → credit_reconciliation.match_status
+ *
+ * `search` matches against the digits-only CNPJ + numero_nota; we strip
+ * the user input to digits and check via LIKE so "12.345" and "12345"
+ * find the same notes.
+ */
+function buildCreditNotesFilters({
+  creditImportId,
+  referenceMonth,
+  statusFilter,
+  search,
+}) {
+  const conditions = [];
+  const params = [];
+
+  if (creditImportId) {
+    conditions.push("credit_notes.credit_import_id = ?");
+    params.push(creditImportId);
+  }
+
+  if (referenceMonth) {
+    conditions.push("credit_imports.reference_month = ?");
+    params.push(referenceMonth);
+  }
+
+  if (statusFilter === "valid") {
+    conditions.push("credit_notes.is_valid = TRUE");
+  } else if (statusFilter === "invalid") {
+    conditions.push("credit_notes.is_valid = FALSE");
+  } else if (
+    statusFilter === "matched" ||
+    statusFilter === "divergent" ||
+    statusFilter === "credit_only" ||
+    statusFilter === "duplicate_credit"
+  ) {
+    conditions.push("credit_reconciliation.match_status = ?");
+    params.push(statusFilter);
+  }
+
+  if (search) {
+    const digitsOnly = String(search).replace(/[^0-9]/g, "");
+    if (digitsOnly) {
+      conditions.push(
+        "(credit_notes.cnpj_estabelecimento LIKE ? OR credit_notes.numero_nota LIKE ?)",
+      );
+      const wildcard = `%${digitsOnly}%`;
+      params.push(wildcard, wildcard);
+    }
+  }
+
+  return { conditions, params };
+}
+
+/**
+ * Paginated list of credit_notes joined with their owning import and the
+ * latest reconciliation status. Powers the "Notas de crédito" section
+ * inside Credits.jsx, where the user wants to drill into specific lines
+ * (e.g. "show me all credit_only notes from this month so I can hunt
+ * down the missing donation"). Pagination defaults are sane for a single
+ * page render; pass `limit: 0` to ask for everything (used by the CSV
+ * export path).
+ */
+export async function listCreditNotes({
+  creditImportId = "",
+  referenceMonth = "",
+  statusFilter = "",
+  search = "",
+  limit = 100,
+  offset = 0,
+} = {}) {
+  const { conditions, params } = buildCreditNotesFilters({
+    creditImportId,
+    referenceMonth,
+    statusFilter,
+    search,
+  });
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  // LIMIT 0 is reserved for "no limit" (used by export). DuckDB doesn't
+  // accept LIMIT NULL, so we build the clause conditionally.
+  const limitClause =
+    Number(limit) > 0
+      ? `LIMIT ${Number(limit)} OFFSET ${Number(offset) || 0}`
+      : "";
+
+  const rows = await queryPrepared(
+    `
+      SELECT
+        credit_notes.id,
+        credit_notes.cnpj_estabelecimento,
+        credit_notes.emitente,
+        credit_notes.numero_nota,
+        strftime(credit_notes.data_emissao, '%Y-%m-%d') AS data_emissao,
+        credit_notes.valor_nf,
+        credit_notes.credito,
+        credit_notes.situacao,
+        credit_notes.is_valid,
+        credit_notes.match_key,
+        credit_notes.valor_cents,
+        credit_notes.credit_import_id,
+        strftime(credit_imports.reference_month, '%Y-%m-01') AS reference_month,
+        credit_imports.file_name AS import_file_name,
+        credit_reconciliation.match_status,
+        donation_notes.cpf AS donation_cpf,
+        donors.id AS donor_id,
+        donors.name AS donor_name
+      FROM credit_notes
+      LEFT JOIN credit_imports
+        ON credit_imports.id = credit_notes.credit_import_id
+      LEFT JOIN credit_reconciliation
+        ON credit_reconciliation.credit_note_id = credit_notes.id
+      LEFT JOIN donation_notes
+        ON donation_notes.id = credit_reconciliation.donation_note_id
+      LEFT JOIN donor_cpf_links
+        ON donor_cpf_links.cpf = donation_notes.cpf
+        AND donor_cpf_links.is_active = TRUE
+      LEFT JOIN donors
+        ON donors.id = donor_cpf_links.donor_id
+      ${whereClause}
+      ORDER BY
+        credit_imports.reference_month DESC,
+        credit_notes.created_at DESC,
+        credit_notes.numero_nota ASC
+      ${limitClause}
+    `,
+    params,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    creditImportId: row.credit_import_id,
+    importFileName: row.import_file_name ?? "",
+    referenceMonth: row.reference_month ?? "",
+    cnpjEstabelecimento: row.cnpj_estabelecimento ?? "",
+    emitente: row.emitente ?? "",
+    numeroNota: row.numero_nota ?? "",
+    dataEmissao: row.data_emissao ?? "",
+    valorNf: Number(row.valor_nf ?? 0),
+    credito: Number(row.credito ?? 0),
+    situacao: row.situacao ?? "",
+    isValid: Boolean(row.is_valid),
+    matchKey: row.match_key ?? "",
+    valorCents: Number(row.valor_cents ?? 0),
+    matchStatus: row.match_status ?? "",
+    donationCpf: row.donation_cpf ?? "",
+    donorId: row.donor_id ?? "",
+    donorName: row.donor_name ?? "",
+  }));
+}
+
+export async function countCreditNotes({
+  creditImportId = "",
+  referenceMonth = "",
+  statusFilter = "",
+  search = "",
+} = {}) {
+  const { conditions, params } = buildCreditNotesFilters({
+    creditImportId,
+    referenceMonth,
+    statusFilter,
+    search,
+  });
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  const rows = await queryPrepared(
+    `
+      SELECT count(*) AS total
+      FROM credit_notes
+      LEFT JOIN credit_imports
+        ON credit_imports.id = credit_notes.credit_import_id
+      LEFT JOIN credit_reconciliation
+        ON credit_reconciliation.credit_note_id = credit_notes.id
+      ${whereClause}
+    `,
+    params,
+  );
+
+  return Number(rows[0]?.total ?? 0);
 }
 
 export async function listCreditImports() {
@@ -674,10 +900,16 @@ export async function cancelReimportCreditPreview(previewData) {
   }
 }
 
-export async function applyReimportCredit(previewData) {
+export async function applyReimportCredit(previewData, { onProgress } = {}) {
   if (!previewData?.creditImportId || !previewData?.registeredFileName) {
     throw new Error("Pré-visualização da reimportação inválida.");
   }
+
+  const reportProgress = (event) => {
+    if (typeof onProgress === "function") {
+      onProgress(event);
+    }
+  };
 
   const {
     creditImportId,
@@ -687,6 +919,10 @@ export async function applyReimportCredit(previewData) {
   } = previewData;
 
   try {
+    reportProgress({
+      step: "inserting-notes",
+      label: "Substituindo créditos anteriores...",
+    });
     await runInTransaction(
       async () => {
         await execute(`
@@ -703,6 +939,10 @@ export async function applyReimportCredit(previewData) {
       { emitChange: false },
     );
 
+    reportProgress({
+      step: "aggregating",
+      label: "Calculando totais da importação...",
+    });
     const totals = await aggregateCreditImportTotals(creditImportId);
 
     await executePrepared(
@@ -719,10 +959,18 @@ export async function applyReimportCredit(previewData) {
       [originalFileName, totals.totalRows, totals.validRows, creditImportId],
     );
 
+    reportProgress({
+      step: "reconciling-credits",
+      label: "Conciliando créditos com doações...",
+    });
     await reconcileCredits({ emitChange: false });
 
     notifyDatabaseChanged({ source: "credit-reimport" });
 
+    reportProgress({
+      step: "finalizing",
+      label: "Salvando histórico da reimportação...",
+    });
     await createActionHistoryEntry({
       actionType: "import",
       entityType: "credit_import",
@@ -736,6 +984,8 @@ export async function applyReimportCredit(previewData) {
         validRows: totals.validRows,
       },
     });
+
+    reportProgress({ step: "done" });
 
     return creditImportId;
   } finally {

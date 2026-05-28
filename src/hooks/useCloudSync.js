@@ -38,8 +38,17 @@ export function useCloudSync() {
     (async () => {
       try {
         await hydrateFromCloud(user.id, {
-          onProgress: (step) => {
-            if (!cancelled) setHydrationStep(step);
+          onProgress: (event) => {
+            if (cancelled) return;
+            // Two shapes flow through here: a bare string ("db" / "download")
+            // for the early phases, or `{ step, currentTable, restoredRows,
+            // totalRows }` once the restore starts. Normalise to a single
+            // object so the consumer doesn't have to branch.
+            if (typeof event === "string") {
+              setHydrationStep({ step: event });
+            } else {
+              setHydrationStep(event);
+            }
           },
         });
         if (cancelled) return;

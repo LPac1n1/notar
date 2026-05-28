@@ -1,6 +1,7 @@
 import Button from "../../../components/ui/Button";
 import DetectedColumnsChecklist from "../../../components/ui/DetectedColumnsChecklist";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
+import ImportProgressIndicator from "../../../components/ui/ImportProgressIndicator";
 import Modal from "../../../components/ui/Modal";
 import MonthInput from "../../../components/ui/MonthInput";
 import TextInput from "../../../components/ui/TextInput";
@@ -32,6 +33,7 @@ export default function CreditUploadModal({
   errors = {},
   fileInputKey,
   isImporting,
+  importStep = null,
   onChange,
   onClose,
   onPreviewImport,
@@ -87,6 +89,8 @@ export default function CreditUploadModal({
       >
         Processar importação
       </Button>
+
+      {isImporting ? <ImportProgressIndicator step={importStep} /> : null}
 
       {previewData ? (
         <div className="mt-6">
