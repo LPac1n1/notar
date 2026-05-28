@@ -1,51 +1,52 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
-import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
-import { PlusIcon } from "../components/ui/icons";
+import SectionCard from "../components/ui/SectionCard";
+import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import CpfListSearchSection from "../features/imports/components/CpfListSearchSection";
-import CpfSummaryDetailsModal from "../features/imports/components/CpfSummaryDetailsModal";
-import CpfSummarySection from "../features/imports/components/CpfSummarySection";
-import ImportHistorySection from "../features/imports/components/ImportHistorySection";
 import ImportUploadModal from "../features/imports/components/ImportUploadModal";
 import MonthlyImportsOverviewSection from "../features/imports/components/MonthlyImportsOverviewSection";
 import ReimportModal from "../features/imports/components/ReimportModal";
-import {
-  CPF_REGISTRATION_FILTER_OPTIONS,
-  IMPORT_STATUS_OPTIONS,
-  getCpfOptions,
-  getCpfSummaryImportOptions,
-  getDemandOptions,
-  getDonorOptions,
-  getImportHistoryOptions,
-  getPreviewColumnOptions,
-} from "../features/imports/utils/options";
+import CreditReimportModal from "../features/credits/components/CreditReimportModal";
+import CreditUploadModal from "../features/credits/components/CreditUploadModal";
+import { getPreviewColumnOptions } from "../features/imports/utils/options";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import { releaseRegisteredFile } from "../services/db";
 import {
-  exportImportCpfSummaryCsv,
-  exportImportsCsv,
+  exportReconciliationByDonorCsv,
+  exportReconciliationPairsCsv,
 } from "../services/exportService";
 import {
   applyReimport,
   cancelReimportPreview,
   deleteImport,
-  listImportCpfSummary,
+  hasDonationImportForMonth,
   listImports,
   prepareImportPreview,
   prepareReimportPreview,
   processImportedFile,
 } from "../services/importService";
-import { getReconciliationStats } from "../services/reconciliation/creditReconciliationService";
+import {
+  applyReimportCredit,
+  cancelCreditImportPreview,
+  cancelReimportCreditPreview,
+  deleteCreditImport,
+  getCreditImportMatchStats,
+  prepareCreditImportPreview,
+  prepareReimportCreditPreview,
+  processCreditImport,
+} from "../services/creditImportService";
+import {
+  getReconciliationStats,
+  reconcileCredits,
+} from "../services/reconciliation/creditReconciliationService";
 import { restoreTrashItem } from "../services/trashService";
-import { useDataResource } from "../hooks/useDataResource";
 import { useAsync } from "../hooks/useAsync";
 import { logError } from "../services/logger";
-import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import {
@@ -54,265 +55,194 @@ import {
   validateImportUpload,
 } from "../utils/preventiveValidation";
 import { useModalState } from "../hooks/useModalState";
-import { usePagination } from "../hooks/usePagination";
-import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
-import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 
-const INITIAL_IMPORT_FILTERS = {
-  importId: "",
+const INITIAL_DONATION_FORM = {
   referenceMonth: "",
-  status: "",
+  valuePerNote: "",
+  cpfColumn: "",
 };
 
-const INITIAL_CPF_FILTERS = {
-  importId: "",
-  referenceMonth: "",
-  cpf: "",
-  donorId: "",
-  demand: "",
-  registrationFilter: "all",
-};
+const INITIAL_CREDIT_FORM = { referenceMonth: "" };
 
+/**
+ * Unified "Importações" page. Single home for everything tied to the
+ * donations × credits workflow:
+ *
+ *   - Per-month overview (one row = one month with both spreadsheets +
+ *     reconciliation summary side-by-side, with inline reimport / delete
+ *     / "importar agora" actions per cell).
+ *   - Toolbar with the rare-but-important escape hatches: re-run
+ *     reconciliation, export CSV by donor, export pair details.
+ *   - CPF list search (paste a list of CPFs to classify each as
+ *     cadastrado / não cadastrado / com or sem doações).
+ *
+ * Two upload paths (donations / credits) live behind separate modal
+ * triggers in the toolbar AND inline "Importar agora" buttons in the
+ * overview placeholder cells, so the user can drive the same flow from
+ * wherever they happen to be.
+ */
 export default function Imports() {
-  const location = useLocation();
+  const navigate = useNavigate();
+
+  // ===== Donation import state =====
   const [availableImports, setAvailableImports] = useState([]);
-  const [uploadForm, setUploadForm] = useState({
-    referenceMonth: "",
-    valuePerNote: "",
-    cpfColumn: "",
-  });
-  const [uploadFormErrors, setUploadFormErrors] = useState({});
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewData, setPreviewData] = useState(null);
-  const [fileInputKey, setFileInputKey] = useState(0);
-  const [importFilters, setImportFilters] = useState({
-    ...INITIAL_IMPORT_FILTERS,
-    ...(location.state?.importFilters ?? {}),
-  });
-  const [cpfFilters, setCpfFilters] = useState({
-    ...INITIAL_CPF_FILTERS,
-    ...(location.state?.cpfFilters ?? {}),
-  });
+  const [donationForm, setDonationForm] = useState({ ...INITIAL_DONATION_FORM });
+  const [donationFormErrors, setDonationFormErrors] = useState({});
+  const [donationFile, setDonationFile] = useState(null);
+  const [donationPreview, setDonationPreview] = useState(null);
+  const [donationFileInputKey, setDonationFileInputKey] = useState(0);
+  const [isDonationPreviewLoading, setIsDonationPreviewLoading] =
+    useState(false);
+  const [isImportingDonation, setIsImportingDonation] = useState(false);
+  const [donationImportStep, setDonationImportStep] = useState(null);
+  const donationUploadModal = useModalState(false);
+
+  const [donationReimportPreview, setDonationReimportPreview] = useState(null);
+  const [
+    isDonationReimportPreviewLoading,
+    setIsDonationReimportPreviewLoading,
+  ] = useState(false);
+  const [isDonationReimportApplying, setIsDonationReimportApplying] =
+    useState(false);
+  const [donationReimportStep, setDonationReimportStep] = useState(null);
+  const [donationReimportError, setDonationReimportError] = useState("");
+  const donationReimportModal = useModalState(null);
+
+  const [deletingDonationId, setDeletingDonationId] = useState("");
+  const donationDeleteModal = useModalState(null);
+
+  // ===== Credit import state =====
+  const [creditPreview, setCreditPreview] = useState(null);
+  const [creditForm, setCreditForm] = useState({ ...INITIAL_CREDIT_FORM });
+  const [creditFormErrors, setCreditFormErrors] = useState({});
+  const [creditFileInputKey, setCreditFileInputKey] = useState(0);
+  const [isCreditPreviewLoading, setIsCreditPreviewLoading] = useState(false);
+  const [isImportingCredit, setIsImportingCredit] = useState(false);
+  const [creditImportStep, setCreditImportStep] = useState(null);
+  const creditUploadModal = useModalState(false);
+
+  const [creditReimportPreview, setCreditReimportPreview] = useState(null);
+  const [creditReimportTarget, setCreditReimportTarget] = useState(null);
+  const [
+    isCreditReimportPreviewLoading,
+    setIsCreditReimportPreviewLoading,
+  ] = useState(false);
+  const [isCreditReimportApplying, setIsCreditReimportApplying] =
+    useState(false);
+  const [creditReimportStep, setCreditReimportStep] = useState(null);
+  const [creditReimportError, setCreditReimportError] = useState("");
+  const creditReimportModal = useModalState(null);
+
+  const [deletingCreditId, setDeletingCreditId] = useState("");
+  const creditDeleteModal = useModalState(null);
+
+  // ===== Shared feedback + toolbar state =====
   const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStep, setImportStep] = useState(null);
-  const importModal = useModalState(false);
-  const removeModal = useModalState(null);
-  const detailsModal = useModalState(null);
-  const [isExportingImports, setIsExportingImports] = useState(false);
-  const [isExportingCpfSummary, setIsExportingCpfSummary] = useState(false);
-  const [deletingImportId, setDeletingImportId] = useState("");
-  const reimportModal = useModalState(null);
-  const [reimportPreview, setReimportPreview] = useState(null);
-  const [isReimportPreviewLoading, setIsReimportPreviewLoading] = useState(false);
-  const [isReimportApplying, setIsReimportApplying] = useState(false);
-  const [reimportStep, setReimportStep] = useState(null);
-  const [reimportError, setReimportError] = useState("");
-  const navigate = useNavigate();
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportKind, setExportKind] = useState("");
 
-  const {
-    data: imports,
-    isLoading: isLoadingImports,
-    isRefreshing: isImportHistoryRefreshing,
-    error: importHistoryError,
-    setError: setImportHistoryError,
-    reload: reloadImportHistory,
-  } = useDataResource({
-    loader: listImports,
-    filters: importFilters,
-    errorMessage: "Não foi possível carregar os dados de importação.",
-    scope: "ImportsPage.history",
-  });
-
-  const {
-    data: cpfSummary,
-    optionSource: cpfSummaryOptionSource,
-    isLoading: isLoadingCpfSummary,
-    isRefreshing: isCpfSummaryRefreshing,
-    error: cpfSummaryError,
-    setError: setCpfSummaryError,
-    reload: reloadCpfSummary,
-  } = useDataResource({
-    loader: listImportCpfSummary,
-    filters: cpfFilters,
-    errorMessage: "Não foi possível carregar os dados de importação.",
-    scope: "ImportsPage.cpfSummary",
-    neutralizedKeys: ["cpf", "donorId", "demand", "registrationFilter"],
-  });
-
-  const error = pageError || importHistoryError || cpfSummaryError;
-  const setError = useCallback(
-    (message) => {
-      setPageError(message);
-      setImportHistoryError(message);
-      setCpfSummaryError(message);
-    },
-    [setImportHistoryError, setCpfSummaryError],
-  );
-
-  const importsPagination = usePagination(imports, {
-    initialPageSize: 5,
-  });
-  const cpfSummaryPagination = usePagination(cpfSummary, {
-    initialPageSize: 5,
-  });
-  const restoredScrollTopRef = useRef(location.state?.importsScrollTop ?? null);
   const importOperation = useAsync({ reportGlobal: true });
-  const isLoading = isLoadingImports || isLoadingCpfSummary;
-  const { showDataRefreshLoading } = useDataRefreshIndicator(
-    isImportHistoryRefreshing || isCpfSummaryRefreshing,
+
+  const donationPreviewColumnOptions = useMemo(
+    () => getPreviewColumnOptions(donationPreview),
+    [donationPreview],
   );
 
-  const openDonorProfile = (donorId) => {
-    if (donorId) {
-      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
-        state: {
-          from: {
-            label: "Voltar para importações",
-            pathname: "/importacoes",
-            state: {
-              importFilters,
-              cpfFilters,
-              importsScrollTop: getAppScrollTop(),
-            },
-          },
-        },
-      });
+  // The donations upload modal needs `availableImports` to validate that
+  // the month isn't already claimed by a prior import. Loading the list
+  // once on mount is enough because every successful import refreshes it
+  // explicitly (see `refreshAfterDonationImport`).
+  const refreshAvailableImports = useCallback(async () => {
+    try {
+      const rows = await listImports();
+      setAvailableImports(rows);
+    } catch (err) {
+      logError("ImportsPage.listImports", err);
     }
-  };
-
-  const previewColumnOptions = useMemo(
-    () => getPreviewColumnOptions(previewData),
-    [previewData],
-  );
-
-  const importHistoryOptions = useMemo(
-    () => getImportHistoryOptions(availableImports),
-    [availableImports],
-  );
-
-  const cpfSummaryImportOptions = useMemo(
-    () => getCpfSummaryImportOptions(availableImports),
-    [availableImports],
-  );
-
-  const cpfOptions = useMemo(
-    () => getCpfOptions(cpfSummaryOptionSource),
-    [cpfSummaryOptionSource],
-  );
-
-  const donorOptions = useMemo(
-    () => getDonorOptions(cpfSummaryOptionSource),
-    [cpfSummaryOptionSource],
-  );
-
-  const demandOptions = useMemo(
-    () => getDemandOptions(cpfSummaryOptionSource),
-    [cpfSummaryOptionSource],
-  );
-
-  const loadAvailableImports = useCallback(async () => {
-    const availableImportRows = await listImports();
-    setAvailableImports(availableImportRows);
   }, []);
 
   useEffect(() => {
-    loadAvailableImports();
-  }, [loadAvailableImports]);
+    refreshAvailableImports();
+  }, [refreshAvailableImports]);
 
-  useEffect(() => () => {
-    if (previewData?.registeredFileName) {
-      releaseRegisteredFile(previewData.registeredFileName).catch(() => null);
-    }
-  }, [previewData]);
-
-  const refreshImports = useCallback(async () => {
-    await Promise.all([
-      loadAvailableImports(),
-      reloadImportHistory(),
-      reloadCpfSummary(),
-    ]);
-  }, [loadAvailableImports, reloadImportHistory, reloadCpfSummary]);
-
-  useDatabaseChangeEffect(refreshImports, {
-    domains: ["demands", "donors", "imports", "monthly"],
-  });
-
-  const handleRestoreDeletedImport = useCallback(
-    async (trashItemId) => {
-      try {
-        setError("");
-        setSuccessMessage("");
-        setSuccessAction(null);
-        await restoreTrashItem(trashItemId);
-        await refreshImports();
-        setSuccessMessage("Importação restaurada com sucesso.");
-      } catch (err) {
-        logError("ImportsPage.restore", err);
-        setError(getErrorMessage(err, "Não foi possível restaurar a importação."));
+  // Release any abandoned preview files on unmount so OPFS doesn't fill up
+  // with orphaned CSVs from cancelled flows.
+  useEffect(
+    () => () => {
+      if (donationPreview?.registeredFileName) {
+        releaseRegisteredFile(donationPreview.registeredFileName).catch(
+          () => null,
+        );
+      }
+      if (creditPreview?.registeredFileName) {
+        releaseRegisteredFile(creditPreview.registeredFileName).catch(
+          () => null,
+        );
       }
     },
-    [refreshImports, setError],
+    [donationPreview, creditPreview],
   );
 
-  useEffect(() => {
-    if (isLoading || restoredScrollTopRef.current === null) {
-      return;
+  const setError = useCallback((message) => {
+    setPageError(message);
+  }, []);
+
+  const openDonorProfile = useCallback(
+    (donorId) => {
+      if (!donorId) return;
+      navigate(`/doadores/${encodeURIComponent(donorId)}`);
+    },
+    [navigate],
+  );
+
+  // ─────────── Donations: upload ───────────
+
+  const resetDonationUpload = async () => {
+    if (donationPreview?.registeredFileName) {
+      await releaseRegisteredFile(donationPreview.registeredFileName);
     }
-
-    const scrollTop = restoredScrollTopRef.current;
-    restoredScrollTopRef.current = null;
-
-    window.requestAnimationFrame(() => {
-      scrollAppTo(scrollTop);
-    });
-  }, [isLoading]);
-
-  const handleImportFilterChange = (event) => {
-    const { name, value } = event.target;
-    setImportFilters((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setDonationFile(null);
+    setDonationPreview(null);
+    setDonationFormErrors({});
+    setDonationFileInputKey((value) => value + 1);
   };
 
-  const handleCpfFilterChange = (event) => {
-    const { name, value } = event.target;
-    setCpfFilters((current) => ({
-      ...current,
-      [name]: value,
-    }));
+  const handleOpenDonationUpload = () => {
+    setError("");
+    setSuccessMessage("");
+    setSuccessAction(null);
+    setDonationForm({ ...INITIAL_DONATION_FORM });
+    setDonationFormErrors({});
+    donationUploadModal.open();
   };
 
-  const handleUploadChange = (event) => {
-    const { name, value } = event.target;
-    setUploadFormErrors((current) => ({
-      ...current,
-      [name]: "",
-    }));
-    setUploadForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
+  const handleCloseDonationUpload = async () => {
+    if (isImportingDonation || isDonationPreviewLoading) return;
+    await resetDonationUpload();
+    setDonationForm({ ...INITIAL_DONATION_FORM });
+    donationUploadModal.close();
   };
 
-  const handlePreviewImport = async (event) => {
+  const handleDonationFormChange = (event) => {
+    const { name, value } = event.target;
+    setDonationFormErrors((current) => ({ ...current, [name]: "" }));
+    setDonationForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleDonationPreview = async (event) => {
     const file = event.target.files?.[0];
 
-    if (previewData?.registeredFileName) {
-      await releaseRegisteredFile(previewData.registeredFileName);
+    if (donationPreview?.registeredFileName) {
+      await releaseRegisteredFile(donationPreview.registeredFileName);
     }
 
     if (!file) {
-      setSelectedFile(null);
-      setPreviewData(null);
-      setUploadFormErrors((current) => ({
-        ...current,
-        file: "",
-      }));
+      setDonationFile(null);
+      setDonationPreview(null);
+      setDonationFormErrors((current) => ({ ...current, file: "" }));
       return;
     }
 
@@ -320,83 +250,50 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setSuccessAction(null);
-      setIsPreviewLoading(true);
+      setIsDonationPreviewLoading(true);
       const preview = await importOperation.run(
         () => prepareImportPreview(file),
         {
-          loadingMessage: "Lendo planilha de importação...",
+          loadingMessage: "Lendo planilha de doações...",
           reportGlobal: false,
         },
       );
-      setSelectedFile(file);
-      setPreviewData(preview);
-      setUploadFormErrors((current) => ({
+      setDonationFile(file);
+      setDonationPreview(preview);
+      setDonationFormErrors((current) => ({
         ...current,
         file: "",
         cpfColumn: preview.detectedCpfColumn ? "" : current.cpfColumn,
       }));
-      setUploadForm((current) => ({
+      setDonationForm((current) => ({
         ...current,
         cpfColumn: preview.detectedCpfColumn || current.cpfColumn,
       }));
     } catch (err) {
-      logError("ImportsPage.preview", err);
-      setError(
-        getErrorMessage(
-          err,
-          "Não foi possível gerar a pré-visualização da planilha.",
-        ),
+      logError("ImportsPage.donationPreview", err);
+      const message = getErrorMessage(
+        err,
+        "Não foi possível gerar a pré-visualização da planilha.",
       );
-      setUploadFormErrors((current) => ({
-        ...current,
-        file: getErrorMessage(
-          err,
-          "Não foi possível gerar a pré-visualização da planilha.",
-        ),
-      }));
-      setSelectedFile(null);
-      setPreviewData(null);
+      setError(message);
+      setDonationFormErrors((current) => ({ ...current, file: message }));
+      setDonationFile(null);
+      setDonationPreview(null);
     } finally {
-      setIsPreviewLoading(false);
+      setIsDonationPreviewLoading(false);
     }
   };
 
-  const resetImportSelection = async () => {
-    if (previewData?.registeredFileName) {
-      await releaseRegisteredFile(previewData.registeredFileName);
-    }
-
-    setSelectedFile(null);
-    setPreviewData(null);
-    setUploadFormErrors({});
-    setFileInputKey((current) => current + 1);
-  };
-
-  const handleCloseImportModal = async () => {
-    if (isImporting || isPreviewLoading) {
-      return;
-    }
-
-    await resetImportSelection();
-    setUploadForm({
-      referenceMonth: "",
-      valuePerNote: "",
-      cpfColumn: "",
-    });
-    setUploadFormErrors({});
-    importModal.close();
-  };
-
-  const handleProcessImport = async () => {
+  const handleProcessDonationImport = async () => {
     const validationErrors = validateImportUpload({
       availableImports,
-      previewData,
-      selectedFile,
-      uploadForm,
+      previewData: donationPreview,
+      selectedFile: donationFile,
+      uploadForm: donationForm,
     });
 
     if (hasValidationErrors(validationErrors)) {
-      setUploadFormErrors(validationErrors);
+      setDonationFormErrors(validationErrors);
       setError(getFirstValidationError(validationErrors));
       return;
     }
@@ -405,36 +302,30 @@ export default function Imports() {
       setError("");
       setSuccessMessage("");
       setSuccessAction(null);
-      setIsImporting(true);
-      setImportStep({ step: "starting", label: "Preparando importação..." });
+      setIsImportingDonation(true);
+      setDonationImportStep({
+        step: "starting",
+        label: "Preparando importação...",
+      });
       await importOperation.run(
         () =>
           processImportedFile({
-            registeredFileName: previewData.registeredFileName,
-            originalFileName: previewData.originalFileName,
-            referenceMonth: uploadForm.referenceMonth,
-            valuePerNote: uploadForm.valuePerNote,
-            cpfColumn: uploadForm.cpfColumn,
-            onProgress: (event) => setImportStep(event),
+            registeredFileName: donationPreview.registeredFileName,
+            originalFileName: donationPreview.originalFileName,
+            referenceMonth: donationForm.referenceMonth,
+            valuePerNote: donationForm.valuePerNote,
+            cpfColumn: donationForm.cpfColumn,
+            onProgress: (event) => setDonationImportStep(event),
           }),
         {
           loadingMessage: "Processando importação e conciliando CPFs...",
         },
       );
-      await refreshImports();
-      await resetImportSelection();
-      setUploadForm({
-        referenceMonth: "",
-        valuePerNote: "",
-        cpfColumn: "",
-      });
-      setUploadFormErrors({});
-      importModal.close();
+      await refreshAvailableImports();
+      await resetDonationUpload();
+      setDonationForm({ ...INITIAL_DONATION_FORM });
+      donationUploadModal.close();
 
-      // Surface the reconciliation impact in the same toast — the donations
-      // import always re-runs reconcileCredits at the tail of the pipeline,
-      // so we just read the new stats. Most informative single line for
-      // "did importing this planilha actually move the needle?".
       const stats = await getReconciliationStats().catch(() => null);
       if (stats && (stats.matched > 0 || stats.divergent > 0)) {
         setSuccessMessage(
@@ -446,232 +337,496 @@ export default function Imports() {
         setSuccessMessage("Importação processada com sucesso.");
       }
     } catch (err) {
-      logError("ImportsPage.process", err);
-      setError(getErrorMessage(err, "Não foi possível processar a importação."));
+      logError("ImportsPage.donationProcess", err);
+      setError(
+        getErrorMessage(err, "Não foi possível processar a importação."),
+      );
     } finally {
-      setIsImporting(false);
-      setImportStep(null);
+      setIsImportingDonation(false);
+      setDonationImportStep(null);
     }
   };
 
-  const handleDeleteImport = async () => {
-    if (!removeModal.value) {
-      return;
+  // ─────────── Donations: reimport / delete ───────────
+
+  const handleStartDonationReimport = useCallback(
+    (item) => {
+      setDonationReimportError("");
+      setDonationReimportPreview(null);
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      donationReimportModal.open(item);
+    },
+    [donationReimportModal, setError],
+  );
+
+  const handlePickDonationReimportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (donationReimportPreview?.registeredFileName) {
+      await cancelReimportPreview(donationReimportPreview).catch(() => null);
+      setDonationReimportPreview(null);
     }
+
+    if (!donationReimportModal.value) return;
+
+    setDonationReimportError("");
+    setIsDonationReimportPreviewLoading(true);
+    try {
+      const preview = await prepareReimportPreview(
+        donationReimportModal.value.id,
+        file,
+      );
+      setDonationReimportPreview(preview);
+    } catch (err) {
+      logError("ImportsPage.donationReimportPreview", err);
+      setDonationReimportError(
+        getErrorMessage(err, "Não foi possível analisar a planilha."),
+      );
+    } finally {
+      setIsDonationReimportPreviewLoading(false);
+    }
+  };
+
+  const handleCancelDonationReimportPreview = async () => {
+    if (donationReimportPreview?.registeredFileName) {
+      await cancelReimportPreview(donationReimportPreview).catch(() => null);
+    }
+    setDonationReimportPreview(null);
+    setDonationReimportError("");
+  };
+
+  const handleCloseDonationReimport = async () => {
+    if (isDonationReimportApplying) return;
+    if (donationReimportPreview?.registeredFileName) {
+      await cancelReimportPreview(donationReimportPreview).catch(() => null);
+    }
+    setDonationReimportPreview(null);
+    setDonationReimportError("");
+    donationReimportModal.close();
+  };
+
+  const handleConfirmDonationReimport = async () => {
+    if (!donationReimportPreview) return;
+
+    setIsDonationReimportApplying(true);
+    setDonationReimportError("");
+    setDonationReimportStep({
+      step: "starting",
+      label: "Preparando reimportação...",
+    });
+    try {
+      await importOperation.run(
+        () =>
+          applyReimport(donationReimportPreview, {
+            onProgress: (event) => setDonationReimportStep(event),
+          }),
+        { loadingMessage: "Aplicando reimportação..." },
+      );
+      setDonationReimportPreview(null);
+      donationReimportModal.close();
+      await refreshAvailableImports();
+      setSuccessMessage("Planilha de doações reimportada com sucesso.");
+    } catch (err) {
+      logError("ImportsPage.donationReimportApply", err);
+      setDonationReimportError(
+        getErrorMessage(err, "Não foi possível aplicar a reimportação."),
+      );
+    } finally {
+      setIsDonationReimportApplying(false);
+      setDonationReimportStep(null);
+    }
+  };
+
+  const handleRestoreDeletedDonation = useCallback(
+    async (trashItemId) => {
+      try {
+        setError("");
+        setSuccessMessage("");
+        setSuccessAction(null);
+        await restoreTrashItem(trashItemId);
+        await refreshAvailableImports();
+        setSuccessMessage("Importação restaurada com sucesso.");
+      } catch (err) {
+        logError("ImportsPage.donationRestore", err);
+        setError(
+          getErrorMessage(err, "Não foi possível restaurar a importação."),
+        );
+      }
+    },
+    [refreshAvailableImports, setError],
+  );
+
+  const handleConfirmDeleteDonation = async () => {
+    if (!donationDeleteModal.value) return;
 
     try {
       setError("");
       setSuccessMessage("");
       setSuccessAction(null);
-      setDeletingImportId(removeModal.value.id);
+      setDeletingDonationId(donationDeleteModal.value.id);
       const trashItemId = await importOperation.run(
-        () => deleteImport(removeModal.value.id),
-        {
-          loadingMessage: "Enviando importação para a lixeira...",
-        },
+        () => deleteImport(donationDeleteModal.value.id),
+        { loadingMessage: "Enviando importação para a lixeira..." },
       );
-      await refreshImports();
-      removeModal.close();
+      await refreshAvailableImports();
+      donationDeleteModal.close();
       setSuccessMessage("Importação enviada para a lixeira com sucesso.");
       if (trashItemId) {
         setSuccessAction({
           label: "Desfazer",
-          onAction: () => handleRestoreDeletedImport(trashItemId),
+          onAction: () => handleRestoreDeletedDonation(trashItemId),
         });
       }
     } catch (err) {
-      logError("ImportsPage.delete", err);
+      logError("ImportsPage.donationDelete", err);
       setError("Não foi possível excluir a importação.");
     } finally {
-      setDeletingImportId("");
+      setDeletingDonationId("");
     }
   };
 
-  const handleExportImports = async () => {
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsExportingImports(true);
-      const result = await importOperation.run(
-        () => exportImportsCsv(importFilters),
-        {
-          loadingMessage: "Exportando histórico de importações...",
-        },
-      );
-      await createActionHistoryEntry({
-        actionType: "export",
-        entityType: "export",
-        entityId: "imports-csv",
-        label: "Histórico de importações CSV",
-        description: `${formatInteger(result.rowCount)} importação(ões) exportada(s) em CSV.`,
-        payload: {
-          filters: importFilters,
-          rowCount: result.rowCount,
-        },
-      });
-      setSuccessMessage(
-        `${formatInteger(result.rowCount)} importação(ões) exportada(s) em CSV.`,
-      );
-    } catch (err) {
-      logError("ImportsPage.exportHistory", err);
-      setError("Não foi possível exportar o histórico de importações.");
-    } finally {
-      setIsExportingImports(false);
+  // ─────────── Credits: upload ───────────
+
+  const resetCreditUpload = async () => {
+    if (creditPreview?.registeredFileName) {
+      await cancelCreditImportPreview(creditPreview);
     }
+    setCreditPreview(null);
+    setCreditForm({ ...INITIAL_CREDIT_FORM });
+    setCreditFormErrors({});
+    setCreditFileInputKey((value) => value + 1);
   };
 
-  const handleExportCpfSummary = async () => {
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsExportingCpfSummary(true);
-      const result = await importOperation.run(
-        () => exportImportCpfSummaryCsv(cpfFilters),
-        {
-          loadingMessage: "Exportando CPFs encontrados...",
-        },
-      );
-      await createActionHistoryEntry({
-        actionType: "export",
-        entityType: "export",
-        entityId: "import-cpfs-csv",
-        label: "CPFs encontrados CSV",
-        description: `${formatInteger(result.rowCount)} CPF(s) exportado(s) em CSV.`,
-        payload: {
-          filters: cpfFilters,
-          rowCount: result.rowCount,
-        },
-      });
-      setSuccessMessage(
-        `${formatInteger(result.rowCount)} CPF(s) exportado(s) em CSV.`,
-      );
-    } catch (err) {
-      logError("ImportsPage.exportCpfSummary", err);
-      setError("Não foi possível exportar os CPFs encontrados.");
-    } finally {
-      setIsExportingCpfSummary(false);
-    }
-  };
-
-  const handleStartReimport = useCallback((item) => {
-    setReimportError("");
-    setReimportPreview(null);
+  const handleOpenCreditUpload = () => {
     setError("");
     setSuccessMessage("");
     setSuccessAction(null);
-    reimportModal.open(item);
-  }, [reimportModal, setError]);
+    setCreditForm({ ...INITIAL_CREDIT_FORM });
+    setCreditFormErrors({});
+    creditUploadModal.open();
+  };
 
-  const handlePickReimportFile = async (event) => {
+  const handleCloseCreditUpload = async () => {
+    if (isCreditPreviewLoading || isImportingCredit) return;
+    await resetCreditUpload();
+    creditUploadModal.close();
+  };
+
+  const handleCreditFormChange = (event) => {
+    const { name, value } = event.target;
+    setCreditFormErrors((current) => ({ ...current, [name]: "" }));
+    setCreditForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleCreditPreview = async (event) => {
     const file = event.target.files?.[0];
+
+    if (creditPreview?.registeredFileName) {
+      await cancelCreditImportPreview(creditPreview);
+      setCreditPreview(null);
+    }
+
     if (!file) return;
 
-    if (reimportPreview?.registeredFileName) {
-      await cancelReimportPreview(reimportPreview).catch(() => null);
-      setReimportPreview(null);
+    try {
+      setError("");
+      setIsCreditPreviewLoading(true);
+      const preview = await prepareCreditImportPreview(file);
+      setCreditPreview(preview);
+    } catch (err) {
+      logError("ImportsPage.creditPreview", err);
+      setError(
+        getErrorMessage(
+          err,
+          "Não foi possível gerar a pré-visualização da planilha de créditos.",
+        ),
+      );
+      setCreditPreview(null);
+    } finally {
+      setIsCreditPreviewLoading(false);
+    }
+  };
+
+  const handleProcessCreditImport = async () => {
+    if (!creditPreview) {
+      setCreditFormErrors((current) => ({
+        ...current,
+        file: "Selecione um arquivo antes de processar.",
+      }));
+      return;
     }
 
-    if (!reimportModal.value) return;
+    if (!creditForm.referenceMonth) {
+      setCreditFormErrors((current) => ({
+        ...current,
+        referenceMonth: "Informe o mês de referência.",
+      }));
+      return;
+    }
 
-    setReimportError("");
-    setIsReimportPreviewLoading(true);
+    // Guardrail: importing credits for a month with no donations on file
+    // produces 100% credit_only rows. Surface the issue before the user
+    // commits to a 30k+ row INSERT they'd have to undo.
     try {
-      const preview = await prepareReimportPreview(reimportModal.value.id, file);
-      setReimportPreview(preview);
+      const hasDonations = await hasDonationImportForMonth(
+        creditForm.referenceMonth,
+      );
+      if (!hasDonations) {
+        const proceed = window.confirm(
+          "Não há doações importadas para o mês selecionado. A conciliação não vai encontrar pares. Deseja continuar mesmo assim?",
+        );
+        if (!proceed) return;
+      }
     } catch (err) {
-      logError("ImportsPage.reimportPreview", err);
-      setReimportError(
-        getErrorMessage(err, "Não foi possível analisar a planilha."),
+      logError("ImportsPage.creditDonationCheck", err);
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsImportingCredit(true);
+      setCreditImportStep({
+        step: "starting",
+        label: "Preparando importação...",
+      });
+      const createdImportId = await processCreditImport({
+        registeredFileName: creditPreview.registeredFileName,
+        originalFileName: creditPreview.originalFileName,
+        creditColumns: creditPreview.creditColumns,
+        referenceMonth: creditForm.referenceMonth,
+        onProgress: (event) => setCreditImportStep(event),
+      });
+      setCreditPreview(null);
+      setCreditForm({ ...INITIAL_CREDIT_FORM });
+      setCreditFormErrors({});
+      setCreditFileInputKey((value) => value + 1);
+      creditUploadModal.close();
+
+      const matchStats = await getCreditImportMatchStats(
+        createdImportId,
+      ).catch(() => null);
+      if (matchStats) {
+        setSuccessMessage(
+          `Créditos importados: ${formatInteger(matchStats.totalCreditNotes)} linha(s), ` +
+            `${formatInteger(matchStats.validCreditNotes)} calculada(s). ` +
+            `Conciliação: ${formatInteger(matchStats.matchedCount)} casada(s) com doações, ` +
+            `${formatInteger(matchStats.creditOnlyCount)} sem doação correspondente.`,
+        );
+      } else {
+        setSuccessMessage("Importação de créditos processada com sucesso.");
+      }
+    } catch (err) {
+      logError("ImportsPage.creditProcess", err);
+      setError(
+        getErrorMessage(err, "Não foi possível processar a importação."),
       );
     } finally {
-      setIsReimportPreviewLoading(false);
+      setIsImportingCredit(false);
+      setCreditImportStep(null);
     }
   };
 
-  const handleCancelReimportPreview = async () => {
-    if (reimportPreview?.registeredFileName) {
-      await cancelReimportPreview(reimportPreview).catch(() => null);
-    }
-    setReimportPreview(null);
-    setReimportError("");
+  // ─────────── Credits: reimport / delete ───────────
+
+  const handleStartCreditReimport = (item) => {
+    setCreditReimportError("");
+    setCreditReimportTarget(item);
+    setCreditReimportPreview(null);
+    creditReimportModal.open(item);
   };
 
-  const handleCloseReimportModal = async () => {
-    if (isReimportApplying) return;
-    if (reimportPreview?.registeredFileName) {
-      await cancelReimportPreview(reimportPreview).catch(() => null);
+  const handleCloseCreditReimport = async () => {
+    if (isCreditReimportApplying || isCreditReimportPreviewLoading) return;
+    if (creditReimportPreview?.registeredFileName) {
+      await cancelReimportCreditPreview(creditReimportPreview);
     }
-    setReimportPreview(null);
-    setReimportError("");
-    reimportModal.close();
+    setCreditReimportPreview(null);
+    setCreditReimportTarget(null);
+    setCreditReimportError("");
+    creditReimportModal.close();
   };
 
-  const handleConfirmReimport = async () => {
-    if (!reimportPreview) return;
+  const handleResetCreditReimportFile = async () => {
+    if (creditReimportPreview?.registeredFileName) {
+      await cancelReimportCreditPreview(creditReimportPreview);
+    }
+    setCreditReimportPreview(null);
+    setCreditReimportError("");
+  };
 
-    setIsReimportApplying(true);
-    setReimportError("");
-    setReimportStep({ step: "starting", label: "Preparando reimportação..." });
+  const handlePickCreditReimportFile = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (creditReimportPreview?.registeredFileName) {
+      await cancelReimportCreditPreview(creditReimportPreview);
+      setCreditReimportPreview(null);
+    }
+
+    if (!file || !creditReimportTarget) return;
+
     try {
-      await importOperation.run(
-        () =>
-          applyReimport(reimportPreview, {
-            onProgress: (event) => setReimportStep(event),
-          }),
-        {
-          loadingMessage: "Aplicando reimportação...",
-        },
+      setCreditReimportError("");
+      setIsCreditReimportPreviewLoading(true);
+      const preview = await prepareReimportCreditPreview(
+        creditReimportTarget.id,
+        file,
       );
-      setReimportPreview(null);
-      reimportModal.close();
-      await refreshImports();
-      setSuccessMessage("Planilha reimportada com sucesso.");
+      setCreditReimportPreview(preview);
     } catch (err) {
-      logError("ImportsPage.reimportApply", err);
-      setReimportError(
+      logError("ImportsPage.creditReimportPreview", err);
+      setCreditReimportError(
+        getErrorMessage(
+          err,
+          "Não foi possível pré-visualizar a reimportação.",
+        ),
+      );
+    } finally {
+      setIsCreditReimportPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmCreditReimport = async () => {
+    if (!creditReimportPreview) return;
+
+    try {
+      setCreditReimportError("");
+      setIsCreditReimportApplying(true);
+      setCreditReimportStep({
+        step: "starting",
+        label: "Preparando reimportação...",
+      });
+      await applyReimportCredit(creditReimportPreview, {
+        onProgress: (event) => setCreditReimportStep(event),
+      });
+      setCreditReimportPreview(null);
+      setCreditReimportTarget(null);
+      creditReimportModal.close();
+      setSuccessMessage("Reimportação de créditos concluída com sucesso.");
+    } catch (err) {
+      logError("ImportsPage.creditReimportApply", err);
+      setCreditReimportError(
         getErrorMessage(err, "Não foi possível aplicar a reimportação."),
       );
     } finally {
-      setIsReimportApplying(false);
-      setReimportStep(null);
+      setIsCreditReimportApplying(false);
+      setCreditReimportStep(null);
     }
   };
 
-  const handleClearImportFilters = () => {
-    setImportFilters({ ...INITIAL_IMPORT_FILTERS });
+  const handleConfirmDeleteCredit = async () => {
+    if (!creditDeleteModal.value) return;
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setDeletingCreditId(creditDeleteModal.value.id);
+      await deleteCreditImport(creditDeleteModal.value.id);
+      creditDeleteModal.close();
+      setSuccessMessage("Importação de créditos excluída.");
+    } catch (err) {
+      logError("ImportsPage.creditDelete", err);
+      setError("Não foi possível excluir a importação de créditos.");
+    } finally {
+      setDeletingCreditId("");
+    }
   };
 
-  const handleClearCpfFilters = () => {
-    setCpfFilters({ ...INITIAL_CPF_FILTERS });
+  // ─────────── Reconciliation toolbar (re-run + exports) ───────────
+
+  const handleRerunReconciliation = async () => {
+    if (isReconciling) return;
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsReconciling(true);
+      await reconcileCredits();
+      const stats = await getReconciliationStats().catch(() => null);
+      setSuccessMessage(
+        stats
+          ? `Conciliação atualizada. ${formatInteger(stats.matched)} casada(s), ` +
+              `${formatInteger(stats.divergent)} divergente(s), ` +
+              `${formatInteger(stats.creditOnly)} sem doação, ` +
+              `${formatInteger(stats.donationOnly)} sem crédito.`
+          : "Conciliação atualizada.",
+      );
+    } catch (err) {
+      logError("ImportsPage.reconcile", err);
+      setError(
+        getErrorMessage(err, "Não foi possível re-rodar a conciliação."),
+      );
+    } finally {
+      setIsReconciling(false);
+    }
   };
 
-  if (isLoading && !imports.length && !cpfSummary.length && !error) {
-    return (
-      <div>
-        <PageHeader
-          title="Importações"
-          subtitle="Planilhas importadas e CPFs encontrados."
-          className="mb-6"
-        />
-        <LoadingScreen
-          title="Organizando as importações"
-          description="Carregando histórico e CPFs."
-        />
-      </div>
+  const runExport = async (kind, exporter, successLabel) => {
+    if (isExporting) return;
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSuccessAction(null);
+      setIsExporting(true);
+      setExportKind(kind);
+      const { rowCount } = await exporter();
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: `reconciliation-${kind}`,
+        label: successLabel,
+        description: `${formatInteger(rowCount)} linha(s) exportada(s) em CSV.`,
+        payload: { rowCount },
+      }).catch(() => null);
+      setSuccessMessage(
+        `${successLabel}: ${formatInteger(rowCount)} linha(s).`,
+      );
+    } catch (err) {
+      logError(`ImportsPage.export.${kind}`, err);
+      setError(getErrorMessage(err, "Não foi possível exportar."));
+    } finally {
+      setIsExporting(false);
+      setExportKind("");
+    }
+  };
+
+  const handleExportDonorCsv = () =>
+    runExport(
+      "donor",
+      exportReconciliationByDonorCsv,
+      "Conciliação por doador exportada",
     );
-  }
+
+  const handleExportPairsCsv = () =>
+    runExport("pairs", exportReconciliationPairsCsv, "Pareamentos exportados");
+
+  // ─────────── Render ───────────
+
+  const error = pageError;
 
   return (
     <div>
       <PageHeader
         title="Importações"
-        subtitle="Planilhas importadas e CPFs encontrados."
+        subtitle="Planilhas de doações e créditos, conciliação e busca de CPFs."
         className="mb-6"
       />
+
       <FeedbackMessage
-        message={importModal.isOpen || removeModal.isOpen ? "" : error}
+        message={
+          donationUploadModal.isOpen ||
+          creditUploadModal.isOpen ||
+          donationDeleteModal.isOpen ||
+          creditDeleteModal.isOpen ||
+          donationReimportModal.isOpen ||
+          creditReimportModal.isOpen
+            ? ""
+            : error
+        }
         tone="error"
       />
       <FeedbackMessage
@@ -681,118 +836,161 @@ export default function Imports() {
         tone="success"
       />
 
-      <div className="mb-6">
-        <Button
-          onClick={() => {
-            setError("");
-            setSuccessMessage("");
-            setSuccessAction(null);
-            setUploadFormErrors({});
-            importModal.open();
-          }}
-          leftIcon={<PlusIcon className="h-4 w-4" />}
-        >
-          Nova importação
-        </Button>
-      </div>
+      <SectionCard className="mb-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={handleOpenDonationUpload}
+            leftIcon={<PlusIcon className="h-4 w-4" />}
+          >
+            Nova planilha de doações
+          </Button>
+          <Button
+            onClick={handleOpenCreditUpload}
+            leftIcon={<PlusIcon className="h-4 w-4" />}
+          >
+            Nova planilha de créditos
+          </Button>
+          <Button
+            variant="subtle"
+            onClick={handleRerunReconciliation}
+            disabled={isReconciling}
+            isLoading={isReconciling}
+            loadingLabel="Conciliando..."
+          >
+            Re-rodar conciliação
+          </Button>
+          <Button
+            variant="subtle"
+            onClick={handleExportDonorCsv}
+            disabled={isExporting}
+            isLoading={isExporting && exportKind === "donor"}
+            loadingLabel="Exportando..."
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+          >
+            Exportar conciliação (doadores)
+          </Button>
+          <Button
+            variant="subtle"
+            onClick={handleExportPairsCsv}
+            disabled={isExporting}
+            isLoading={isExporting && exportKind === "pairs"}
+            loadingLabel="Exportando..."
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+          >
+            Exportar pareamentos
+          </Button>
+        </div>
+      </SectionCard>
 
-      <AnimatePresence>
-        {importModal.isOpen ? (
-          <ImportUploadModal
-            errorMessage={error}
-            fileInputKey={fileInputKey}
-            isImporting={isImporting}
-            importStep={importStep}
-            isPreviewLoading={isPreviewLoading}
-            onChange={handleUploadChange}
-            onClose={handleCloseImportModal}
-            onPreviewImport={handlePreviewImport}
-            onProcessImport={handleProcessImport}
-            errors={uploadFormErrors}
-            previewColumnOptions={previewColumnOptions}
-            previewData={previewData}
-            uploadForm={uploadForm}
-          />
-        ) : null}
-      </AnimatePresence>
-
-      <MonthlyImportsOverviewSection />
-
-      <ImportHistorySection
-        deletingImportId={deletingImportId}
-        filters={importFilters}
-        imports={imports}
-        isExporting={isExportingImports}
-        isRefreshing={isImportHistoryRefreshing || showDataRefreshLoading}
-        showRefreshSkeleton={showDataRefreshLoading}
-        onClearFilters={handleClearImportFilters}
-        onDelete={removeModal.open}
-        onExport={handleExportImports}
-        onFilterChange={handleImportFilterChange}
-        onReimport={handleStartReimport}
-        options={importHistoryOptions}
-        pagination={importsPagination}
-        statusOptions={IMPORT_STATUS_OPTIONS}
-      />
-
-      <CpfSummarySection
-        cpfOptions={cpfOptions}
-        cpfSummary={cpfSummary}
-        demandOptions={demandOptions}
-        donorOptions={donorOptions}
-        filters={cpfFilters}
-        importOptions={cpfSummaryImportOptions}
-        isExporting={isExportingCpfSummary}
-        isRefreshing={isCpfSummaryRefreshing || showDataRefreshLoading}
-        showRefreshSkeleton={showDataRefreshLoading}
-        onClearFilters={handleClearCpfFilters}
-        onExport={handleExportCpfSummary}
-        onFilterChange={handleCpfFilterChange}
-        onOpenDetails={detailsModal.open}
-        onOpenDonorProfile={openDonorProfile}
-        pagination={cpfSummaryPagination}
-        registrationFilterOptions={CPF_REGISTRATION_FILTER_OPTIONS}
+      <MonthlyImportsOverviewSection
+        onImportNewDonation={handleOpenDonationUpload}
+        onImportNewCredit={handleOpenCreditUpload}
+        onReimportDonation={handleStartDonationReimport}
+        onDeleteDonation={donationDeleteModal.open}
+        onReimportCredit={handleStartCreditReimport}
+        onDeleteCredit={creditDeleteModal.open}
+        deletingDonationId={deletingDonationId}
+        deletingCreditId={deletingCreditId}
       />
 
       <CpfListSearchSection onOpenDonorProfile={openDonorProfile} />
 
       <AnimatePresence>
-        {detailsModal.isOpen ? (
-          <CpfSummaryDetailsModal
-            details={detailsModal.value}
-            onClose={detailsModal.close}
-            onOpenDonorProfile={openDonorProfile}
+        {donationUploadModal.isOpen ? (
+          <ImportUploadModal
+            errorMessage={error}
+            fileInputKey={donationFileInputKey}
+            isImporting={isImportingDonation}
+            importStep={donationImportStep}
+            isPreviewLoading={isDonationPreviewLoading}
+            onChange={handleDonationFormChange}
+            onClose={handleCloseDonationUpload}
+            onPreviewImport={handleDonationPreview}
+            onProcessImport={handleProcessDonationImport}
+            errors={donationFormErrors}
+            previewColumnOptions={donationPreviewColumnOptions}
+            previewData={donationPreview}
+            uploadForm={donationForm}
           />
         ) : null}
       </AnimatePresence>
 
       <AnimatePresence>
-        {removeModal.isOpen ? (
+        {creditUploadModal.isOpen ? (
+          <CreditUploadModal
+            errorMessage={error}
+            errors={creditFormErrors}
+            fileInputKey={creditFileInputKey}
+            isImporting={isImportingCredit}
+            importStep={creditImportStep}
+            onChange={handleCreditFormChange}
+            onClose={handleCloseCreditUpload}
+            onPreviewImport={handleCreditPreview}
+            onProcessImport={handleProcessCreditImport}
+            previewData={creditPreview}
+            uploadForm={creditForm}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {donationDeleteModal.isOpen ? (
           <ConfirmModal
             title="Excluir importação"
-            description={`Tem certeza de que deseja excluir a importação ${removeModal.value.fileName}? Ela ficará disponível na lixeira para restauração.`}
+            description={`Tem certeza de que deseja excluir a importação ${donationDeleteModal.value.fileName}? Ela ficará disponível na lixeira para restauração.`}
             confirmLabel="Excluir importação"
             feedbackMessage={error}
-            isLoading={deletingImportId === removeModal.value.id}
-            onCancel={removeModal.close}
-            onConfirm={handleDeleteImport}
+            isLoading={deletingDonationId === donationDeleteModal.value.id}
+            onCancel={donationDeleteModal.close}
+            onConfirm={handleConfirmDeleteDonation}
           />
         ) : null}
       </AnimatePresence>
 
       <AnimatePresence>
-        {reimportModal.isOpen ? (
+        {creditDeleteModal.isOpen ? (
+          <ConfirmModal
+            title="Excluir importação de créditos"
+            description={`Tem certeza de que deseja excluir a importação ${creditDeleteModal.value.fileName}? Esta ação é permanente — para recuperar os dados, será necessário re-importar a planilha original.`}
+            confirmLabel="Excluir importação"
+            feedbackMessage={error}
+            isLoading={deletingCreditId === creditDeleteModal.value.id}
+            onCancel={creditDeleteModal.close}
+            onConfirm={handleConfirmDeleteCredit}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {donationReimportModal.isOpen ? (
           <ReimportModal
-            errorMessage={reimportError}
-            importItem={reimportModal.value}
-            isPreviewLoading={isReimportPreviewLoading}
-            isApplying={isReimportApplying}
-            reimportStep={reimportStep}
-            onCancel={handleCancelReimportPreview}
-            onClose={handleCloseReimportModal}
-            onConfirm={handleConfirmReimport}
-            onPickFile={handlePickReimportFile}
-            preview={reimportPreview}
+            errorMessage={donationReimportError}
+            importItem={donationReimportModal.value}
+            isPreviewLoading={isDonationReimportPreviewLoading}
+            isApplying={isDonationReimportApplying}
+            reimportStep={donationReimportStep}
+            onCancel={handleCancelDonationReimportPreview}
+            onClose={handleCloseDonationReimport}
+            onConfirm={handleConfirmDonationReimport}
+            onPickFile={handlePickDonationReimportFile}
+            preview={donationReimportPreview}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {creditReimportModal.isOpen && creditReimportTarget ? (
+          <CreditReimportModal
+            creditImportItem={creditReimportTarget}
+            errorMessage={creditReimportError}
+            isApplying={isCreditReimportApplying}
+            isPreviewLoading={isCreditReimportPreviewLoading}
+            reimportStep={creditReimportStep}
+            onCancel={handleResetCreditReimportFile}
+            onClose={handleCloseCreditReimport}
+            onConfirm={handleConfirmCreditReimport}
+            onPickFile={handlePickCreditReimportFile}
+            preview={creditReimportPreview}
           />
         ) : null}
       </AnimatePresence>

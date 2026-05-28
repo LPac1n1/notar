@@ -1,44 +1,92 @@
 import { useCallback } from "react";
+import Button from "../../../components/ui/Button";
 import EmptyState from "../../../components/ui/EmptyState";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
 import SectionCard from "../../../components/ui/SectionCard";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { SkeletonRows } from "../../../components/ui/Skeleton";
+import { PlusIcon, TrashIcon } from "../../../components/ui/icons";
 import { useDataResource } from "../../../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { getMonthlyImportsOverview } from "../../../services/monthlyOverviewService";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
+/**
+ * One cell of the per-month table — either an existing import (with
+ * Reimport / Excluir actions) or a placeholder with a "Nova importação"
+ * shortcut so the user can fill the missing side without leaving the page.
+ */
 function PresenceCell({
   importItem,
   emptyLabel,
+  emptyActionLabel,
   totalLabel,
   countSecondary,
+  isDeleting = false,
+  onReimport,
+  onDelete,
+  onImportNew,
 }) {
   if (!importItem) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--muted)]">
-        {emptyLabel}
+      <div className="flex h-full flex-col gap-2 rounded-md border border-dashed border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2">
+        <p className="text-xs text-[var(--muted)]">{emptyLabel}</p>
+        {onImportNew ? (
+          <Button
+            variant="subtle"
+            className="min-h-8 self-start px-3 py-1.5 text-xs"
+            onClick={onImportNew}
+            leftIcon={<PlusIcon className="h-3.5 w-3.5" />}
+          >
+            {emptyActionLabel ?? "Importar agora"}
+          </Button>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-3 py-2">
+    <div className="flex h-full flex-col gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-3 py-2">
       <p
         className="break-all text-xs font-medium text-[var(--text-main)]"
         title={importItem.fileName}
       >
         {importItem.fileName || "(sem nome)"}
       </p>
-      <p className="mt-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
-        {totalLabel}
-      </p>
-      <p className="font-mono text-sm text-[var(--text-soft)]">
-        {countSecondary}
-      </p>
-      <StatusBadge className="mt-2" status={importItem.status} />
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+          {totalLabel}
+        </p>
+        <p className="font-mono text-sm text-[var(--text-soft)]">
+          {countSecondary}
+        </p>
+      </div>
+      <StatusBadge status={importItem.status} />
+      <div className="mt-auto flex flex-wrap gap-2 pt-1">
+        {onReimport ? (
+          <Button
+            variant="subtle"
+            className="min-h-8 px-3 py-1.5 text-xs"
+            onClick={() => onReimport(importItem)}
+          >
+            Reimportar
+          </Button>
+        ) : null}
+        {onDelete ? (
+          <Button
+            variant="danger"
+            className="min-h-8 px-3 py-1.5 text-xs"
+            onClick={() => onDelete(importItem)}
+            disabled={isDeleting}
+            isLoading={isDeleting}
+            loadingLabel="Excluindo..."
+            leftIcon={<TrashIcon className="h-3.5 w-3.5" />}
+          >
+            Excluir
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -120,17 +168,26 @@ function ReconciliationCell({ reconciliation }) {
 }
 
 /**
- * Top-of-page "Visão por mês" table for the Imports page (Sprint 3 / P1.1).
- * Each row condenses the three sides of the workflow for that month:
- * the donations spreadsheet, the credits spreadsheet, and the reconciliation
- * status. Designed so the user can scan the table top-to-bottom and tell
- * which months still need attention.
+ * The unified per-month overview that anchors the "Importações" page. Each
+ * row is one reference month with three side-by-side cells: donations
+ * planilha, credits planilha, reconciliation status. Per-cell actions
+ * (reimport, delete, "importar agora") are inlined so the user can drive
+ * the whole month from a single row without bouncing between sections.
  *
- * Reads from `getMonthlyImportsOverview` — a single grouped query trio —
- * and auto-reloads whenever an import, credit import, or reconciliation
- * event fires.
+ * The action callbacks are optional so the section can also be embedded
+ * in read-only contexts (e.g. dashboard widgets) without dragging in the
+ * modal plumbing.
  */
-export default function MonthlyImportsOverviewSection() {
+export default function MonthlyImportsOverviewSection({
+  onImportNewDonation,
+  onImportNewCredit,
+  onReimportDonation,
+  onDeleteDonation,
+  onReimportCredit,
+  onDeleteCredit,
+  deletingDonationId = "",
+  deletingCreditId = "",
+}) {
   const loader = useCallback(() => getMonthlyImportsOverview(), []);
 
   const { data, isLoading, isRefreshing, error, reload } = useDataResource({
@@ -178,7 +235,7 @@ export default function MonthlyImportsOverviewSection() {
       ) : rows.length === 0 ? (
         <EmptyState
           title="Ainda não há importações"
-          description="Importe uma planilha de doações ou de créditos para começar."
+          description="Use os botões acima para importar uma planilha de doações ou de créditos."
         />
       ) : (
         <div aria-busy={isRefreshing} className="overflow-x-auto">
@@ -186,8 +243,8 @@ export default function MonthlyImportsOverviewSection() {
             <thead className="bg-[var(--surface-strong)] text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
                 <th className="px-3 py-2">Mês</th>
-                <th className="px-3 py-2 min-w-[240px]">Planilha de doações</th>
-                <th className="px-3 py-2 min-w-[240px]">Planilha de créditos</th>
+                <th className="px-3 py-2 min-w-[260px]">Planilha de doações</th>
+                <th className="px-3 py-2 min-w-[260px]">Planilha de créditos</th>
                 <th className="px-3 py-2 min-w-[260px]">Conciliação</th>
               </tr>
             </thead>
@@ -206,16 +263,32 @@ export default function MonthlyImportsOverviewSection() {
                     <PresenceCell
                       importItem={row.donationImport}
                       emptyLabel="Planilha de doações não importada."
+                      emptyActionLabel="Importar doações"
                       totalLabel={`${formatInteger(row.donationImport?.totalNotes ?? 0)} nota(s)`}
                       countSecondary={`${formatInteger(row.donationImport?.validNotes ?? 0)} válida(s)`}
+                      isDeleting={
+                        Boolean(deletingDonationId) &&
+                        deletingDonationId === row.donationImport?.id
+                      }
+                      onReimport={onReimportDonation}
+                      onDelete={onDeleteDonation}
+                      onImportNew={onImportNewDonation}
                     />
                   </td>
                   <td className="px-3 py-3">
                     <PresenceCell
                       importItem={row.creditImport}
                       emptyLabel="Planilha de créditos não importada."
+                      emptyActionLabel="Importar créditos"
                       totalLabel={`${formatInteger(row.creditImport?.totalRows ?? 0)} linha(s)`}
                       countSecondary={`${formatInteger(row.creditImport?.validRows ?? 0)} calculada(s)`}
+                      isDeleting={
+                        Boolean(deletingCreditId) &&
+                        deletingCreditId === row.creditImport?.id
+                      }
+                      onReimport={onReimportCredit}
+                      onDelete={onDeleteCredit}
+                      onImportNew={onImportNewCredit}
                     />
                   </td>
                   <td className="px-3 py-3">

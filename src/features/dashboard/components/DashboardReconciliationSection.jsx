@@ -106,25 +106,25 @@ export default function DashboardReconciliationSection({
             label="Notas conciliadas"
             value={formatInteger(reconciliation.matched)}
             helper={`${formatCurrency(reconciliation.matchedCreditValue)} em crédito real casado`}
-            onClick={() => navigate("/creditos")}
+            onClick={() => navigate("/importacoes")}
           />
           <MetricCard
             label="Divergentes"
             value={formatInteger(reconciliation.divergent)}
             helper={`Mesma nota, valor diferente · ${formatCurrency(reconciliation.divergentCreditValue)}`}
-            onClick={() => navigate("/creditos")}
+            onClick={() => navigate("/importacoes")}
           />
           <MetricCard
             label="Créditos sem doação"
             value={formatInteger(reconciliation.creditOnly)}
             helper={`${formatCurrency(reconciliation.creditOnlyValue)} sem doação correspondente`}
-            onClick={() => navigate("/creditos")}
+            onClick={() => navigate("/importacoes")}
           />
           <MetricCard
             label="Doações sem crédito"
             value={formatInteger(reconciliation.donationOnly)}
             helper="Doações válidas que não bateram com nenhum crédito."
-            onClick={() => navigate("/creditos")}
+            onClick={() => navigate("/importacoes")}
           />
           <MetricCard
             label="Duplicidades"
@@ -132,7 +132,7 @@ export default function DashboardReconciliationSection({
               reconciliation.duplicateCredit + reconciliation.duplicateDonation,
             )}
             helper={`${formatInteger(reconciliation.duplicateCredit)} crédito(s), ${formatInteger(reconciliation.duplicateDonation)} doação(ões)`}
-            onClick={() => navigate("/creditos")}
+            onClick={() => navigate("/importacoes")}
           />
         </div>
         </>

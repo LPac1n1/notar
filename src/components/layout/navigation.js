@@ -1,5 +1,4 @@
 import {
-  CreditIcon,
   DashboardIcon,
   DemandIcon,
   DonorIcon,
@@ -47,14 +46,8 @@ export const MAIN_NAV_ITEMS = [
   {
     to: "/importacoes",
     label: "Importações",
-    description: "Planilhas, conciliação e histórico",
+    description: "Planilhas de doações e créditos, conciliação e busca de CPFs",
     icon: ImportIcon,
-  },
-  {
-    to: "/creditos",
-    label: "Créditos",
-    description: "Planilhas de créditos da Nota Fiscal Paulista",
-    icon: CreditIcon,
   },
   {
     to: "/anotacoes",

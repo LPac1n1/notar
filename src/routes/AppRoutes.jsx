@@ -1,5 +1,11 @@
 import { AnimatePresence } from "framer-motion";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Routes,
+  Route,
+  useLocation,
+} from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import PageTransition from "../components/layout/PageTransition";
 
@@ -10,7 +16,6 @@ import Demands from "../pages/Demands";
 import People from "../pages/People";
 import Monthly from "../pages/Monthly";
 import Imports from "../pages/Imports";
-import Credits from "../pages/Credits";
 import Notes from "../pages/Notes";
 import ActionHistory from "../pages/ActionHistory";
 import Settings from "../pages/Settings";
@@ -35,7 +40,12 @@ function AnimatedRoutes() {
             <Route path="/demandas" element={<Demands />} />
             <Route path="/mensal" element={<Monthly />} />
             <Route path="/importacoes" element={<Imports />} />
-            <Route path="/creditos" element={<Credits />} />
+            {/* `/creditos` was merged into `/importacoes` (commit 158).
+                Redirect old links so bookmarks / dashboard CTAs keep working. */}
+            <Route
+              path="/creditos"
+              element={<Navigate to="/importacoes" replace />}
+            />
             <Route path="/anotacoes" element={<Notes />} />
             <Route path="/lixeira" element={<Trash />} />
             <Route path="/historico" element={<ActionHistory />} />
