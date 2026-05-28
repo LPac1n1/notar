@@ -97,6 +97,22 @@ export default function Credits() {
     [navigate],
   );
 
+  const {
+    data: creditImports,
+    isLoading,
+    isRefreshing,
+    error: listError,
+    setError: setListError,
+    reload,
+  } = useDataResource({
+    loader: listCreditImports,
+    scope: "CreditsPage",
+    errorMessage: "Não foi possível carregar as importações de créditos.",
+  });
+
+  // Filters reference month dropdown for the credit-notes list. Derived
+  // from the already-loaded `creditImports` so we don't issue a separate
+  // query just to populate the option list.
   const creditNotesMonthOptions = useMemo(() => {
     const months = new Map();
     for (const item of creditImports ?? []) {
@@ -110,19 +126,6 @@ export default function Credits() {
       ...Array.from(months, ([value, label]) => ({ value, label })),
     ];
   }, [creditImports]);
-
-  const {
-    data: creditImports,
-    isLoading,
-    isRefreshing,
-    error: listError,
-    setError: setListError,
-    reload,
-  } = useDataResource({
-    loader: listCreditImports,
-    scope: "CreditsPage",
-    errorMessage: "Não foi possível carregar as importações de créditos.",
-  });
 
   const { showDataRefreshLoading } = useDataRefreshIndicator(isRefreshing);
   const error = pageError || listError;
