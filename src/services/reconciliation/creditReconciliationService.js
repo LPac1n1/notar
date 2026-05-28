@@ -781,16 +781,19 @@ export async function listOrphanedCredits({ limit = 100 } = {}) {
 
 /**
  * Cheap counter for the navigation badge — how many active donors are
- * currently in a state that demands the user's attention (abatement
- * exceeded the real credit, or credit available beyond what was abated).
- * "No-credit" donors are excluded because they typically just need an
- * import, not action on the donor themselves.
+ * currently in a state that demands the user's attention. The only
+ * remaining failure mode is `exceeded` (NGO abated more than the donor
+ * actually generated in NFP credit). Surplus credit (credit > abated)
+ * is normal NFP behaviour and is intentionally not flagged.
+ *
+ * `no-credit` donors are also excluded because they typically just need
+ * an import, not action on the donor themselves.
  */
 export async function countDonorReconciliationIssues() {
   const statuses = await listDonorReconciliationStatuses();
   let count = 0;
   for (const entry of statuses.values()) {
-    if (entry.status === "exceeded" || entry.status === "incomplete") {
+    if (entry.status === "exceeded") {
       count += 1;
     }
   }
@@ -811,8 +814,8 @@ export async function countDonorReconciliationIssues() {
  *   and the abated total honour the filter so the row stays internally
  *   consistent.
  * @param {string} [options.statusFilter] - One of "ok" | "exceeded" |
- *   "incomplete" | "no-credit". Filtered in JS after aggregation since
- *   the status depends on the comparison of two summed columns.
+ *   "no-credit". Filtered in JS after aggregation since the status
+ *   depends on the comparison of two summed columns.
  */
 export async function listReconciliationByDonor({
   referenceMonth = "",

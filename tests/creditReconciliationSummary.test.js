@@ -31,15 +31,13 @@ test("status is 'exceeded' when abated is meaningfully above credit", () => {
   assert.equal(computeReconciliationStatus(99.99, 100.01), "exceeded");
 });
 
-test("status is 'incomplete' when credit exceeds abated by more than epsilon", () => {
-  assert.equal(computeReconciliationStatus(100, 50), "incomplete");
-  assert.equal(computeReconciliationStatus(100.01, 99.99), "incomplete");
-});
-
-test("status is 'incomplete' even when only the credit side has data", () => {
-  // Donor generated credit but the NGO hasn't marked anything as paid yet.
-  // This is the most common state for a freshly-imported credit spreadsheet.
-  assert.equal(computeReconciliationStatus(30, 0), "incomplete");
+test("status is 'ok' when credit is above abated — surplus credit is normal", () => {
+  // The NGO doesn't need to abate every cent of credit the donor generated.
+  // Surplus credit on the NFP side is expected behaviour, so it should not
+  // surface as a warning anywhere in the UI.
+  assert.equal(computeReconciliationStatus(100, 50), "ok");
+  assert.equal(computeReconciliationStatus(100.01, 99.99), "ok");
+  assert.equal(computeReconciliationStatus(30, 0), "ok");
 });
 
 test("status is 'exceeded' even when no credit was generated but money was abated", () => {

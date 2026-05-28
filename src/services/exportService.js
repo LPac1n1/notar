@@ -8,10 +8,13 @@ import {
 import { buildCsvContent } from "../utils/csv.js";
 import { downloadFile } from "../utils/download.js";
 
+// `incomplete` was retired — surplus credit folds into `ok` because the
+// user established that credit > abated is normal NFP behaviour. Kept
+// the key here for back-compat with any persisted CSV export referencing
+// the old wording, but it should never come back from the service.
 const RECONCILIATION_STATUS_LABEL = {
   ok: "Dentro do limite",
   exceeded: "Abatimento excedido",
-  incomplete: "Crédito disponível",
   "no-credit": "Sem crédito conciliado",
 };
 

@@ -14,17 +14,21 @@ export const RECONCILIATION_EPSILON = 0.005;
  * across the UI (donor profile badge, monthly row icon, dashboard counters).
  *
  *   no-credit  — donor never generated any credit (nothing to reconcile).
- *   ok         — abated value matches the credit within RECONCILIATION_EPSILON.
- *   exceeded   — NGO abated more than the donor actually generated.
- *   incomplete — donor still has credit not yet abated.
+ *   ok         — abated value is within (or under) the credit generated.
+ *                The NGO doesn't have to abate every cent of credit the
+ *                donor produced; surplus credit is normal NFP behaviour
+ *                and never deserves a warning.
+ *   exceeded   — NGO abated more than the donor actually generated. The
+ *                only failure mode worth surfacing: it means the system
+ *                marked off abatements the credit can't cover.
  */
 export function computeReconciliationStatus(totalCredit, totalAbated) {
   if (totalCredit <= 0 && totalAbated <= 0) {
     return "no-credit";
   }
   const diff = totalAbated - totalCredit;
-  if (Math.abs(diff) <= RECONCILIATION_EPSILON) {
-    return "ok";
+  if (diff > RECONCILIATION_EPSILON) {
+    return "exceeded";
   }
-  return diff > 0 ? "exceeded" : "incomplete";
+  return "ok";
 }

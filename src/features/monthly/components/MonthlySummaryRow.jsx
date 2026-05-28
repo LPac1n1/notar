@@ -11,6 +11,9 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricField from "./MetricField";
 import StatusToggle from "./StatusToggle";
 
+// Only "exceeded" surfaces as a badge — surplus NFP credit over the
+// abatement value is normal and intentionally silent. See
+// `computeReconciliationStatus` for the rationale.
 const RECONCILIATION_BADGE = {
   exceeded: {
     label: "Crédito excedido",
@@ -18,13 +21,6 @@ const RECONCILIATION_BADGE = {
       "Abatimento marcado como realizado é maior que o crédito real gerado na NFP.",
     className:
       "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]",
-  },
-  incomplete: {
-    label: "Crédito disponível",
-    title:
-      "Ainda há crédito real na NFP não marcado como abatido para este doador.",
-    className:
-      "border-[var(--warning-line)] bg-[var(--warning-soft)] text-[var(--warning)]",
   },
 };
 
@@ -343,22 +339,18 @@ export default function MonthlySummaryRow({
                   : "—"
               }
               valueClassName={
-                reconciliation
-                  ? reconciliation.status === "exceeded"
-                    ? "text-[var(--danger)]"
-                    : reconciliation.status === "incomplete"
-                      ? "text-[var(--warning)]"
-                      : reconciliation.status === "ok"
-                        ? "text-[var(--success)]"
-                        : ""
+                // Only red on exceeded — credit ≥ abated (the "ok" bucket
+                // now covers both exact and surplus) keeps the default
+                // text colour because the user told us surplus credit is
+                // not actionable.
+                reconciliation && reconciliation.status === "exceeded"
+                  ? "text-[var(--danger)]"
                   : ""
               }
               helper={
                 reconciliation && reconciliation.status === "exceeded"
                   ? "Abatido > crédito real"
-                  : reconciliation && reconciliation.status === "incomplete"
-                    ? "Crédito ainda disponível"
-                    : undefined
+                  : undefined
               }
             />
           </div>

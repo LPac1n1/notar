@@ -142,8 +142,8 @@ export default function Sidebar() {
   }, []);
 
   // Refresh the badge whenever the reconciliation table moves. Listening
-  // to `monthly` too because flipping abatement_status changes the
-  // exceeded/incomplete classification even without a fresh reconcile.
+  // to `monthly` too because flipping abatement_status can move a donor
+  // into the `exceeded` bucket even without a fresh reconcile.
   useDatabaseChangeEffect(
     async () => {
       try {

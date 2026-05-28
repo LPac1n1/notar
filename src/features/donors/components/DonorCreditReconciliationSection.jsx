@@ -5,24 +5,22 @@ import { getDonorReconciliationSummary } from "../../../services/reconciliation/
 import { logError } from "../../../services/logger";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
+// "incomplete" used to surface as a warning ("Crédito disponível"). The
+// user established that surplus credit on the NFP side is normal — there
+// is no expectation that every cent of credit be abated — so it now
+// rolls into "ok". Only "exceeded" remains as an actionable warning.
 const STATUS_META = {
   ok: {
     label: "Dentro do limite",
     tone: "success",
     description:
-      "O valor abatido no sistema bate com o crédito real gerado na NFP.",
+      "O abatimento marcado no sistema está dentro do crédito real gerado na NFP.",
   },
   exceeded: {
     label: "Abatimento excedido",
     tone: "danger",
     description:
       "O valor abatido no sistema é maior que o crédito real disponível na NFP.",
-  },
-  incomplete: {
-    label: "Crédito disponível",
-    tone: "warning",
-    description:
-      "O doador ainda tem crédito real na NFP que não foi marcado como abatido.",
   },
   "no-credit": {
     label: "Sem crédito conciliado",
@@ -109,11 +107,15 @@ export default function DonorCreditReconciliationSection({ donorId }) {
   }
 
   const meta = STATUS_META[summary.status] ?? STATUS_META["no-credit"];
+  // For surplus credit (status "ok" but difference negative) we still show
+  // the number so the user can see the headroom, just without "crédito
+  // restante" framing that implied actionability. The exceeded case keeps
+  // the explicit "abatido a mais" call-out.
   const differenceLabel =
     summary.difference > 0
       ? `+${formatCurrency(summary.difference)} abatido a mais`
       : summary.difference < 0
-      ? `${formatCurrency(summary.difference)} (crédito restante)`
+      ? formatCurrency(summary.difference)
       : formatCurrency(0);
 
   return (
@@ -149,11 +151,7 @@ export default function DonorCreditReconciliationSection({ donorId }) {
           label="Diferença"
           value={differenceLabel}
           valueClass={
-            summary.status === "exceeded"
-              ? "text-[var(--danger)]"
-              : summary.status === "incomplete"
-              ? "text-[var(--warning)]"
-              : ""
+            summary.status === "exceeded" ? "text-[var(--danger)]" : ""
           }
         />
         <MetricTile

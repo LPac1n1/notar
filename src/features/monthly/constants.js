@@ -43,10 +43,13 @@ export const ABATEMENT_SORT_OPTIONS = [
   { value: "asc", label: "Menor abatimento primeiro" },
 ];
 
+// "incomplete" used to be a separate filter ("Crédito disponível") but
+// surplus credit no longer counts as a problem — credit > abated is just
+// folded into "ok". Removing the option keeps the filter list from
+// landing the user on an always-empty result page.
 export const RECONCILIATION_STATUS_OPTIONS = [
   { value: "all", label: "Toda a conciliação" },
   { value: "ok", label: "Dentro do limite", tone: "success" },
   { value: "exceeded", label: "Abatimento excedido", tone: "danger" },
-  { value: "incomplete", label: "Crédito disponível", tone: "warning" },
   { value: "no-credit", label: "Sem crédito conciliado", tone: "default" },
 ];
