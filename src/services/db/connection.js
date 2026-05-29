@@ -181,6 +181,34 @@ async function _runPrepared(sql, params) {
 }
 
 /**
+ * Best-effort extraction of "rows affected" from a DuckDB-WASM DML result.
+ * Returns `null` when the value cannot be determined safely — callers fall
+ * back to assuming a change happened (the safe default for cache + event
+ * invalidation). The output of DML statements is implementation-defined in
+ * DuckDB-WASM and has changed shape across versions, so we never throw
+ * from inspection.
+ */
+function extractRowsAffected(result) {
+  if (!result) return null;
+  try {
+    const arr =
+      typeof result.toArray === "function" ? result.toArray() : null;
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const row = arr[0];
+    if (row == null || typeof row !== "object") return null;
+    // DuckDB historically uses `Count`; some bindings expose lowercase
+    // `count`. BigInt comes through DuckDB-WASM for INTEGER aggregates.
+    const raw = row.Count ?? row.count;
+    if (raw == null) return null;
+    if (typeof raw === "bigint") return Number(raw);
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
  * Run a prepared write statement (INSERT/UPDATE/DELETE/etc.). Same lifetime
  * rules as `queryPrepared`. Honors the connection-level flush hook so the
  * connected file (if any) is persisted after the write.
@@ -192,15 +220,25 @@ export async function executePrepared(
 ) {
   const connection = await initDB();
   const stmt = await connection.prepare(sql);
+  let rowsAffected = null;
   try {
-    await stmt.query(...sanitizePreparedParams(params));
+    const result = await stmt.query(...sanitizePreparedParams(params));
+    rowsAffected = extractRowsAffected(result);
   } finally {
     await stmt.close().catch(() => null);
   }
 
-  invalidateCache();
+  // If DuckDB told us the write hit zero rows, skip the cache invalidation
+  // AND the change event. Loops of UPDATE-then-UPDATE-then-... that no-op
+  // (e.g. an idempotent backfill touching nothing) used to burn one cache
+  // wipe + one event per call. When we can't determine the count we keep
+  // the previous behaviour of always invalidating — safer to over-notify
+  // than miss a real change.
+  if (rowsAffected !== 0) {
+    invalidateCache();
+  }
 
-  if (flush && transactionDepth === 0) {
+  if (flush && transactionDepth === 0 && rowsAffected !== 0) {
     await flushAfterTransaction();
     notifyDatabaseChanged(source || domains ? { source, domains } : undefined);
   }

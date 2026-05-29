@@ -5,6 +5,7 @@ import {
   queryPrepared,
   runInTransaction,
 } from "../db";
+import { withCache } from "../queryCache.js";
 import { computeReconciliationStatus } from "./reconciliationStatus";
 
 // Re-export so existing callers (`creditReconciliationService.computeReconciliationStatus`)
@@ -278,7 +279,7 @@ function toNumber(value) {
  * `referenceMonth` (YYYY-MM-01) filters by the donation import's month —
  * useful for the monthly view.
  */
-export async function getReconciliationStats({ referenceMonth = "" } = {}) {
+async function _getReconciliationStatsUncached({ referenceMonth = "" } = {}) {
   const monthFilter = referenceMonth
     ? `
         AND (
@@ -348,6 +349,22 @@ export async function getReconciliationStats({ referenceMonth = "" } = {}) {
     stats.matchedCreditValue + stats.divergentCreditValue + stats.creditOnlyValue;
   return stats;
 }
+
+// 15s TTL — `getReconciliationStats()` runs five-table joins on tens of
+// thousands of rows and is invoked from multiple post-import toasts in
+// quick succession (donation import shows it, then reconcile re-run
+// shows it again, then any focus event from cloud-sync conflict checks).
+// Cached lookups within a 15s window collapse the work into one query;
+// any write through `executePrepared` invalidates the cache, so the
+// next read after a mutation always re-runs.
+const RECONCILIATION_STATS_TTL_MS = 15_000;
+
+export const getReconciliationStats = withCache(
+  ({ referenceMonth = "" } = {}) =>
+    `getReconciliationStats:${referenceMonth}`,
+  _getReconciliationStatsUncached,
+  RECONCILIATION_STATS_TTL_MS,
+);
 
 /**
  * Per-donor matched totals — drives the donor profile credit panel and the

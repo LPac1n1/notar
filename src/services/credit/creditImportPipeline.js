@@ -12,6 +12,15 @@ import {
 } from "../db";
 import { createActionHistoryEntry } from "../actionHistoryService";
 import { reconcileCredits } from "../reconciliation/creditReconciliationService";
+// Donations and credits use the same SQL fragment helpers so both sides
+// derive identical match_keys / valor_cents for the same nota fiscal —
+// any drift between the two would silently break reconciliation.
+import {
+  brOrUsDoubleSqlExpression,
+  buildCsvSource,
+  escapeIdentifier,
+  numeroNotaSqlExpression,
+} from "../import/sqlExpressions";
 import {
   detectCreditColumns,
   getImportFileExtension,
@@ -27,49 +36,10 @@ import { getErrorMessage } from "../../utils/error";
  * key (cnpj_estabelecimento, numero_nota, data_emissao) shadows the donations
  * side so Fase 3 can join the two cheaply.
  *
- * `is_valid` reflects the per-row "Situação do Crédito": only "calculado"
- * counts toward the totals used in reconciliation. Other situations land in
- * the table so the diagnostic UI can surface why a row was ignored.
+ * `is_valid` is TRUE when the trimmed, lowercased Situação column is either
+ * "calculado" (post-Jan 2026 NFP exports) or "liberado" (pre-Jan 2026
+ * exports).
  */
-
-function escapeIdentifier(value) {
-  return `"${String(value).replaceAll('"', '""')}"`;
-}
-
-function buildCsvSource(fileName) {
-  return `read_csv_auto('${escapeSqlString(fileName)}', all_varchar = true)`;
-}
-
-/**
- * Same numero_nota normalizer used in the donations pipeline — must stay
- * in sync so both sides produce identical match keys for the same nota.
- * Strips non-digits AND leading zeros.
- */
-function numeroNotaSqlExpression(columnName) {
-  if (!columnName) return `''`;
-  const id = escapeIdentifier(columnName);
-  return `ltrim(regexp_replace(coalesce(CAST(${id} AS VARCHAR), ''), '[^0-9]', '', 'g'), '0')`;
-}
-
-/**
- * Same BR/US auto-detect currency parser as the donations pipeline.
- * Critical for `valor_cents` to agree across both sides; see the donation
- * pipeline for the full rationale.
- */
-function brOrUsDoubleSqlExpression(columnName) {
-  if (!columnName) return `0`;
-  const id = escapeIdentifier(columnName);
-  const stripped = `regexp_replace(coalesce(CAST(${id} AS VARCHAR), '0'), '[^0-9,.\\-]', '', 'g')`;
-  return `(
-    CASE
-      WHEN ${stripped} LIKE '%,%'
-        THEN try_cast(replace(replace(${stripped}, '.', ''), ',', '.') AS DOUBLE)
-      WHEN regexp_full_match(${stripped}, '-?[0-9]+\\.[0-9]{1,2}')
-        THEN try_cast(${stripped} AS DOUBLE)
-      ELSE try_cast(replace(${stripped}, '.', '') AS DOUBLE)
-    END
-  )`;
-}
 
 async function registerSpreadsheetPreviewFile(file, registeredFileName) {
   const fileExtension = getImportFileExtension(file.name);
