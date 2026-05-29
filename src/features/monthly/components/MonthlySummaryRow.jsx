@@ -9,6 +9,7 @@ import {
 } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricField from "./MetricField";
+import MonthlyRowHistoryPanel from "./MonthlyRowHistoryPanel";
 import StatusToggle from "./StatusToggle";
 
 // Only "exceeded" surfaces as a badge — surplus NFP credit over the
@@ -31,12 +32,19 @@ function MonthlySummaryRowBase({
   onStatusChange,
   reconciliation,
   showReferenceMonth = false,
+  isSelected = false,
+  onToggleSelect,
 }) {
   const reconciliationBadge =
     reconciliation && RECONCILIATION_BADGE[reconciliation.status]
       ? RECONCILIATION_BADGE[reconciliation.status]
       : null;
   const [expanded, setExpanded] = useState(false);
+  // History panel — separate from mobile `expanded` because it loads
+  // remote data (last 6 months) and we don't want it firing on every
+  // mobile expand. Only fetched the first time the user clicks the
+  // history toggle.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const hasStartDateConflict =
     summary.hasDonationsInMonth &&
@@ -64,22 +72,45 @@ function MonthlySummaryRowBase({
 
   const detailId = `monthly-row-detail-${summary.id}`;
 
+  // Checkbox visible whenever the parent provided a toggle callback. We
+  // render it on a dedicated rail so it doesn't shift the existing
+  // header layout — `position: absolute` against the article keeps the
+  // mobile button row clickable without intercepting taps on the
+  // checkbox.
+  const checkboxRail = onToggleSelect ? (
+    <label
+      className="absolute left-3 top-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface)] transition-colors hover:border-[var(--accent)]"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        checked={isSelected}
+        onChange={(event) => onToggleSelect(summary.id, event.target.checked)}
+        className="h-3.5 w-3.5 accent-[var(--accent)]"
+        aria-label={`Selecionar ${summary.donorName}`}
+      />
+    </label>
+  ) : null;
+
   return (
     <article
-      className={`rounded-md border ${
-        hasStartDateConflict
-          ? "border-[var(--warning-line)] bg-[var(--surface-elevated)]"
-          : !summary.hasDonationsInMonth
-            ? "border-[var(--line)] bg-[var(--surface-strong)]"
-            : "border-[var(--line)] bg-[var(--surface-elevated)]"
+      className={`relative rounded-md border ${
+        isSelected
+          ? "border-[var(--accent)] bg-[var(--accent-2-soft)]"
+          : hasStartDateConflict
+            ? "border-[var(--warning-line)] bg-[var(--surface-elevated)]"
+            : !summary.hasDonationsInMonth
+              ? "border-[var(--line)] bg-[var(--surface-strong)]"
+              : "border-[var(--line)] bg-[var(--surface-elevated)]"
       }`}
     >
+      {checkboxRail}
       {/* Compact mobile header (≤ md). Tapping toggles the expanded detail.
           Desktop/tablet (md+) skip the header and render the full layout
           directly below. */}
       <button
         type="button"
-        className="flex w-full items-center gap-3 p-4 text-left md:hidden"
+        className={`flex w-full items-center gap-3 p-4 text-left md:hidden ${onToggleSelect ? "pl-12" : ""}`}
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
         aria-controls={detailId}
@@ -127,7 +158,7 @@ function MonthlySummaryRowBase({
           expanded
             ? "block border-t border-[var(--line)] p-4"
             : "hidden"
-        } md:block md:border-t-0 md:p-4`}
+        } md:block md:border-t-0 md:p-4 ${onToggleSelect ? "md:pl-12" : ""}`}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] xl:items-start">
           <div className="min-w-0">
@@ -391,6 +422,40 @@ function MonthlySummaryRowBase({
             </p>
           </div>
         </div>
+
+        {/* Histórico do doador — fica disponível em qualquer linha que
+            tenha donorId real (linhas "Via acumulado" / "Sem doação"
+            também). Só carrega dados quando o usuário expande. */}
+        {summary.donorId ? (
+          <div className="mt-4 border-t border-[var(--line)] pt-3">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((value) => !value)}
+              aria-expanded={historyOpen}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--accent)]"
+            >
+              <ChevronDownIcon
+                className={`h-3.5 w-3.5 transition-transform ${
+                  historyOpen ? "rotate-180" : ""
+                }`}
+              />
+              {historyOpen ? "Ocultar" : "Mostrar"} histórico do doador
+            </button>
+            {historyOpen ? (
+              <MonthlyRowHistoryPanel
+                donorId={summary.donorId}
+                currentMonthAbatement={summary.abatementAmount ?? 0}
+                currentMonthCreditValue={
+                  reconciliation ? reconciliation.totalCredit : null
+                }
+                currentMonthDifference={
+                  reconciliation ? reconciliation.difference : null
+                }
+                onOpenProfile={onNavigate}
+              />
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </article>
   );

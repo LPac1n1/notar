@@ -16,11 +16,15 @@ export default function MonthlySummaryList({
   onStatusChange,
   reconciliationByDonor,
   showReferenceMonth,
+  selectedIds,
+  onToggleSelect,
 }) {
   const resolveReconciliation = (summary) =>
     reconciliationByDonor && summary.donorId
       ? reconciliationByDonor.get(summary.donorId)
       : null;
+  const isSelected = (summary) =>
+    Boolean(selectedIds && selectedIds.has(summary.id));
   const paginationProps = {
     endItem: pagination.endItem,
     onPageChange: pagination.setPage,
@@ -52,6 +56,8 @@ export default function MonthlySummaryList({
               onStatusChange={onStatusChange}
               reconciliation={resolveReconciliation(summary)}
               showReferenceMonth={showReferenceMonth}
+              isSelected={isSelected(summary)}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </GroupSection>
@@ -74,6 +80,8 @@ export default function MonthlySummaryList({
               onStatusChange={onStatusChange}
               reconciliation={resolveReconciliation(summary)}
               showReferenceMonth={showReferenceMonth}
+              isSelected={isSelected(summary)}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </GroupSection>

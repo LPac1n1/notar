@@ -13,9 +13,11 @@ import BulkAbatementModal from "../features/monthly/components/BulkAbatementModa
 import CatchUpAdjustmentModal from "../features/donors/components/CatchUpAdjustmentModal";
 import ConsolidatedPendingDonors from "../features/monthly/components/ConsolidatedPendingDonors";
 import ImportedMonthsCarousel from "../features/monthly/components/ImportedMonthsCarousel";
+import BulkActionBar from "../features/monthly/components/BulkActionBar";
 import MonthlyFiltersBar from "../features/monthly/components/MonthlyFiltersBar";
 import MonthlySummaryList from "../features/monthly/components/MonthlySummaryList";
 import MonthlySummaryToolbar from "../features/monthly/components/MonthlySummaryToolbar";
+import MonthSwitcher from "../features/monthly/components/MonthSwitcher";
 import FirstVisitHint from "../components/ui/FirstVisitHint";
 import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
@@ -86,6 +88,10 @@ export default function Monthly() {
   });
   const [updatingSummaryId, setUpdatingSummaryId] = useState("");
   const [updatingDonorId, setUpdatingDonorId] = useState("");
+  // Bulk selection — Set of summary ids selected via row checkbox. Cleared
+  // when filters change or after a successful bulk apply so the operator
+  // doesn't accidentally re-act on stale rows.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingJpeg, setIsExportingJpeg] = useState(false);
@@ -159,6 +165,27 @@ export default function Monthly() {
     setAvailableImports(rows);
   }, []);
 
+  // Mês implícito (Sprint 2 / P2): quando o usuário entra na Gestão
+  // Mensal sem `referenceMonth` previamente guardado em location.state e
+  // já temos importações processadas, ancoramos no mês mais recente. A
+  // ordem de `listImports` já é DESC, então rows[0] é o mais novo.
+  //
+  // Não chumbamos para sobrescrever uma navegação intencional (back do
+  // browser, deep-link com filtros) — só age quando o filtro está
+  // vazio. E só roda uma vez via guard `referenceMonth === ""` para não
+  // entrar em loop com a futura troca manual de mês.
+  useEffect(() => {
+    if (filters.referenceMonth) return;
+    if (availableImports.length === 0) return;
+    const mostRecentMonth = availableImports[0]?.referenceMonth ?? "";
+    if (!mostRecentMonth) return;
+    setFilters((current) =>
+      current.referenceMonth
+        ? current
+        : { ...current, referenceMonth: mostRecentMonth },
+    );
+  }, [availableImports, filters.referenceMonth]);
+
   const loadReconciliationStatuses = useCallback(async () => {
     try {
       const map = await listDonorReconciliationStatuses();
@@ -192,6 +219,45 @@ export default function Monthly() {
   const monthlyOperation = useAsync({ reportGlobal: true });
   const dataSyncFeedback = useDataSyncFeedback();
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
+
+  // Selection helpers. Clear whenever the underlying month / filters
+  // shift so the bar never carries over stale ids the user can't see.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filters]);
+
+  const handleToggleSelect = useCallback((summaryId, nextSelected) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (nextSelected) {
+        next.add(summaryId);
+      } else {
+        next.delete(summaryId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  // Eligible-for-bulk = selected AND pending AND row can be edited.
+  const eligibleBulkSummaries = useMemo(() => {
+    if (selectedIds.size === 0 || !summaries) return [];
+    return summaries.filter(
+      (summary) =>
+        selectedIds.has(summary.id) &&
+        summary.canUpdateAbatement &&
+        summary.abatementStatus === "pending",
+    );
+  }, [summaries, selectedIds]);
+
+  const handleApplyBulkSelection = useCallback(async () => {
+    if (eligibleBulkSummaries.length === 0) return;
+    await handleBulkAbate(eligibleBulkSummaries.map((summary) => summary.id));
+    setSelectedIds(new Set());
+  }, [eligibleBulkSummaries, handleBulkAbate]);
   const isNotDonatedFilterActive =
     hasSelectedReferenceMonth && filters.donationActivity === "not-donated";
   const activeFilterCount = [
@@ -606,11 +672,20 @@ export default function Monthly() {
 
   return (
     <div>
-      <PageHeader
-        title="Gestão Mensal"
-        subtitle="Abatimentos por mês, doador e status."
-        className="mb-6"
-      />
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <PageHeader
+          title="Gestão Mensal"
+          subtitle="Abatimentos por mês, doador e status."
+          className=""
+        />
+        {/* Mês corrente persistente — sempre visível no topo. Substitui o
+            ato de scroll-find-no-carrossel a cada navegação. */}
+        <MonthSwitcher
+          selectedReferenceMonth={filters.referenceMonth}
+          availableImports={availableImports}
+          onSelectMonth={handleSelectImportedMonth}
+        />
+      </div>
       <FirstVisitHint
         storageKey="notar:monthly-hint-v1"
         title="Como usar a Gestão Mensal"
@@ -747,16 +822,27 @@ export default function Monthly() {
             }
           />
         ) : (
-          <MonthlySummaryList
-            pagination={monthlyPagination}
-            donatedSummaries={visibleDonatedSummaries}
-            notDonatedSummaries={visibleNotDonatedSummaries}
-            updatingSummaryId={updatingSummaryId}
-            onNavigate={handleOpenDonorProfile}
-            onStatusChange={handleStatusChange}
-            reconciliationByDonor={reconciliationByDonor}
-            showReferenceMonth={!hasSelectedReferenceMonth}
-          />
+          <>
+            <BulkActionBar
+              selectedCount={selectedIds.size}
+              eligibleCount={eligibleBulkSummaries.length}
+              onApplyBulk={handleApplyBulkSelection}
+              onClear={handleClearSelection}
+              isApplying={isBulkAbating}
+            />
+            <MonthlySummaryList
+              pagination={monthlyPagination}
+              donatedSummaries={visibleDonatedSummaries}
+              notDonatedSummaries={visibleNotDonatedSummaries}
+              updatingSummaryId={updatingSummaryId}
+              onNavigate={handleOpenDonorProfile}
+              onStatusChange={handleStatusChange}
+              reconciliationByDonor={reconciliationByDonor}
+              showReferenceMonth={!hasSelectedReferenceMonth}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+            />
+          </>
         )}
       </SectionCard>
 
