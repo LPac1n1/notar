@@ -226,6 +226,22 @@ export default function DonorProfile() {
           Lançar acumulado
         </Button>
 
+        {/* Deep-link para o Histórico já filtrado pelo nome do doador.
+            Substitui o caminho "abrir histórico → digitar nome → buscar"
+            que afastava o operador desse recurso. */}
+        <Button
+          variant="subtle"
+          onClick={() =>
+            navigate("/historico", {
+              state: {
+                actionHistoryFilters: { label: donor.name },
+              },
+            })
+          }
+        >
+          Ver histórico desse doador
+        </Button>
+
         {!donor.isActive ? (
           <StatusBadge status="inactive" />
         ) : null}

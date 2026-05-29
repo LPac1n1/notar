@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import Button from "../components/ui/Button";
 import DataSyncSectionLoading from "../components/ui/DataSyncSectionLoading";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -29,7 +30,15 @@ const INITIAL_FILTERS = {
 const loadHistory = (f) => listActionHistory({ ...f, limit: 100 });
 
 export default function ActionHistory() {
-  const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
+  const location = useLocation();
+  // Deep-links de outras páginas podem pré-preencher um filtro de label
+  // (ex.: DonorProfile com "Ver histórico desse doador"). Lemos do
+  // location.state pra fazer o mesmo trabalho que `?label=...`, sem
+  // expor a string na URL.
+  const [filters, setFilters] = useState(() => ({
+    ...INITIAL_FILTERS,
+    ...(location.state?.actionHistoryFilters ?? {}),
+  }));
 
   const { data: actions, isLoading, isRefreshing, error, reload } = useDataResource({
     loader: loadHistory,
