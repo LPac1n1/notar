@@ -493,6 +493,145 @@ export default function Settings() {
         </div>
       </SectionCard>
 
+      {/* ── Design system ─────────────────────────────────────────────── */}
+      <SectionCard
+        title="Convenções de design"
+        icon={KeyboardIcon}
+        description="Referência rápida das regras visuais e de feedback usadas em todo o sistema."
+        className="mb-6"
+        collapsible
+        defaultOpen={false}
+      >
+        <div className="space-y-5 text-sm">
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Hierarquia tipográfica
+            </p>
+            <ul className="space-y-2 text-[var(--text-soft)]">
+              <li>
+                <strong className="text-[var(--text-main)]">Page header (h1)</strong>{" "}
+                — Montserrat, 30px, semibold. Único por página.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Section title (h2)</strong>{" "}
+                — Montserrat, 20px, bold. Um por SectionCard.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Card title (h3)</strong>{" "}
+                — System sans, 16px, semibold.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Metric value</strong>{" "}
+                — Montserrat, 24-30px, semibold, tabular-nums em valores
+                monetários.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Body</strong> — 14px,
+                line-height 1.5.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Helper / muted</strong>{" "}
+                — 12px, cor <code>--muted</code>.
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Estados de carregamento
+            </p>
+            <ul className="space-y-2 text-[var(--text-soft)]">
+              <li>
+                <strong className="text-[var(--text-main)]">Skeleton</strong> —
+                primeira carga de listas. Mantém a estrutura visível.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">
+                  Inline spinner pequeno
+                </strong>{" "}
+                — refresh em background. Não bloqueia interação.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">LoadingScreen full</strong>{" "}
+                — boot ou operação irreversível (importação processando).
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">EmptyState</strong> —
+                sempre acompanhado de um CTA primário.
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Feedback de ação
+            </p>
+            <ul className="space-y-2 text-[var(--text-soft)]">
+              <li>
+                <strong className="text-[var(--text-main)]">Otimista, sem toast</strong>{" "}
+                — local instantânea (toggle, filtro).
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Toast + "Desfazer" 8s</strong>{" "}
+                — mutação reversível (delete, edit).
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Inline progress</strong>{" "}
+                — mutação cara (import, reimport). Mostra step label.
+              </li>
+              <li>
+                <strong className="text-[var(--text-main)]">Toast com número</strong>{" "}
+                — mutação que altera muito estado (re-rodar conciliação).
+                Exemplo: "12 doadores movidos para conciliado".
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Cores de status
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                {
+                  label: "success",
+                  className:
+                    "border-[var(--success-line)] bg-[var(--accent-2-soft)] text-[var(--success)]",
+                },
+                {
+                  label: "warning",
+                  className:
+                    "border-[var(--warning-line)] bg-[var(--warning-soft)] text-[var(--warning)]",
+                },
+                {
+                  label: "danger",
+                  className:
+                    "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]",
+                },
+                {
+                  label: "neutral",
+                  className:
+                    "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--muted-strong)]",
+                },
+              ].map((tone) => (
+                <div
+                  key={tone.label}
+                  className={`rounded-md border px-3 py-2 text-xs font-semibold ${tone.className}`}
+                >
+                  {tone.label}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs text-[var(--muted)]">
+            Pressione <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5 font-mono text-[10px]">?</kbd>{" "}
+            em qualquer página para ver o painel completo de atalhos de
+            teclado.
+          </p>
+        </div>
+      </SectionCard>
+
       {/* ── Diagnóstico ───────────────────────────────────────────────── */}
       <SectionCard
         title="Diagnóstico"

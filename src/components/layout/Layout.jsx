@@ -1,7 +1,9 @@
+import { AnimatePresence } from "framer-motion";
 import { APP_SCROLL_CONTAINER_ID } from "../../utils/appScroll";
 import { useCommandPalette } from "../../hooks/useCommandPalette";
 import { useKeyboardNavigation } from "../../hooks/useKeyboardNavigation";
 import CommandPalette from "../search/CommandPalette";
+import KeyboardShortcutsOverlay from "../ui/KeyboardShortcutsOverlay";
 import Header from "./Header";
 import MobileBottomNav from "./MobileBottomNav";
 import Sidebar from "./Sidebar";
@@ -19,7 +21,8 @@ function KeyboardNavigationHint({ isPendingG }) {
 }
 
 export default function Layout({ children }) {
-  const { isPendingG } = useKeyboardNavigation();
+  const { isPendingG, isShortcutsOpen, closeShortcuts } =
+    useKeyboardNavigation();
   const palette = useCommandPalette();
 
   return (
@@ -51,6 +54,11 @@ export default function Layout({ children }) {
         results={palette.results}
         isSearching={palette.isSearching}
       />
+      <AnimatePresence>
+        {isShortcutsOpen ? (
+          <KeyboardShortcutsOverlay onClose={closeShortcuts} />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

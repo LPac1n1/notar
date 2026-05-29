@@ -25,6 +25,10 @@ export function useKeyboardNavigation() {
   const pendingRef = useRef(false);
   const timerRef = useRef(null);
   const [isPendingG, setIsPendingG] = useState(false);
+  // Painel de atalhos é controlado aqui (não no Header) porque o `?`
+  // pertence ao mesmo registro do `g` — mantém o ponteiro de quem
+  // intercepta teclas em um único lugar.
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
   const reset = useCallback(() => {
     pendingRef.current = false;
@@ -44,6 +48,15 @@ export function useKeyboardNavigation() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // `?` (Shift + /) abre o painel de atalhos. Não passa pelo chord
+      // `g` — é stand-alone porque é o atalho mais provável de ser
+      // descoberto por chance ("o que esse sistema sabe fazer?").
+      if (e.key === "?") {
+        e.preventDefault();
+        setIsShortcutsOpen((value) => !value);
+        return;
+      }
 
       const key = e.key.toLowerCase();
 
@@ -72,5 +85,7 @@ export function useKeyboardNavigation() {
     };
   }, [navigate, reset]);
 
-  return { isPendingG };
+  const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);
+
+  return { isPendingG, isShortcutsOpen, closeShortcuts };
 }
