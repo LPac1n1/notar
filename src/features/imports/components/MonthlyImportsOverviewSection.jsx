@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Button from "../../../components/ui/Button";
 import EmptyState from "../../../components/ui/EmptyState";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
@@ -9,8 +9,17 @@ import { PlusIcon, TrashIcon } from "../../../components/ui/icons";
 import { useDataResource } from "../../../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { getMonthlyImportsOverview } from "../../../services/monthlyOverviewService";
-import { formatMonthYear } from "../../../utils/date";
+import { formatMonthYear, startOfMonth } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
+
+// Filtros visuais para o operador isolar rapidamente "onde está o
+// problema". `pending` = há linha não conciliada ou exceeded; `clean` =
+// nada pendente E tudo conciliado.
+const FILTER_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "pending", label: "Com pendências" },
+  { value: "clean", label: "Tudo conciliado" },
+];
 
 /**
  * One cell of the per-month table — either an existing import (with
@@ -91,7 +100,7 @@ function PresenceCell({
   );
 }
 
-function ReconciliationCell({ reconciliation }) {
+function ReconciliationCell({ reconciliation, abatement }) {
   const total =
     (reconciliation.matched ?? 0) +
     (reconciliation.divergent ?? 0) +
@@ -99,7 +108,14 @@ function ReconciliationCell({ reconciliation }) {
     (reconciliation.donationOnly ?? 0) +
     (reconciliation.duplicates ?? 0);
 
-  if (total === 0) {
+  const totalAbated = abatement?.totalApplied ?? 0;
+  const totalCredit = reconciliation.matchedCreditValue ?? 0;
+  // diff > 0 → abatido > crédito real (exceeded — único caso de aviso)
+  const diff = totalAbated - totalCredit;
+  const showAbatementComparison = totalAbated > 0 || totalCredit > 0;
+  const diffIsExceeded = diff > 0.005;
+
+  if (total === 0 && !showAbatementComparison) {
     return (
       <div className="rounded-md border border-dashed border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--muted)]">
         Sem dados para conciliar.
@@ -129,10 +145,33 @@ function ReconciliationCell({ reconciliation }) {
               : `${formatInteger(issues)} pendência(s)`
           }
         />
-        <span className="font-mono text-xs text-[var(--muted)]">
-          {formatCurrency(reconciliation.matchedCreditValue)}
-        </span>
       </div>
+
+      {/* Sub-row de valores: abatido (sistema) × crédito real (NFP) —
+          a comparação que o operador pede toda hora. Aparece sempre que
+          há algum dos dois lados pra mostrar. */}
+      {showAbatementComparison ? (
+        <div className="mt-2 rounded border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-1.5">
+          <div className="flex items-baseline justify-between gap-2 text-xs">
+            <span className="text-[var(--muted)]">Abatido</span>
+            <span className="font-mono text-[var(--text-main)]">
+              {formatCurrency(totalAbated)}
+            </span>
+          </div>
+          <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs">
+            <span className="text-[var(--muted)]">Crédito real</span>
+            <span className="font-mono text-[var(--text-main)]">
+              {formatCurrency(totalCredit)}
+            </span>
+          </div>
+          {diffIsExceeded ? (
+            <p className="mt-1 text-[10px] font-medium text-[var(--danger)]">
+              ↳ {formatCurrency(diff)} a mais que o crédito gerado
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <ul className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-[var(--text-soft)]">
         <li className="flex items-center justify-between">
           <span className="text-[var(--success)]">Casadas</span>
@@ -162,6 +201,14 @@ function ReconciliationCell({ reconciliation }) {
             <span className="font-mono">{formatInteger(reconciliation.duplicates)}</span>
           </li>
         ) : null}
+        {(abatement?.pendingCount ?? 0) > 0 ? (
+          <li className="flex items-center justify-between">
+            <span className="text-[var(--muted-strong)]">Pendentes</span>
+            <span className="font-mono">
+              {formatInteger(abatement.pendingCount)}
+            </span>
+          </li>
+        ) : null}
       </ul>
     </div>
   );
@@ -185,6 +232,21 @@ function ReconciliationCell({ reconciliation }) {
 const INITIAL_VISIBLE_MONTHS = 24;
 const VISIBLE_INCREMENT = 24;
 
+function rowHasPendencies(row) {
+  const r = row.reconciliation;
+  if ((r?.divergent ?? 0) > 0) return true;
+  if ((r?.creditOnly ?? 0) > 0) return true;
+  if ((r?.donationOnly ?? 0) > 0) return true;
+  if ((r?.duplicates ?? 0) > 0) return true;
+  // Abated > credit gerado = excedido = pendência real.
+  const diff =
+    (row.abatement?.totalApplied ?? 0) - (r?.matchedCreditValue ?? 0);
+  if (diff > 0.005) return true;
+  // Linhas pendentes pra marcar como abatido também contam.
+  if ((row.abatement?.pendingCount ?? 0) > 0) return true;
+  return false;
+}
+
 export default function MonthlyImportsOverviewSection({
   onImportNewDonation,
   onImportNewCredit,
@@ -197,6 +259,7 @@ export default function MonthlyImportsOverviewSection({
 }) {
   const loader = useCallback(() => getMonthlyImportsOverview(), []);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MONTHS);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const { data, isLoading, isRefreshing, error, reload } = useDataResource({
     loader,
@@ -212,16 +275,43 @@ export default function MonthlyImportsOverviewSection({
       "credit-import",
       "credit-reimport",
       "reconciliation",
+      "monthly-action-history",
     ],
   });
 
-  const rows = data ?? [];
-  const visibleRows = rows.slice(0, visibleCount);
-  const hasMore = rows.length > visibleRows.length;
+  // Memoize the data fallback so dependent useMemo hooks below don't
+  // re-run on every render (lint flagged this — `data ?? []` creates a
+  // fresh array reference when data is nullish).
+  const allRows = useMemo(() => data ?? [], [data]);
+  const currentMonth = useMemo(
+    () => startOfMonth(new Date().toISOString()),
+    [],
+  );
+
+  const filteredRows = useMemo(() => {
+    if (statusFilter === "all") return allRows;
+    if (statusFilter === "pending") return allRows.filter(rowHasPendencies);
+    if (statusFilter === "clean") {
+      return allRows.filter((row) => !rowHasPendencies(row));
+    }
+    return allRows;
+  }, [allRows, statusFilter]);
+
+  const visibleRows = filteredRows.slice(0, visibleCount);
+  const hasMore = filteredRows.length > visibleRows.length;
+
+  const counts = useMemo(() => {
+    const pending = allRows.filter(rowHasPendencies).length;
+    return {
+      all: allRows.length,
+      pending,
+      clean: allRows.length - pending,
+    };
+  }, [allRows]);
 
   return (
     <SectionCard className="mb-5">
-      <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="font-display text-xl font-bold text-[var(--text-main)]">
             Visão por mês
@@ -234,18 +324,62 @@ export default function MonthlyImportsOverviewSection({
         <p className="text-xs text-[var(--muted)]">
           {isRefreshing
             ? "Atualizando..."
-            : `${formatInteger(rows.length)} mês(es) com importações.`}
+            : statusFilter === "all"
+              ? `${formatInteger(allRows.length)} mês(es) com importações.`
+              : `${formatInteger(filteredRows.length)} de ${formatInteger(allRows.length)} mês(es).`}
         </p>
       </div>
 
+      {/* Quick filters — operador localiza "onde está o problema" em 1
+          clique. Contagem em cada chip dá feedback imediato de quantos
+          meses caem em cada categoria. */}
+      {allRows.length > 0 ? (
+        <div role="tablist" className="mb-4 flex flex-wrap gap-2">
+          {FILTER_OPTIONS.map((option) => {
+            const count = counts[option.value] ?? 0;
+            const isActive = statusFilter === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setStatusFilter(option.value)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                  isActive
+                    ? "border-[var(--accent)] bg-[var(--accent-2-soft)] text-[var(--accent-strong)]"
+                    : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] hover:border-[var(--line-strong)]"
+                }`}
+              >
+                {option.label}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                    isActive
+                      ? "bg-[var(--surface)] text-[var(--text-main)]"
+                      : "bg-[var(--surface-strong)] text-[var(--muted)]"
+                  }`}
+                >
+                  {formatInteger(count)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       <FeedbackMessage tone="error" message={error} persistent />
 
-      {isLoading && rows.length === 0 ? (
+      {isLoading && allRows.length === 0 ? (
         <SkeletonRows rows={4} loadingLabel="Carregando visão por mês..." />
-      ) : rows.length === 0 ? (
+      ) : allRows.length === 0 ? (
         <EmptyState
           title="Ainda não há importações"
           description="Use os botões acima para importar uma planilha de doações ou de créditos."
+        />
+      ) : filteredRows.length === 0 ? (
+        <EmptyState
+          title="Nenhum mês neste filtro"
+          description="Tente outro filtro acima para ver mais resultados."
         />
       ) : (
         <div aria-busy={isRefreshing} className="overflow-x-auto">
@@ -269,15 +403,35 @@ export default function MonthlyImportsOverviewSection({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)] bg-[var(--surface-elevated)]">
-              {visibleRows.map((row) => (
-                <tr key={row.referenceMonth} className="align-top">
-                  <td className="px-3 py-3">
+              {visibleRows.map((row) => {
+                const isCurrent = row.referenceMonth === currentMonth;
+                return (
+                <tr
+                  key={row.referenceMonth}
+                  className={`align-top ${
+                    isCurrent
+                      ? "bg-[var(--accent-2-soft)]/30"
+                      : ""
+                  }`}
+                >
+                  <td
+                    className={`px-3 py-3 ${
+                      isCurrent
+                        ? "border-l-2 border-[var(--accent)]"
+                        : ""
+                    }`}
+                  >
                     <p className="font-semibold text-[var(--text-main)]">
                       {formatMonthYear(row.referenceMonth)}
                     </p>
                     <p className="mt-1 text-[10px] text-[var(--muted)]">
                       {row.referenceMonth}
                     </p>
+                    {isCurrent ? (
+                      <p className="mt-2 inline-block rounded-full border border-[var(--accent)] bg-[var(--surface)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
+                        Atual
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3">
                     <PresenceCell
@@ -312,10 +466,14 @@ export default function MonthlyImportsOverviewSection({
                     />
                   </td>
                   <td className="px-3 py-3">
-                    <ReconciliationCell reconciliation={row.reconciliation} />
+                    <ReconciliationCell
+                      reconciliation={row.reconciliation}
+                      abatement={row.abatement}
+                    />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           {hasMore ? (
@@ -325,7 +483,7 @@ export default function MonthlyImportsOverviewSection({
                 className="min-h-8 px-3 py-1.5 text-xs"
                 onClick={() => setVisibleCount((c) => c + VISIBLE_INCREMENT)}
               >
-                Mostrar mais {Math.min(VISIBLE_INCREMENT, rows.length - visibleRows.length)} mês(es)
+                Mostrar mais {Math.min(VISIBLE_INCREMENT, filteredRows.length - visibleRows.length)} mês(es)
               </Button>
             </div>
           ) : null}

@@ -368,8 +368,26 @@ export default function Demands() {
                 </span>
                 <div className="min-w-0">
                   <p className="font-medium">{demand.name}</p>
-                  <p className="font-mono text-xs text-[var(--muted)]">
-                    {demand.color}
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    {demand.activeDonorCount > 0 || demand.inactiveDonorCount > 0
+                      ? (
+                          <>
+                            <span className="font-semibold text-[var(--success)]">
+                              {formatInteger(demand.activeDonorCount)}
+                            </span>{" "}
+                            ativo(s)
+                            {demand.inactiveDonorCount > 0 ? (
+                              <>
+                                {" · "}
+                                <span className="font-semibold text-[var(--muted-strong)]">
+                                  {formatInteger(demand.inactiveDonorCount)}
+                                </span>{" "}
+                                inativo(s)
+                              </>
+                            ) : null}
+                          </>
+                        )
+                      : "Nenhum doador vinculado"}
                   </p>
                 </div>
               </div>

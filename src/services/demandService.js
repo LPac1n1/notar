@@ -39,10 +39,26 @@ async function _listDemandsUncached(filters = {}) {
 
   const rows = await queryPrepared(
     `
-      SELECT id, name, color, is_active
+      SELECT
+        demands.id,
+        demands.name,
+        demands.color,
+        demands.is_active,
+        coalesce((
+          SELECT count(*)
+          FROM donors
+          WHERE lower(trim(donors.demand)) = lower(trim(demands.name))
+            AND donors.is_active = TRUE
+        ), 0) AS active_donor_count,
+        coalesce((
+          SELECT count(*)
+          FROM donors
+          WHERE lower(trim(donors.demand)) = lower(trim(demands.name))
+            AND donors.is_active = FALSE
+        ), 0) AS inactive_donor_count
       FROM demands
       ${whereClause}
-      ORDER BY name ASC
+      ORDER BY demands.name ASC
     `,
     params,
   );
@@ -52,6 +68,8 @@ async function _listDemandsUncached(filters = {}) {
     name: row.name,
     color: normalizeDemandColor(row.color || DEFAULT_DEMAND_COLOR),
     isActive: Boolean(row.is_active),
+    activeDonorCount: Number(row.active_donor_count ?? 0),
+    inactiveDonorCount: Number(row.inactive_donor_count ?? 0),
   }));
 }
 

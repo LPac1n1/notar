@@ -129,6 +129,18 @@ export async function listTrashItems() {
   }));
 }
 
+/**
+ * Lightweight counter for the Sidebar badge. Avoids `listTrashItems`
+ * which decodes a (potentially large) JSON payload per row just to
+ * count them.
+ */
+export async function countTrashItems() {
+  const rows = await query(
+    `SELECT count(*) AS total FROM trash_items`,
+  );
+  return Number(rows[0]?.total ?? 0);
+}
+
 export async function deleteTrashItemPermanently(id) {
   const rows = await query(`
     SELECT id, entity_type, entity_id, label

@@ -11,31 +11,17 @@ import {
   UserIcon,
 } from "../ui/icons";
 
-export const MAIN_NAV_ITEMS = [
+// Workspace = trabalho diário. Dashboard puxa o usuário pra ação, Mensal
+// e Importações são as duas oficinas onde o operador gasta a maior
+// parte do tempo. Anotações fica aqui porque é captura de contexto,
+// não configuração.
+export const WORKSPACE_NAV_ITEMS = [
   {
     to: "/",
     label: "Dashboard",
     end: true,
     description: "Visão geral, alertas e indicadores",
     icon: DashboardIcon,
-  },
-  {
-    to: "/demandas",
-    label: "Demandas",
-    description: "Grupos atendidos e vínculos principais",
-    icon: DemandIcon,
-  },
-  {
-    to: "/doadores",
-    label: "Doadores",
-    description: "Cadastros, CPFs e início das doações",
-    icon: DonorIcon,
-  },
-  {
-    to: "/pessoas",
-    label: "Pessoas",
-    description: "Referências, vínculos e papéis no sistema",
-    icon: UserIcon,
   },
   {
     to: "/mensal",
@@ -55,6 +41,36 @@ export const MAIN_NAV_ITEMS = [
     description: "Registros internos rápidos",
     icon: NotesIcon,
   },
+];
+
+// Cadastros = entidades configuradas raramente. Separadas visualmente
+// pra reforçar "isso é setup, não rotina diária".
+export const REGISTRY_NAV_ITEMS = [
+  {
+    to: "/doadores",
+    label: "Doadores",
+    description: "Cadastros, CPFs e início das doações",
+    icon: DonorIcon,
+  },
+  {
+    to: "/pessoas",
+    label: "Pessoas",
+    description: "Referências, vínculos e papéis no sistema",
+    icon: UserIcon,
+  },
+  {
+    to: "/demandas",
+    label: "Demandas",
+    description: "Grupos atendidos e vínculos principais",
+    icon: DemandIcon,
+  },
+];
+
+// Back-compat barrel — Settings (shortcuts) e CommandPalette consomem
+// a lista plana. Ordem preserva a hierarquia: workspace primeiro.
+export const MAIN_NAV_ITEMS = [
+  ...WORKSPACE_NAV_ITEMS,
+  ...REGISTRY_NAV_ITEMS,
 ];
 
 export const AUDIT_NAV_ITEMS = [

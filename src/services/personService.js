@@ -60,6 +60,7 @@ function mapPersonRow(row) {
     donationStartDate: formatMonthYear(row.donation_start_date ?? ""),
     createdAt: row.created_at ?? "",
     referencedByAuxiliaries: Number(row.referenced_by_auxiliaries ?? 0),
+    linkedDonorCount: Number(row.linked_donor_count ?? 0),
     role: role.role,
     roleLabel: role.roleLabel,
     roleTone: role.roleTone,
@@ -125,7 +126,14 @@ async function queryPersonRows({
           WHERE donors.holder_person_id = people.id
             AND donors.donor_type = 'auxiliary'
             AND donors.is_active = TRUE
-        ), 0) AS referenced_by_auxiliaries
+        ), 0) AS referenced_by_auxiliaries,
+        coalesce((
+          SELECT count(*)
+          FROM donors
+          WHERE (donors.person_id = people.id
+                  OR donors.holder_person_id = people.id)
+            AND donors.is_active = TRUE
+        ), 0) AS linked_donor_count
       FROM people
       ${whereClause}
       ORDER BY people.name ASC, people.id ASC

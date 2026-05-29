@@ -36,8 +36,12 @@ function PersonListItemBase({
         </div>
 
         <p className="mt-1 text-sm text-[var(--muted)]">
-          {person.referencedByAuxiliaries > 0
-            ? `Referência de ${formatInteger(person.referencedByAuxiliaries)} auxiliar(es).`
+          {person.linkedDonorCount > 0
+            ? `Vinculada a ${formatInteger(person.linkedDonorCount)} doador(es)${
+                person.referencedByAuxiliaries > 0
+                  ? ` · ${formatInteger(person.referencedByAuxiliaries)} via auxiliar`
+                  : ""
+              }.`
             : "Disponível para vínculo com auxiliar."}
         </p>
         {person.createdAt ? (

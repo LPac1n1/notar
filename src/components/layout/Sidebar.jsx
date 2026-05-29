@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { AUDIT_NAV_ITEMS, CONFIG_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
+import {
+  AUDIT_NAV_ITEMS,
+  CONFIG_NAV_ITEMS,
+  REGISTRY_NAV_ITEMS,
+  WORKSPACE_NAV_ITEMS,
+} from "./navigation";
 import { countDonorReconciliationIssues } from "../../services/reconciliation/creditReconciliationService";
+import { countTrashItems } from "../../services/trashService";
 import { useDatabaseChangeEffect } from "../../hooks/useDatabaseChangeEffect";
 import { logError } from "../../services/logger";
 import { formatInteger } from "../../utils/format";
@@ -135,6 +141,7 @@ function FooterNavItem({ item }) {
 
 export default function Sidebar() {
   const [reconciliationIssueCount, setReconciliationIssueCount] = useState(0);
+  const [trashItemCount, setTrashItemCount] = useState(0);
   const recountTimerRef = useRef(null);
 
   useEffect(() => {
@@ -144,6 +151,11 @@ export default function Sidebar() {
         if (!cancelled) setReconciliationIssueCount(count);
       })
       .catch((err) => logError("Sidebar.reconciliationIssues", err));
+    countTrashItems()
+      .then((count) => {
+        if (!cancelled) setTrashItemCount(count);
+      })
+      .catch((err) => logError("Sidebar.trashCount", err));
     return () => {
       cancelled = true;
       if (recountTimerRef.current) {
@@ -167,18 +179,25 @@ export default function Sidebar() {
       recountTimerRef.current = setTimeout(async () => {
         recountTimerRef.current = null;
         try {
-          const count = await countDonorReconciliationIssues();
-          setReconciliationIssueCount(count);
+          const [reconciliationCount, trashCount] = await Promise.all([
+            countDonorReconciliationIssues().catch(() => 0),
+            countTrashItems().catch(() => 0),
+          ]);
+          setReconciliationIssueCount(reconciliationCount);
+          setTrashItemCount(trashCount);
         } catch (err) {
           logError("Sidebar.reconciliationIssues", err);
         }
       }, RECONCILIATION_RECOUNT_DEBOUNCE_MS);
     },
-    { domains: ["credits", "monthly", "donors", "imports"] },
+    { domains: ["credits", "monthly", "donors", "imports", "demands", "people", "notes"] },
   );
 
-  const badgeFor = (item) =>
-    item.to === "/doadores" ? reconciliationIssueCount : 0;
+  const badgeFor = (item) => {
+    if (item.to === "/doadores") return reconciliationIssueCount;
+    if (item.to === "/lixeira") return trashItemCount;
+    return 0;
+  };
 
   return (
     <>
@@ -211,7 +230,23 @@ export default function Sidebar() {
           </div>
 
           <nav className="mt-5 flex flex-1 flex-col gap-2 overflow-y-auto">
-            {MAIN_NAV_ITEMS.map((item) => (
+            <p className="hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
+              Workspace
+            </p>
+            {WORKSPACE_NAV_ITEMS.map((item) => (
+              <NavItem key={item.to} item={item} badgeCount={badgeFor(item)} />
+            ))}
+
+            <p className="mt-3 hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
+              Cadastros
+            </p>
+            {/* Compact (md) breakpoint: divider replaces the label so the
+                grouping is still visible without taking vertical space. */}
+            <div
+              aria-hidden="true"
+              className="my-1 border-t border-[var(--line)] lg:hidden"
+            />
+            {REGISTRY_NAV_ITEMS.map((item) => (
               <NavItem key={item.to} item={item} badgeCount={badgeFor(item)} />
             ))}
           </nav>

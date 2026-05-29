@@ -20,6 +20,7 @@ export async function getMonthlyImportsOverview() {
     donationImports,
     creditImports,
     reconciliationByMonth,
+    abatementByMonth,
   ] = await Promise.all([
     query(`
       SELECT
@@ -76,6 +77,23 @@ export async function getMonthlyImportsOverview() {
       ) IS NOT NULL
       GROUP BY 1
     `),
+    // Total abatement per month — applied OR pending — so the sub-row
+    // can compare "valor abatido (sistema)" × "crédito real (NFP)" on
+    // the same line. Only counts rows the operator has actually marked
+    // (status='applied') because pending rows aren't yet "abatement".
+    query(`
+      SELECT
+        strftime(reference_month, '%Y-%m-01') AS reference_month,
+        coalesce(sum(abatement_amount), 0) AS total_applied,
+        coalesce(sum(
+          CASE WHEN abatement_status = 'pending'
+            THEN abatement_amount ELSE 0 END
+        ), 0) AS total_pending,
+        count(*) FILTER (WHERE abatement_status = 'pending') AS pending_count,
+        count(*) FILTER (WHERE abatement_status = 'applied') AS applied_count
+      FROM monthly_donor_summary
+      GROUP BY reference_month
+    `),
   ]);
 
   // Index each result set by month so the final merge is O(months).
@@ -119,10 +137,22 @@ export async function getMonthlyImportsOverview() {
     });
   }
 
+  const abatementMap = new Map();
+  for (const row of abatementByMonth) {
+    if (!row.reference_month) continue;
+    abatementMap.set(row.reference_month, {
+      totalApplied: Number(row.total_applied ?? 0),
+      totalPending: Number(row.total_pending ?? 0),
+      pendingCount: Number(row.pending_count ?? 0),
+      appliedCount: Number(row.applied_count ?? 0),
+    });
+  }
+
   const allMonths = new Set([
     ...donationByMonth.keys(),
     ...creditByMonth.keys(),
     ...reconciliationMap.keys(),
+    ...abatementMap.keys(),
   ]);
 
   // Sort newest first — matches the rest of the imports UI.
@@ -142,6 +172,13 @@ export async function getMonthlyImportsOverview() {
         donationOnly: 0,
         duplicates: 0,
         matchedCreditValue: 0,
+      },
+    abatement:
+      abatementMap.get(referenceMonth) ?? {
+        totalApplied: 0,
+        totalPending: 0,
+        pendingCount: 0,
+        appliedCount: 0,
       },
   }));
 }
