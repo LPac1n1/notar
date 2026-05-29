@@ -29,6 +29,8 @@ export function useKeyboardNavigation() {
   // pertence ao mesmo registro do `g` — mantém o ponteiro de quem
   // intercepta teclas em um único lugar.
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  // Inbox de próximas ações — mesmo motivo: atalho `a` ao lado do `?`.
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
 
   const reset = useCallback(() => {
     pendingRef.current = false;
@@ -60,6 +62,15 @@ export function useKeyboardNavigation() {
 
       const key = e.key.toLowerCase();
 
+      // `a` (sem chord) abre o inbox de próximas ações. Escolhido
+      // porque é fácil de bater com a mão direita e nenhum outro chord
+      // de navegação usa essa letra ainda.
+      if (!pendingRef.current && key === "a") {
+        e.preventDefault();
+        setIsInboxOpen((value) => !value);
+        return;
+      }
+
       if (pendingRef.current) {
         reset();
         const route = ROUTES[key];
@@ -86,6 +97,13 @@ export function useKeyboardNavigation() {
   }, [navigate, reset]);
 
   const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);
+  const closeInbox = useCallback(() => setIsInboxOpen(false), []);
 
-  return { isPendingG, isShortcutsOpen, closeShortcuts };
+  return {
+    isPendingG,
+    isShortcutsOpen,
+    closeShortcuts,
+    isInboxOpen,
+    closeInbox,
+  };
 }

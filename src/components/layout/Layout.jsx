@@ -4,6 +4,7 @@ import { useCommandPalette } from "../../hooks/useCommandPalette";
 import { useKeyboardNavigation } from "../../hooks/useKeyboardNavigation";
 import CommandPalette from "../search/CommandPalette";
 import KeyboardShortcutsOverlay from "../ui/KeyboardShortcutsOverlay";
+import NextActionsInbox from "../../features/dashboard/components/NextActionsInbox";
 import Header from "./Header";
 import MobileBottomNav from "./MobileBottomNav";
 import Sidebar from "./Sidebar";
@@ -21,8 +22,13 @@ function KeyboardNavigationHint({ isPendingG }) {
 }
 
 export default function Layout({ children }) {
-  const { isPendingG, isShortcutsOpen, closeShortcuts } =
-    useKeyboardNavigation();
+  const {
+    isPendingG,
+    isShortcutsOpen,
+    closeShortcuts,
+    isInboxOpen,
+    closeInbox,
+  } = useKeyboardNavigation();
   const palette = useCommandPalette();
 
   return (
@@ -58,6 +64,9 @@ export default function Layout({ children }) {
         {isShortcutsOpen ? (
           <KeyboardShortcutsOverlay onClose={closeShortcuts} />
         ) : null}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isInboxOpen ? <NextActionsInbox onClose={closeInbox} /> : null}
       </AnimatePresence>
     </div>
   );

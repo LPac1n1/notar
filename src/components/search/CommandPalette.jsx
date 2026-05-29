@@ -1,14 +1,146 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  CheckIcon,
   CloseIcon,
+  DashboardIcon,
+  DemandIcon,
   DonorIcon,
+  DownloadIcon,
+  HistoryIcon,
   ImportIcon,
   LoadingIcon,
+  MonthlyIcon,
+  NotesIcon,
   SearchIcon,
+  SettingsIcon,
   UserIcon,
 } from "../ui/icons";
 import { formatMonthYear } from "../../utils/date";
+
+// Lista plana de comandos e navegação disponíveis. Filtrados pela query
+// digitada — quando ela está vazia, todos aparecem como "sugestões".
+// Cada item é "estável" (não depende de search remoto) então funciona
+// instant, sem debounce.
+function buildStaticItems(navigate) {
+  return [
+    // Navegação primeiro — caso mais comum: "ir pra X"
+    {
+      key: "nav-dashboard",
+      group: "Ir para",
+      icon: DashboardIcon,
+      primary: "Dashboard",
+      keywords: "dashboard inicio home visao geral atencao",
+      action: () => navigate("/"),
+    },
+    {
+      key: "nav-monthly",
+      group: "Ir para",
+      icon: MonthlyIcon,
+      primary: "Gestão Mensal",
+      keywords: "mensal mes abatimento marcar status",
+      action: () => navigate("/mensal"),
+    },
+    {
+      key: "nav-imports",
+      group: "Ir para",
+      icon: ImportIcon,
+      primary: "Importações",
+      keywords: "importacoes planilhas conciliacao credito",
+      action: () => navigate("/importacoes"),
+    },
+    {
+      key: "nav-donors",
+      group: "Ir para",
+      icon: DonorIcon,
+      primary: "Doadores",
+      keywords: "doadores cadastro cpf",
+      action: () => navigate("/doadores"),
+    },
+    {
+      key: "nav-people",
+      group: "Ir para",
+      icon: UserIcon,
+      primary: "Pessoas",
+      keywords: "pessoas referencia auxiliar",
+      action: () => navigate("/pessoas"),
+    },
+    {
+      key: "nav-demands",
+      group: "Ir para",
+      icon: DemandIcon,
+      primary: "Demandas",
+      keywords: "demandas grupos",
+      action: () => navigate("/demandas"),
+    },
+    {
+      key: "nav-notes",
+      group: "Ir para",
+      icon: NotesIcon,
+      primary: "Anotações",
+      keywords: "anotacoes notes lembretes",
+      action: () => navigate("/anotacoes"),
+    },
+    {
+      key: "nav-history",
+      group: "Ir para",
+      icon: HistoryIcon,
+      primary: "Histórico",
+      keywords: "historico auditoria log acoes",
+      action: () => navigate("/historico"),
+    },
+    {
+      key: "nav-settings",
+      group: "Ir para",
+      icon: SettingsIcon,
+      primary: "Configurações",
+      keywords: "configuracoes settings preferencias",
+      action: () => navigate("/configuracoes"),
+    },
+
+    // Ações — atalhos pra fluxos comuns que poderiam exigir
+    // navegar+scroll+clicar.
+    {
+      key: "action-import-donation",
+      group: "Ação rápida",
+      icon: ImportIcon,
+      primary: "Importar planilha de doações",
+      keywords: "importar planilha doacoes csv xlsx nova",
+      action: () => navigate("/importacoes", { state: { openDonationUpload: true } }),
+    },
+    {
+      key: "action-import-credit",
+      group: "Ação rápida",
+      icon: ImportIcon,
+      primary: "Importar planilha de créditos",
+      keywords: "importar planilha creditos nfp csv xlsx nova",
+      action: () => navigate("/importacoes", { state: { openCreditUpload: true } }),
+    },
+    {
+      key: "action-export-reconciliation-donor",
+      group: "Ação rápida",
+      icon: DownloadIcon,
+      primary: "Exportar conciliação por doador (CSV)",
+      keywords: "exportar conciliacao doador csv",
+      action: () => navigate("/importacoes", { state: { exportDonorCsv: true } }),
+    },
+    {
+      key: "action-rerun-reconciliation",
+      group: "Ação rápida",
+      icon: CheckIcon,
+      primary: "Re-rodar conciliação",
+      keywords: "rerodar reconciliar conciliacao recalcular",
+      action: () => navigate("/importacoes", { state: { rerunReconciliation: true } }),
+    },
+  ];
+}
+
+function normalize(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replaceAll(/\p{Diacritic}/gu, "");
+}
 
 function ResultItem({ icon, primary, secondary, onClick, isActive }) {
   const ref = useRef(null);
@@ -54,12 +186,21 @@ function ResultGroup({ label, children }) {
 export default function CommandPalette({ isOpen, onClose, query, onQueryChange, results, isSearching }) {
   const navigate = useNavigate();
   const inputRef = useRef(null);
-  const resultsKey = results.donors.length + results.people.length + results.imports.length;
-  // Pair index with the resultsKey it was set for — auto-resets to 0 when results change
-  const [activeState, setActiveState] = useState({ key: resultsKey, index: 0 });
-  const activeIndex = activeState.key === resultsKey ? activeState.index : 0;
+
+  // Lista estática (navegação + ações) — instantânea, sem search remoto.
+  // Filtrada pela query digitada quando há texto.
+  const staticItems = useMemo(() => buildStaticItems(navigate), [navigate]);
+  const filteredStaticItems = useMemo(() => {
+    const q = normalize(query).trim();
+    if (!q) return staticItems;
+    return staticItems.filter((item) => {
+      const haystack = normalize(`${item.primary} ${item.keywords ?? ""}`);
+      return haystack.includes(q);
+    });
+  }, [query, staticItems]);
 
   const allItems = [
+    ...filteredStaticItems,
     ...results.donors.map((d) => ({
       key: `donor-${d.id}`,
       icon: DonorIcon,
@@ -87,6 +228,11 @@ export default function CommandPalette({ isOpen, onClose, query, onQueryChange, 
       action: () => navigate("/importacoes"),
     })),
   ];
+
+  const resultsKey = allItems.length;
+  // Pair index with the resultsKey it was set for — auto-resets to 0 when results change
+  const [activeState, setActiveState] = useState({ key: resultsKey, index: 0 });
+  const activeIndex = activeState.key === resultsKey ? activeState.index : 0;
 
   // Focus input when opened
   useEffect(() => {
@@ -153,7 +299,7 @@ export default function CommandPalette({ isOpen, onClose, query, onQueryChange, 
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar doadores, pessoas, importações…"
+            placeholder="Buscar, navegar ou executar ações…"
             className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--muted)]"
             aria-label="Buscar"
             autoComplete="off"
@@ -170,11 +316,7 @@ export default function CommandPalette({ isOpen, onClose, query, onQueryChange, 
 
         {/* Results */}
         <div className="max-h-[360px] overflow-y-auto">
-          {!query.trim() ? (
-            <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
-              Digite para buscar doadores, pessoas ou importações.
-            </p>
-          ) : showEmpty ? (
+          {showEmpty ? (
             <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
               Nenhum resultado para "{query}".
             </p>

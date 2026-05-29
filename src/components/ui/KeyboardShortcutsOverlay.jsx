@@ -13,13 +13,18 @@ const NAV_LABEL_BY_PATH = Object.fromEntries(
 // nome do atalho.
 const GLOBAL_SHORTCUTS = [
   {
+    chord: ["a"],
+    label: "Próximas ações (inbox)",
+    where: "Em qualquer página",
+  },
+  {
     chord: ["n"],
     label: "Nova anotação rápida",
     where: "Em qualquer página",
   },
   {
     chord: ["Ctrl", "K"],
-    label: "Busca global",
+    label: "Busca global / comandos",
     where: "Em qualquer página",
   },
   {
