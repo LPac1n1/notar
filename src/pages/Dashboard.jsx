@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
+import Eyebrow from "../components/ui/Eyebrow";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
-import DashboardAttentionZone from "../features/dashboard/components/DashboardAttentionZone";
 import DashboardCurrentMonthBanner from "../features/dashboard/components/DashboardCurrentMonthBanner";
 import DashboardLatestMonthSection from "../features/dashboard/components/DashboardLatestMonthSection";
 import DashboardModals from "../features/dashboard/components/DashboardModals";
@@ -13,34 +13,22 @@ import DashboardOverviewCards from "../features/dashboard/components/DashboardOv
 import DashboardRankingsSection from "../features/dashboard/components/DashboardRankingsSection";
 import DashboardReconciliationSection from "../features/dashboard/components/DashboardReconciliationSection";
 import DashboardRecentImportsSection from "../features/dashboard/components/DashboardRecentImportsSection";
-import DashboardRecentReportsSection from "../features/dashboard/components/DashboardRecentReportsSection";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
-import DashboardWorkflowChecklist from "../features/dashboard/components/DashboardWorkflowChecklist";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
-import {
-  getCurrentMonthFlow,
-  getDashboardAttention,
-} from "../services/dashboardAttentionService";
 import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 
 /**
- * Dashboard reorganizado em três zonas verticais (do mais acionável pro
+ * Dashboard organizado em duas zonas verticais (do mais acionável pro
  * mais informativo):
  *
- *   ⚠ Zona 1 — Atenção
- *      `DashboardAttentionZone` lista cards-ação. Some quando o sistema
- *      está saudável; a ausência é o sinal positivo.
- *
- *   ▤ Zona 2 — Mês corrente
+ *   ▤ Zona 1 — Mês corrente
  *      `DashboardCurrentMonthBanner` resume o último mês com dados em
- *      um banner inline, e `DashboardWorkflowChecklist` exibe o fluxo
- *      do mês atual (importar doações → créditos → conferir → marcar).
- *      O checklist some quando todas as etapas estão concluídas.
+ *      um banner inline.
  *
- *   ▥ Zona 3 — Histórico
+ *   ▥ Zona 2 — Histórico
  *      Cards e seções já existentes (totais, ranking, importações
  *      recentes) rebaixados visualmente em modo `compact`. São consulta,
  *      não rotina.
@@ -70,27 +58,6 @@ export default function Dashboard() {
     initialData: null,
   });
 
-  // Attention zone + workflow flow load independently of the heavy
-  // overview query — keeps the actionable cards visible quickly even
-  // while the historic sections are still loading.
-  const attentionLoader = useCallback(() => getDashboardAttention(), []);
-  const flowLoader = useCallback(() => getCurrentMonthFlow(), []);
-  const noFilters = useMemo(() => ({}), []);
-  const { data: attention, reload: reloadAttention } = useDataResource({
-    loader: attentionLoader,
-    filters: noFilters,
-    initialData: { items: [] },
-    scope: "Dashboard.attention",
-    errorMessage: "",
-  });
-  const { data: flow, reload: reloadFlow } = useDataResource({
-    loader: flowLoader,
-    filters: noFilters,
-    initialData: null,
-    scope: "Dashboard.flow",
-    errorMessage: "",
-  });
-
   const {
     dataSyncFeedback,
     showDataRefreshLoading: hasDataRefreshLoading,
@@ -112,11 +79,7 @@ export default function Dashboard() {
     }
   };
 
-  const reloadAll = useCallback(async () => {
-    await Promise.all([reloadDashboard(), reloadAttention(), reloadFlow()]);
-  }, [reloadDashboard, reloadAttention, reloadFlow]);
-
-  useDatabaseChangeEffect(reloadAll, {
+  useDatabaseChangeEffect(reloadDashboard, {
     domains: ["demands", "donors", "imports", "monthly", "people", "credits"],
   });
 
@@ -184,12 +147,8 @@ export default function Dashboard() {
         />
       ) : null}
 
-      {/* ─── Zona 1 — Atenção ───────────────────────────────────────── */}
-      <DashboardAttentionZone items={attention?.items ?? []} />
-
-      {/* ─── Zona 2 — Mês corrente ──────────────────────────────────── */}
+      {/* ─── Zona 1 — Mês corrente ──────────────────────────────────── */}
       <DashboardCurrentMonthBanner latestMonth={latestMonth} />
-      <DashboardWorkflowChecklist flow={flow} />
 
       {showRefreshing ? (
         <DashboardReviewSection
@@ -210,7 +169,8 @@ export default function Dashboard() {
 
       {showSectionsData ? (
         <div className="space-y-6">
-          {/* ─── Zona 3 — Detalhe & histórico (rebaixado) ───────────── */}
+          {/* ─── Zona 2 — Detalhe & histórico (rebaixado) ───────────── */}
+          <Eyebrow as="rule">Histórico &amp; detalhe</Eyebrow>
           <DashboardReviewSection
             inconsistencies={inconsistencies}
             onOpenModal={setActiveModal}
@@ -234,14 +194,11 @@ export default function Dashboard() {
           <DashboardRecentImportsSection
             imports={dashboard?.recentImports ?? []}
           />
-          <DashboardRecentReportsSection />
 
           {/* Totais globais como rodapé compacto — informativo, não
               acionável a partir daqui. */}
           <div>
-            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Totais do sistema
-            </p>
+            <Eyebrow className="mb-3">Totais do sistema</Eyebrow>
             <DashboardOverviewCards
               compact
               isRefreshing={showRefreshing}
