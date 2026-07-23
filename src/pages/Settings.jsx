@@ -33,7 +33,6 @@ import {
 import { exportLogBuffer, getLogBufferSnapshot, logError } from "../services/logger";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
-import { KEYBOARD_SHORTCUTS } from "../hooks/useKeyboardNavigation";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   finishDataSyncFeedback,
@@ -44,7 +43,6 @@ import { downloadFile } from "../utils/download";
 import { formatDatePtBR, formatSyncTime } from "../utils/date";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
-import { NAV_ITEMS } from "../components/layout/navigation";
 
 const DATA_SYNC_HANDOFF_DELAY_MS = 650;
 
@@ -53,10 +51,6 @@ const THEME_OPTIONS = [
   { value: "dark",   label: "Escuro",  icon: MoonIcon },
   { value: "light",  label: "Claro",   icon: SunIcon },
 ];
-
-const SHORTCUT_LABELS = Object.fromEntries(
-  NAV_ITEMS.map((item) => [item.to, item.label]),
-);
 
 function plural(n, singular, pluralForm) {
   return `${formatInteger(n)} ${n === 1 ? singular : pluralForm}`;
@@ -465,34 +459,6 @@ export default function Settings() {
         </div>
       </SectionCard>
 
-      {/* ── Atalhos de teclado ────────────────────────────────────────── */}
-      <SectionCard
-        title="Atalhos de teclado"
-        icon={KeyboardIcon}
-        description="Pressione g seguido de uma letra para navegar rapidamente entre páginas."
-        className="mb-6"
-        collapsible
-        defaultOpen={false}
-      >
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 md:grid-cols-4">
-          {KEYBOARD_SHORTCUTS.map(({ key, to }) => (
-            <div key={key} className="flex items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1">
-                <kbd className="rounded border border-[var(--line-strong)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-xs font-semibold text-[var(--text-soft)]">
-                  g
-                </kbd>
-                <kbd className="rounded border border-[var(--line-strong)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-xs font-semibold text-[var(--accent)]">
-                  {key}
-                </kbd>
-              </span>
-              <span className="truncate text-[var(--muted)]">
-                {SHORTCUT_LABELS[to] ?? to}
-              </span>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
       {/* ── Design system ─────────────────────────────────────────────── */}
       <SectionCard
         title="Convenções de design"
@@ -623,12 +589,6 @@ export default function Settings() {
               ))}
             </div>
           </div>
-
-          <p className="text-xs text-[var(--muted)]">
-            Pressione <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5 font-mono text-[10px]">?</kbd>{" "}
-            em qualquer página para ver o painel completo de atalhos de
-            teclado.
-          </p>
         </div>
       </SectionCard>
 

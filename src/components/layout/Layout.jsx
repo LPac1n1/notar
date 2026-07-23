@@ -1,33 +1,9 @@
-import { AnimatePresence } from "framer-motion";
 import { APP_SCROLL_CONTAINER_ID } from "../../utils/appScroll";
-import { useKeyboardNavigation } from "../../hooks/useKeyboardNavigation";
-import KeyboardShortcutsOverlay from "../ui/KeyboardShortcutsOverlay";
-import NextActionsInbox from "../../features/dashboard/components/NextActionsInbox";
 import Header from "./Header";
 import MobileBottomNav from "./MobileBottomNav";
 import Sidebar from "./Sidebar";
 
-function KeyboardNavigationHint({ isPendingG }) {
-  if (!isPendingG) return null;
-  return (
-    <div className="pointer-events-none fixed bottom-20 left-1/2 z-[200] -translate-x-1/2 lg:bottom-4">
-      <div className="rounded-lg border border-[var(--line-strong)] bg-[var(--surface-muted)] px-3 py-2 text-sm font-medium text-[var(--text-main)]">
-        <kbd className="font-mono font-bold text-[var(--accent)]">g</kbd>
-        <span className="ml-2 text-[var(--muted)]">→ pressione uma letra para navegar</span>
-      </div>
-    </div>
-  );
-}
-
 export default function Layout({ children }) {
-  const {
-    isPendingG,
-    isShortcutsOpen,
-    closeShortcuts,
-    isInboxOpen,
-    closeInbox,
-  } = useKeyboardNavigation();
-
   return (
     <div className="h-dvh overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-4 p-4 md:flex-row md:gap-5 md:p-5">
@@ -48,15 +24,6 @@ export default function Layout({ children }) {
       </div>
 
       <MobileBottomNav />
-      <KeyboardNavigationHint isPendingG={isPendingG} />
-      <AnimatePresence>
-        {isShortcutsOpen ? (
-          <KeyboardShortcutsOverlay onClose={closeShortcuts} />
-        ) : null}
-      </AnimatePresence>
-      <AnimatePresence>
-        {isInboxOpen ? <NextActionsInbox onClose={closeInbox} /> : null}
-      </AnimatePresence>
     </div>
   );
 }
