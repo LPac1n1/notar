@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -22,7 +22,6 @@ import {
 } from "../constants/filterOptions";
 import DonorForm from "../features/donors/components/DonorForm";
 import DonorListItem from "../features/donors/components/DonorListItem";
-import DonorSidePanel from "../features/donors/components/DonorSidePanel";
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
 import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
 import { createActionHistoryEntry } from "../services/actionHistoryService";
@@ -41,7 +40,7 @@ import { listPeople } from "../services/personService";
 import { restoreTrashItem } from "../services/trashService";
 import { usePaginatedResource } from "../hooks/usePaginatedResource";
 import { logError } from "../services/logger";
-import { scrollAppTo } from "../utils/appScroll";
+import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
 import { getErrorMessage, isUserFacingError } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -74,6 +73,7 @@ const INITIAL_DONOR_FILTERS = {
 
 export default function Donors() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
@@ -121,24 +121,25 @@ export default function Donors() {
     useDataRefreshIndicator(isRefreshing);
   const restoredScrollTopRef = useRef(location.state?.donorScrollTop ?? null);
 
-  // Side panel = first-touch context. Mantém a lista por trás visível,
-  // não recarrega filtros, e o usuário pode pular entre doadores sem
-  // ir e voltar de tela. `openDonorProfile` foi renomeado pra refletir
-  // o que faz hoje: abre o painel lateral, não navega.
-  const [panelDonor, setPanelDonor] = useState(null);
-
   const openDonorProfile = useCallback(
     (donorId) => {
-      if (!donorId) return;
-      // Procura na lista carregada pra evitar uma query extra. Side
-      // panel completa a busca via getDonorProfile.
-      const target = donors.find((donor) => donor.id === donorId);
-      if (target) setPanelDonor(target);
+      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+        state: {
+          from: {
+            label: "Voltar para doadores",
+            pathname: "/doadores",
+            state: {
+              donorFilters: filters,
+              donorScrollTop: getAppScrollTop(),
+              donorPage: donorsPagination.page,
+              donorPageSize: donorsPagination.pageSize,
+            },
+          },
+        },
+      });
     },
-    [donors],
+    [filters, donorsPagination.page, donorsPagination.pageSize, navigate],
   );
-
-  const closeSidePanel = useCallback(() => setPanelDonor(null), []);
 
   const donorFormDemandOptions = useMemo(
     () =>
@@ -796,19 +797,6 @@ export default function Donors() {
             isSubmitting={isReactivating}
             onClose={() => setDonorPendingReactivation(null)}
             onConfirm={handleConfirmReactivate}
-          />
-        ) : null}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {panelDonor ? (
-          <DonorSidePanel
-            donor={panelDonor}
-            onClose={closeSidePanel}
-            onEdit={(donor) => {
-              closeSidePanel();
-              handleOpenEditModal(donor);
-            }}
           />
         ) : null}
       </AnimatePresence>
