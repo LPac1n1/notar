@@ -66,8 +66,8 @@ export const REGISTRY_NAV_ITEMS = [
   },
 ];
 
-// Back-compat barrel — Settings (shortcuts) e CommandPalette consomem
-// a lista plana. Ordem preserva a hierarquia: workspace primeiro.
+// Back-compat barrel — MobileBottomNav consome a lista plana. Ordem
+// preserva a hierarquia: workspace primeiro.
 export const MAIN_NAV_ITEMS = [
   ...WORKSPACE_NAV_ITEMS,
   ...REGISTRY_NAV_ITEMS,

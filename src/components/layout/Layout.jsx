@@ -1,8 +1,6 @@
 import { AnimatePresence } from "framer-motion";
 import { APP_SCROLL_CONTAINER_ID } from "../../utils/appScroll";
-import { useCommandPalette } from "../../hooks/useCommandPalette";
 import { useKeyboardNavigation } from "../../hooks/useKeyboardNavigation";
-import CommandPalette from "../search/CommandPalette";
 import KeyboardShortcutsOverlay from "../ui/KeyboardShortcutsOverlay";
 import NextActionsInbox from "../../features/dashboard/components/NextActionsInbox";
 import Header from "./Header";
@@ -29,7 +27,6 @@ export default function Layout({ children }) {
     isInboxOpen,
     closeInbox,
   } = useKeyboardNavigation();
-  const palette = useCommandPalette();
 
   return (
     <div className="h-dvh overflow-hidden">
@@ -37,7 +34,7 @@ export default function Layout({ children }) {
         <Sidebar />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-          <Header onOpenSearch={palette.open} />
+          <Header />
 
           <main className="min-h-0 flex-1 overflow-hidden">
             <div
@@ -52,14 +49,6 @@ export default function Layout({ children }) {
 
       <MobileBottomNav />
       <KeyboardNavigationHint isPendingG={isPendingG} />
-      <CommandPalette
-        isOpen={palette.isOpen}
-        onClose={palette.close}
-        query={palette.query}
-        onQueryChange={palette.setQuery}
-        results={palette.results}
-        isSearching={palette.isSearching}
-      />
       <AnimatePresence>
         {isShortcutsOpen ? (
           <KeyboardShortcutsOverlay onClose={closeShortcuts} />
