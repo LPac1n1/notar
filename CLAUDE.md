@@ -236,6 +236,35 @@ Auditoria de UX gerou 14+ pontos, priorizados em 3 sprints. Tudo entregue.
 - Compressão do JSON antes do upload (se um dia o snapshot ficar grande; hoje é desprezível).
 - Testes de integração para os pipelines de import com `onProgress` (hoje só lint+build cobrem).
 
+## Simplificação de features + nova identidade visual ✅ CONCLUÍDA (commits 170-181)
+
+Usuário pediu simplificação agressiva ("tirar muitas funções desnecessárias") e, na sequência, troca completa da identidade visual ("mais simples, moderno e intuitivo").
+
+**Remoção de features** [commits 170-175]: busca universal (`CommandPalette`, `useCommandPalette`, `searchService`), atalhos de teclado (`useKeyboardNavigation`, `KeyboardShortcutsOverlay`), captura rápida de nota (`QuickNoteCapture`), painel lateral de doador (`DonorSidePanel` — `Donors.jsx` voltou a usar `navigate()` para o perfil, padrão anterior recuperado via `git show`), widgets de insight do Dashboard (`NextActionsInbox`, `DashboardAttentionZone`, `DashboardWorkflowChecklist`, `DashboardRecentReportsSection` + services `dashboardAttentionService`/`recentReportsService`), PWA/service worker (`public/sw.js`, manifest, ícone maskable). Bug real encontrado e corrigido de passagem: `MobileBottomNav` usava índices mágicos obsoletos em `MAIN_NAV_ITEMS` — corrigido para `WORKSPACE_NAV_ITEMS`. Nova confirmação + undo em `DonorAbatementAdjustmentsSection` (era a única ação destrutiva sem `ConfirmModal` no app). `Settings.jsx` perdeu as seções "Convenções de design" e "Atalhos de teclado" (jargão interno exposto ao usuário final).
+
+**Identidade visual "Direção A — Neutro"** [commits ~176-181]: paleta cinza-grafite frio + acento único índigo (`--accent #818cf8` dark / `#4f46e5` light), tipografia reduzida a só Geist (tirou IBM Plex Mono e Fraunces de um refresh anterior não commitado, "Editorial Terminal"). Tokens de `radius` movidos para dentro do `@theme` do Tailwind 4 — bug real encontrado: estavam em `:root` mas fora do `@theme`, então `rounded-lg` etc. nunca pegavam o valor customizado. Bug de contraste WCAG recorrente: `--success` no tema claro mediu 3.77:1 (falha AA), o MESMO valor que uma auditoria anterior já tinha flagueado — corrigido para `#047857` (5.48:1), verificado ao vivo via `getComputedStyle`.
+
+## Roadmap "melhoria completa do sistema" (pós-simplificação)
+
+Depois da simplificação + identidade visual, usuário pediu um roadmap único consolidando tudo que falta e mandou executar do início ao fim. Numeração de fases reinicia em 1 aqui — não confundir com as Fases 1-20 acima, que são de um ciclo de trabalho anterior já concluído.
+
+### Fase 1 — Cloud sync: correções de race condition e perda de dados ✅ CONCLUÍDA (commit 182)
+
+- `beforeunload` agora tenta upload via `fetch(..., {keepalive:true})` direto (bypassa o SDK do Supabase, que nunca seta `keepalive`, confirmado lendo o bundle minificado) quando o snapshot cabe no limite de ~64KB do browser; acima disso cai pro fallback síncrono (`performUpload`, extraído do antigo `uploadSnapshotImmediate` para pular o gate de conflito nesse caminho de orçamento apertado).
+- Upload normal (`uploadSnapshotImmediate`) passou a checar conflito remoto (`checkForRemoteChanges`) antes de subir — evita sobrescrever dado mais novo de outro dispositivo.
+- Bug corrigido: `acknowledgeRemoteConflict()` ("Manter minhas alterações" no banner) limpava a flag de conflito mas nunca re-disparava o upload pendente — usuário clicava e nada subia até a próxima edição não relacionada.
+
+### Fase 2 — CI/CD + e2e
+
+- **2.1 — CI/CD (GitHub Actions)**: pendente.
+- **2.2 — Corrigir specs e2e desatualizados** ✅ CONCLUÍDA (commits 183-185). 12 de 15 specs falhavam. Duas causas eram bugs reais de app, não só teste desatualizado:
+  - **Race condition em `initDB()`** (`services/db/connection.js`): o módulo publicava `conn` (variável de módulo) logo após `db.connect()`, ANTES de `runSchemaBootstrap` (todas as migrations) terminar. Qualquer chamada concorrente a `initDB()` nessa janela caía no fast-path `if (conn) return conn` e recebia uma conexão com schema incompleto — reproduzido via `restoreDatabaseSnapshot` batendo em `DELETE FROM credit_reconciliation` (tabela da migration v8) e falhando com "table does not exist". A publicação de `conn` acontecia cedo de propósito, pra permitir que o reconcile pós-migration (`reconcileCredits`, disparado de dentro do próprio `initDB()` quando migrations 10/11 aplicam) não travasse esperando sua própria promise. Corrigido publicando `conn` só depois do `runSchemaBootstrap` completar, e movendo o reconcile pós-migration pra fora da IIFE que produz `initPromise` (roda depois que `initPromise` resolve, então as chamadas internas do reconcile pegam o fast-path legitimamente em vez de aguardar uma promise ainda pendente).
+  - **Visão consolidada "Abatimentos por doador" inalcançável** depois da primeira importação: dois bugs se combinando.
+    1. `ImportedMonthsCarousel.jsx` comparava `item.referenceMonth.slice(0, 7)` (7 chars) contra `selectedReferenceMonth` (data completa "YYYY-MM-DD", vinda do auto-anchor ou do `MonthSwitcher`) — nunca batia, então o card do mês ativo nunca aparecia como selecionado e clicar nele pra "fechar"/desmarcar na verdade re-selecionava o mesmo mês (no-op).
+    2. Mesmo corrigindo a comparação, o `useEffect` de "mês implícito" (Sprint 2/P2, `Monthly.jsx`) re-disparava toda vez que `filters.referenceMonth` ficava vazio — inclusive quando o usuário limpava de propósito — e re-selecionava o mês mais recente imediatamente. O comentário original dizia "só roda uma vez" mas isso nunca foi de fato implementado. Corrigido com `hasAutoAnchoredRef`: desarma permanentemente assim que o auto-anchor roda uma vez OU quando já chega com um mês setado (deep-link).
+  - Specs corrigidos (fixtures + assertions): CSVs de fixture ganharam as 4 colunas de conciliação (`CNPJ Estabelecimento`, `Número da Nota`, `Valor da Nota`, `Data da Nota`) exigidas desde a Fase 17-19; mensagem de sucesso do backup mudou de "Backup importado com sucesso" pra "Backup importado: {stats}." em algum commit anterior sem atualizar os specs; seção "CPFs encontrados" em Importações foi removida num refactor anterior (Sprint 3 / `MonthlyImportsOverviewSection` + `CpfListSearchSection` a substituíram) — `CpfSummaryItem.jsx` ficou como código morto (throw pra Fase 3.5); `MonthlySummaryRow` renderiza cada doador DUAS vezes no DOM (card mobile compacto + detalhe desktop, alternados via `md:hidden`/`md:block`) — `getByText(...).first()` pegava consistentemente o nó mobile (oculto no viewport padrão do Playwright) por ordem de DOM; trocado por `getByRole("button", ...)` (nome acessível não bate no card mobile, que concatena todo o texto do card) ou `.and(page.locator(":visible"))` quando precisa continuar sendo `getByText`.
+  - 118/118 testes unitários/integração, 15/15 e2e (2 rodadas consecutivas), lint 0 erros, build OK.
+
 ## Convenções do projeto
 
 - Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 151**.
