@@ -19,12 +19,16 @@ import DonorCreditReconciliationSection from "../features/donors/components/Dono
 import DonorLinkedSection from "../features/donors/components/DonorLinkedSection";
 import DonorMonthlyHistorySection from "../features/donors/components/DonorMonthlyHistorySection";
 import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
-import { deleteAbatementAdjustment } from "../services/abatementAdjustmentService";
+import {
+  createAbatementAdjustment,
+  deleteAbatementAdjustment,
+} from "../services/abatementAdjustmentService";
 import {
   deactivateDonor,
   getDonorProfile,
   reactivateDonor,
 } from "../services/donorService";
+import { logError } from "../services/logger";
 import {
   formatDateTimePtBR,
   formatDonationDuration,
@@ -41,6 +45,7 @@ export default function DonorProfile() {
   const location = useLocation();
   const navigate = useNavigate();
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showReactivateModal, setShowReactivateModal] = useState(false);
@@ -76,6 +81,7 @@ export default function DonorProfile() {
   const runMutation = useMutationAction({
     setError,
     setSuccessMessage,
+    setSuccessAction,
     setBusy: setIsSubmitting,
     reload: loadProfile,
   });
@@ -127,6 +133,24 @@ export default function DonorProfile() {
       successMessage: "Lançamento de acumulado removido.",
       errorMessage: "Não foi possível remover o lançamento.",
       logContext: { donorId },
+      undo: async () => {
+        try {
+          await createAbatementAdjustment({
+            donorId: adjustment.donorId,
+            referenceMonth: adjustment.referenceMonth,
+            rangeStartMonth: adjustment.rangeStartMonth,
+            rangeEndMonth: adjustment.rangeEndMonth,
+            notesCount: adjustment.notesCount,
+            abatementAmount: adjustment.abatementAmount,
+            description: adjustment.description,
+            donorName: profile?.donor?.name ?? "",
+          });
+          await loadProfile();
+        } catch (err) {
+          logError("DonorProfile.undoDeleteAdjustment", err, { donorId });
+          setError("Não foi possível desfazer a remoção do lançamento.");
+        }
+      },
     });
 
   const navigateToRelatedDonor = (nextDonorId) => {
@@ -192,7 +216,12 @@ export default function DonorProfile() {
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Button

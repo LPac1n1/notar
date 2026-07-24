@@ -1,4 +1,6 @@
+import { useState } from "react";
 import Button from "../../../components/ui/Button";
+import ConfirmModal from "../../../components/ui/ConfirmModal";
 import SectionCard from "../../../components/ui/SectionCard";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -8,9 +10,17 @@ export default function DonorAbatementAdjustmentsSection({
   isSubmitting,
   onDelete,
 }) {
+  const [pendingRemoval, setPendingRemoval] = useState(null);
+
   if (!adjustments?.length) {
     return null;
   }
+
+  const handleConfirmRemoval = () => {
+    if (!pendingRemoval) return;
+    onDelete(pendingRemoval);
+    setPendingRemoval(null);
+  };
 
   return (
     <SectionCard
@@ -65,7 +75,7 @@ export default function DonorAbatementAdjustmentsSection({
               <Button
                 variant="subtle"
                 disabled={isSubmitting}
-                onClick={() => onDelete(adjustment)}
+                onClick={() => setPendingRemoval(adjustment)}
               >
                 Remover lançamento
               </Button>
@@ -73,6 +83,17 @@ export default function DonorAbatementAdjustmentsSection({
           </div>
         ))}
       </div>
+
+      {pendingRemoval ? (
+        <ConfirmModal
+          title="Remover lançamento de acumulado"
+          description={`Tem certeza que deseja remover o acumulado de ${pendingRemoval.referenceMonthFormatted}? Essa ação pode ser desfeita logo em seguida, pelo botão "Desfazer".`}
+          confirmLabel="Remover"
+          isLoading={isSubmitting}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={handleConfirmRemoval}
+        />
+      ) : null}
     </SectionCard>
   );
 }
