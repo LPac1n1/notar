@@ -1,10 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  /* Registers font-display utility class (replaces font-[var(--font-display)] arbitrary values) */
+  /* ── Editorial Terminal type system ─────────────────────────────────
+   * font-display → Geist (headings / page titles)
+   * font-mono    → IBM Plex Mono (registers the `font-mono` utility for
+   *                every numeric value across the app — the "ledger feel")
+   * Eyebrows use Fraunces via the `.eyebrow` utility defined below.      */
   --font-display:
-    "Montserrat", "Aptos", "Segoe UI Variable", "Segoe UI", "Noto Sans",
-    Arial, sans-serif;
+    "Geist", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono:
+    "IBM Plex Mono", "SFMono-Regular", "Menlo", ui-monospace, monospace;
 }
 
 :root {
@@ -14,44 +19,76 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
-  /* Border radius scale */
+  /* Border radius scale — "ledger" dry corners: 6px dominant */
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
+  --radius-lg: 0.625rem;
   --radius-xl: 0.75rem;
-  --app-bg: #0f1319;
-  --surface: #12151c;
-  --surface-strong: #151922;
-  --surface-muted: #242a38;
-  --surface-elevated: #151922;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --text-main: #f7f7f4;
-  --text-soft: #c6c7ca;
-  --muted: #8c9098;
-  --muted-strong: #a7abb3;
-  --accent: #ffd24d;
-  --accent-strong: #ffe176;
-  --accent-soft: rgba(255, 210, 77, 0.14);
-  --accent-2: #1ae680;
-  --accent-2-soft: rgba(26, 230, 128, 0.12);
-  --danger: #ff5b5b;
-  --danger-strong: #e04545;
-  --danger-line: rgba(255, 91, 91, 0.45);
-  --danger-soft: rgba(255, 91, 91, 0.14);
-  --success: #1ae680;
-  --success-line: rgba(26, 230, 128, 0.45);
-  --warning: #f59e0b;
-  --warning-line: rgba(245, 158, 11, 0.45);
-  --warning-soft: rgba(245, 158, 11, 0.13);
+
+  /* ── BASE — warm graphite (undertone marrom) ───────────────────────── */
+  --app-bg: #0a0c10;
+  --surface-deep: #0a0c10;
+  --surface: #0e1014;
+  --surface-strong: #1b1f26;
+  --surface-muted: #232831;
+  --surface-elevated: #14171c;
+
+  /* ── LINHAS ─────────────────────────────────────────────────────────── */
+  --line-subtle: rgba(243, 240, 234, 0.05);
+  --line: rgba(243, 240, 234, 0.09);
+  --line-strong: rgba(243, 240, 234, 0.18);
+  /* warm hairline used under numeric values — barely-there copper */
+  --line-warm: rgba(211, 151, 80, 0.22);
+
+  /* ── TEXTO — cream, não branco puro (sensação editorial/papel) ──────── */
+  --text-strong: #f3f0ea;
+  --text-main: #e1ddd4;
+  --text-soft: #b4afa3;
+  --muted: #7c7669;
+  --muted-strong: #9b958a;
+
+  /* ── ACCENT — cobre (única cor de identidade) ───────────────────────── */
+  --accent: #d39750;
+  --accent-strong: #b87838;
+  --accent-deep: #6e4621;
+  --accent-soft: rgba(211, 151, 80, 0.12);
+  /* Legacy alias: a few components reference --accent-2 / --accent-2-soft
+   * for "success-tinted" surfaces. Map them onto the sage-green family so
+   * the single-accent rule holds (copper is the only brand accent). */
+  --accent-2: #6da37f;
+  --accent-2-soft: rgba(109, 163, 127, 0.12);
+
+  /* ── SEMÂNTICAS (muted — maturidade, não florescente) ──────────────── */
+  --success: #6da37f;
+  --success-line: rgba(109, 163, 127, 0.4);
+  --danger: #c97366;
+  --danger-strong: #b35a4d;
+  --danger-line: rgba(201, 115, 102, 0.42);
+  --danger-soft: rgba(201, 115, 102, 0.12);
+  --warning: #d9a247;
+  --warning-line: rgba(217, 162, 71, 0.4);
+  --warning-soft: rgba(217, 162, 71, 0.12);
+
+  /* ── DADOS (séries de gráfico — paleta estável e aprendível) ────────── */
+  --data-1: #d39750; /* copper — sempre "valor do sistema" */
+  --data-2: #6da37f; /* sage   — sempre "valor NFP/crédito" */
+  --data-3: #8c9bb5; /* slate azul */
+  --data-4: #c97366; /* terra cota */
+  --data-5: #b4a18a; /* champagne */
+  --data-grid: rgba(228, 221, 212, 0.06);
+
   /* Standard elevations. Use these instead of inline shadow-[...] arbitrary
-   * values so spacing stays consistent across modals, popovers and toasts. */
-  --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.72);
-  --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.58);
-  --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.52);
+   * values so spacing stays consistent across modals, popovers and toasts.
+   * Editorial shadow: deep drop + 1px inset highlight (paper edge). */
+  --shadow-elevated:
+    0 24px 60px -28px rgba(0, 0, 0, 0.78),
+    0 1px 0 rgba(243, 240, 234, 0.04) inset;
+  --shadow-popover: 0 18px 40px -26px rgba(0, 0, 0, 0.64);
+  --shadow-toast: 0 14px 32px -24px rgba(0, 0, 0, 0.58);
   --font-sans:
-    "Montserrat", "Aptos", "Segoe UI Variable", "Segoe UI", "Noto Sans",
-    Arial, sans-serif;
+    "Geist", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono:
+    "IBM Plex Mono", "SFMono-Regular", "Menlo", ui-monospace, monospace;
 }
 
 html,
@@ -87,8 +124,72 @@ textarea {
 }
 
 ::selection {
-  background: rgba(255, 210, 77, 0.28);
-  color: var(--text-main);
+  background: rgba(211, 151, 80, 0.26);
+  color: var(--text-strong);
+}
+
+/* ── Editorial utilities ──────────────────────────────────────────────── */
+
+/* Eyebrow — Fraunces uppercase com tracking generoso. Assinatura tipográfica
+ * do sistema: cinco caracteres em serif sobre títulos sans. Usado em labels
+ * de seção, headers de card de métrica e divisores editoriais. */
+.eyebrow {
+  font-family: "Fraunces", Georgia, serif;
+  font-optical-sizing: auto;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Valor numérico — IBM Plex Mono tabular. Aplicar em qualquer número que o
+ * usuário lê como dado (R$, contagens, percentuais). */
+.numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* Hatched underline sob KPIs — referência a livro contábil. Ocupa a largura
+ * do número e fica logo abaixo dele. Aplicar no wrapper do valor. */
+.kpi-rule {
+  position: relative;
+}
+.kpi-rule::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 28px;
+  height: 3px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--accent) 0,
+    var(--accent) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.7;
+}
+
+/* Divisor editorial — traço que continua após o label da seção.
+ * <div class="section-rule"><span>EYEBROW</span></div> */
+.section-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.section-rule > span {
+  flex-shrink: 0;
+}
+.section-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
 }
 
 :where(a, button, input, textarea, select, [role="button"], [tabindex]):focus-visible {
@@ -313,6 +414,7 @@ textarea {
   --line: rgba(0, 0, 0, 0.08);
   --line-strong: rgba(0, 0, 0, 0.16);
   --text-main: #111214;
+  --text-strong: #0a0c10;
   --text-soft: #3d4148;
   --muted: #696d76; /* #7a7e88 was 4.06:1 on white — fails AA; #696d76 gives 5.18:1 */
   --muted-strong: #555a64;
