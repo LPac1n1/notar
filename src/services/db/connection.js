@@ -70,6 +70,12 @@ export async function initDB() {
   if (conn) return conn;
   if (initPromise) return initPromise;
 
+  // Populated by the IIFE below once migrations finish. Captured outside
+  // it (rather than in the IIFE's return value) so `initPromise` keeps
+  // resolving to the connection — concurrent callers that hit
+  // `if (initPromise) return initPromise` above depend on that shape.
+  let appliedMigrationIds = [];
+
   initPromise = (async () => {
     const worker = new Worker(DUCKDB_BUNDLE.mainWorker);
     const logger = new duckdb.VoidLogger();
@@ -78,39 +84,24 @@ export async function initDB() {
     await db.instantiate(DUCKDB_BUNDLE.mainModule);
     await openDatabase();
 
-    conn = await db.connect();
+    const connection = await db.connect();
+    const { appliedIds = [] } = await runSchemaBootstrap(connection);
+    appliedMigrationIds = appliedIds;
 
-    const { appliedIds = [] } = await runSchemaBootstrap(conn);
-
-    // Migrations that mutate the reconciliation inputs need a fresh
-    // `credit_reconciliation` rebuild so the UI doesn't show stale buckets
-    // until the user touches an import:
-    //   v10 — strips leading zeros from `numero_nota` and rebuilds every
-    //         `match_key`.
-    //   v11 — recomputes `is_valid` for credit_notes so pre-Jan-2026
-    //         exports ("Liberado") finally count toward matching.
-    // Dynamic import breaks the module cycle (reconciliation → db barrel
-    // → connection).
-    const reconcileTriggeringMigrations = [10, 11];
-    if (appliedIds.some((id) => reconcileTriggeringMigrations.includes(id))) {
-      try {
-        const { reconcileCredits } = await import(
-          "../reconciliation/creditReconciliationService.js"
-        );
-        await reconcileCredits({ emitChange: false });
-      } catch (error) {
-        console.warn(
-          "Post-migration reconcile failed; the user can run it manually from Credits → 'Re-rodar conciliação'.",
-          error,
-        );
-      }
-    }
+    // Published only now, after every migration has run. Publishing this
+    // earlier (right after `db.connect()`) let any concurrent caller that
+    // resolved `initDB()` mid-bootstrap read/write a database missing
+    // whichever tables the still-pending migrations hadn't created yet
+    // (e.g. a `restoreDatabaseSnapshot()` fired moments after boot could
+    // hit "credit_reconciliation does not exist" if that table's migration
+    // (v8) hadn't run yet).
+    conn = connection;
 
     return conn;
   })();
 
   try {
-    return await initPromise;
+    await initPromise;
   } catch (error) {
     db = null;
     conn = null;
@@ -119,6 +110,39 @@ export async function initDB() {
     updateStorageInfo(DEFAULT_STORAGE_INFO);
     throw error;
   }
+
+  // Migrations that mutate the reconciliation inputs need a fresh
+  // `credit_reconciliation` rebuild so the UI doesn't show stale buckets
+  // until the user touches an import:
+  //   v10 — strips leading zeros from `numero_nota` and rebuilds every
+  //         `match_key`.
+  //   v11 — recomputes `is_valid` for credit_notes so pre-Jan-2026
+  //         exports ("Liberado") finally count toward matching.
+  // Dynamic import breaks the module cycle (reconciliation → db barrel
+  // → connection). Runs after `initPromise` resolves (not inside the IIFE
+  // above) so its own `execute`/`query` calls resolve `conn` through the
+  // normal fast path instead of awaiting the very promise they'd be
+  // nested inside of. Only the caller that actually created `initPromise`
+  // reaches this far (everyone else already returned above), so reconcile
+  // still runs exactly once per boot.
+  const reconcileTriggeringMigrations = [10, 11];
+  if (
+    appliedMigrationIds.some((id) => reconcileTriggeringMigrations.includes(id))
+  ) {
+    try {
+      const { reconcileCredits } = await import(
+        "../reconciliation/creditReconciliationService.js"
+      );
+      await reconcileCredits({ emitChange: false });
+    } catch (error) {
+      console.warn(
+        "Post-migration reconcile failed; the user can run it manually from Credits → 'Re-rodar conciliação'.",
+        error,
+      );
+    }
+  }
+
+  return conn;
 }
 
 export async function query(sql) {
