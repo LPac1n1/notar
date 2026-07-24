@@ -16,15 +16,16 @@ test("monthly management shows donors with and without donations", async ({ page
 
   await page.goto("/");
   await page.getByRole("link", { name: "Configurações" }).click();
+  await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(backupPath);
-  await page.getByRole("button", { name: "Importar backup" }).click();
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
 
   const restoreDialog = page.getByRole("dialog", { name: "Restaurar backup" });
   await expect(restoreDialog).toBeVisible();
   await restoreDialog
     .getByRole("button", { name: "Restaurar backup" })
     .click({ force: true });
-  await expect(page.getByText("Backup importado com sucesso")).toBeVisible();
+  await expect(page.getByText("Backup importado:")).toBeVisible();
 
   await page.getByRole("link", { name: "Gestão Mensal" }).click();
 
@@ -38,6 +39,14 @@ test("monthly management shows donors with and without donations", async ({ page
     .locator("article")
     .filter({ hasText: "MARIA SILVA" })
     .first();
+
+  // Monthly auto-anchors to the most recently imported month on load, so
+  // the consolidated all-months view ("Abatimentos por doador") starts
+  // hidden behind it. Toggling the already-selected card in the "Meses
+  // importados" carousel off is the only UI path back to it.
+  await page
+    .getByRole("listitem", { name: "Limpar seleção de Março de 2026" })
+    .click();
 
   await expect(
     mariaConsolidatedCard.getByRole("button", {

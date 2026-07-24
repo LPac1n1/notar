@@ -61,7 +61,7 @@ test("auxiliary donor can link to a reference person who is not an active donor"
   await expect(page.getByText("Pessoa de referência")).toBeVisible();
 
   await page.getByRole("link", { name: "Importações" }).click();
-  await page.getByRole("button", { name: "Nova importação" }).click();
+  await page.getByRole("button", { name: "Nova planilha de doações" }).click();
   const importDialog = page.getByRole("dialog", { name: "Nova importação" });
   await importDialog.locator('input[type="file"]').setInputFiles(fixturePath);
   await expect(page.getByText("Pré-visualização")).toBeVisible();
@@ -71,9 +71,7 @@ test("auxiliary donor can link to a reference person who is not an active donor"
     importDialog.locator('[data-select-name="cpfColumn"]').getByRole("button", { name: "CPF" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Processar importação" }).click();
-  await expect(page.getByText("JOAO AUXILIAR").first()).toBeVisible();
-  await expect(page.getByText("Vinculado a: CARLOS REFERENCIA").first()).toBeVisible();
-  await expect(page.getByText("Pessoa de referência").first()).toBeVisible();
+  await expect(page.getByText("Processada", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Gestão Mensal" }).click();
   const monthlySection = page

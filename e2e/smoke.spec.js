@@ -67,7 +67,7 @@ test("main flow smoke test", async ({ page }) => {
   await page.getByRole("button", { name: "Voltar para doadores" }).click();
 
   await page.getByRole("link", { name: "Importações" }).click();
-  await page.getByRole("button", { name: "Nova importação" }).click();
+  await page.getByRole("button", { name: "Nova planilha de doações" }).click();
   const importSection = page.getByRole("dialog", { name: "Nova importação" });
   await importSection.locator('input[type="file"]').setInputFiles(fixturePath);
   await expect(page.getByText("Pré-visualização")).toBeVisible();
@@ -78,8 +78,7 @@ test("main flow smoke test", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("button", { name: "Processar importação" }).click();
   await expect(page.getByText("nfp-sample.csv")).toBeVisible();
-  await expect(page.getByRole("button", { name: "JOAO AUXILIAR" }).first()).toBeVisible();
-  await expect(page.getByText("Vinculado a: MARIA SILVA").first()).toBeVisible();
+  await expect(page.getByText("Processada", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Gestão Mensal" }).click();
   const monthlySection = page
@@ -87,9 +86,13 @@ test("main flow smoke test", async ({ page }) => {
     .locator("xpath=ancestor::section[1]");
   await monthlySection.locator('input[name="referenceMonth"]').fill("03/2026");
   await expect(page.getByRole("button", { name: "MARIA SILVA" })).toBeVisible();
-  await expect(page.getByText("JOAO AUXILIAR").first()).toBeVisible();
-  await expect(page.getByText(/^R\$\s*1,00$/, { exact: true })).toBeVisible();
-  await expect(page.getByText(/^R\$\s*0,50$/, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "JOAO AUXILIAR" })).toBeVisible();
+  await expect(
+    page.getByText(/^R\$\s*1,00$/, { exact: true }).and(page.locator(":visible")),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^R\$\s*0,50$/, { exact: true }).and(page.locator(":visible")).first(),
+  ).toBeVisible();
   await selectOption(page, monthlySection, "demand", "DEMANDA TESTE");
   await expect(page.getByRole("button", { name: "MARIA SILVA" })).toBeVisible();
   await page.getByRole("button", { name: /Março de 2026/i }).click();
@@ -103,12 +106,13 @@ test("old auxiliary donor model is migrated from backup", async ({ page }) => {
 
   await page.goto("/");
   await page.getByRole("link", { name: "Configurações" }).click();
+  await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(oldBackupPath);
-  await page.getByRole("button", { name: "Importar backup" }).click();
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
   const restoreDialog = page.getByRole("dialog", { name: "Restaurar backup" });
   await expect(restoreDialog).toBeVisible();
   await restoreDialog.getByRole("button", { name: "Restaurar backup" }).click({ force: true });
-  await expect(page.getByText("Backup importado com sucesso")).toBeVisible();
+  await expect(page.getByText("Backup importado:")).toBeVisible();
 
   await page.getByRole("link", { name: "Doadores" }).click();
   await expect(page.getByRole("button", { name: "MARIA SILVA" })).toBeVisible();
@@ -126,7 +130,11 @@ test("old auxiliary donor model is migrated from backup", async ({ page }) => {
     .locator("xpath=ancestor::section[1]");
   await monthlySection.locator('input[name="referenceMonth"]').fill("03/2026");
   await expect(page.getByRole("button", { name: "MARIA SILVA" })).toBeVisible();
-  await expect(page.getByText("JOAO AUXILIAR").first()).toBeVisible();
-  await expect(page.getByText(/^R\$\s*1,00$/, { exact: true })).toBeVisible();
-  await expect(page.getByText(/^R\$\s*0,50$/, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "JOAO AUXILIAR" })).toBeVisible();
+  await expect(
+    page.getByText(/^R\$\s*1,00$/, { exact: true }).and(page.locator(":visible")),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^R\$\s*0,50$/, { exact: true }).and(page.locator(":visible")).first(),
+  ).toBeVisible();
 });

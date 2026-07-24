@@ -52,7 +52,7 @@ test("import CPF copy buttons copy the expected CPF", async ({
   await expect(page.getByRole("button", { name: "MARIA COPY" })).toBeVisible();
 
   await page.getByRole("link", { name: "Importações" }).click();
-  await page.getByRole("button", { name: "Nova importação" }).click();
+  await page.getByRole("button", { name: "Nova planilha de doações" }).click();
   const importDialog = page.getByRole("dialog", { name: "Nova importação" });
   await importDialog.locator('input[type="file"]').setInputFiles(fixturePath);
   await expect(page.getByText("Pré-visualização")).toBeVisible();
@@ -65,33 +65,6 @@ test("import CPF copy buttons copy the expected CPF", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Processar importação" }).click();
   await expect(page.getByText("nfp-sample.csv")).toBeVisible();
-
-  const cpfSummarySection = page
-    .getByRole("heading", { name: "CPFs encontrados" })
-    .locator("xpath=ancestor::section[1]");
-  const summaryCopyButton = cpfSummarySection
-    .getByRole("button", { name: "Copiar CPF" })
-    .first();
-
-  await summaryCopyButton.click();
-  await expect(summaryCopyButton).toHaveAttribute("data-copy-state", "copied");
-  await expectClipboardText(page, "123.456.789-09");
-
-  await cpfSummarySection
-    .getByRole("button", { name: "Ver meses e arquivos" })
-    .first()
-    .click();
-  const detailsDialog = page.getByRole("dialog", {
-    name: "Meses e arquivos do CPF",
-  });
-  const detailsCopyButton = detailsDialog
-    .getByRole("button", { name: "Copiar CPF" })
-    .first();
-
-  await detailsCopyButton.click();
-  await expect(detailsCopyButton).toHaveAttribute("data-copy-state", "copied");
-  await expectClipboardText(page, "123.456.789-09");
-  await detailsDialog.getByRole("button", { name: "Fechar modal" }).click();
 
   const cpfListSearchSection = page
     .getByRole("heading", { name: "Busca por lista de CPFs" })

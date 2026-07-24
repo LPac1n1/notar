@@ -18,7 +18,7 @@ test("imports drop invalid status rows and report them per donor", async ({
 
   await page.goto("/");
   await expect(
-    page.getByText("Nenhum arquivo de dados conectado"),
+    page.getByText("Ainda não há dados suficientes para o dashboard"),
   ).toBeVisible();
 
   // Cadastra demanda mínima
@@ -46,7 +46,7 @@ test("imports drop invalid status rows and report them per donor", async ({
 
   // Importa a planilha com 2 válidas + 3 inválidas
   await page.getByRole("link", { name: "Importações" }).click();
-  await page.getByRole("button", { name: "Nova importação" }).click();
+  await page.getByRole("button", { name: "Nova planilha de doações" }).click();
   const importSection = page.getByRole("dialog", { name: "Nova importação" });
   await importSection.locator('input[type="file"]').setInputFiles(fixturePath);
   await expect(page.getByText("Pré-visualização")).toBeVisible();

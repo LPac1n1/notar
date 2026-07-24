@@ -54,6 +54,6 @@ for (const source of SOURCES) {
     }
 
     await expect(page.getByRole("heading", { name: "Configurações" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Armazenamento local" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Cópia de segurança" })).toBeVisible();
   });
 }
