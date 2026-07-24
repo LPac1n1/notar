@@ -13,8 +13,8 @@ import { createClient } from "@supabase/supabase-js";
 // environments. Optional chaining lets the module load cleanly in both
 // contexts; functions that depend on these values guard with isSupabaseConfigured.
 const env = import.meta.env ?? {};
-const supabaseUrl = env.VITE_SUPABASE_URL;
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
+export const supabaseUrl = env.VITE_SUPABASE_URL;
+export const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
 export const isLocalAuthMode = env.VITE_NOTAR_AUTH_MODE === "local";
 
 export const STORAGE_BUCKET = env.VITE_SUPABASE_STORAGE_BUCKET || "notar";

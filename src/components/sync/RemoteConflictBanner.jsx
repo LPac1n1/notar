@@ -7,9 +7,10 @@ import {
 
 /**
  * Fixed banner shown when another device wrote to the cloud snapshot while
- * this tab was open. The user picks between reloading (pulling the remote
- * changes, losing any unsynced local edits) or dismissing (next local save
- * will overwrite the remote version).
+ * this tab was open. Uploads are paused while this is visible (see
+ * `uploadSnapshotImmediate` in cloudStorage.js) — the user has to actively
+ * choose: reload (pull the remote version, losing any unsynced local edits)
+ * or keep editing here (the next save overwrites the remote version).
  */
 export default function RemoteConflictBanner() {
   const [hasConflict, setHasConflict] = useState(false);
@@ -32,8 +33,10 @@ export default function RemoteConflictBanner() {
             Os dados foram atualizados em outro dispositivo
           </p>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Recarregue para baixar a versão mais recente. Alterações locais
-            ainda não sincronizadas serão perdidas.
+            A sincronização está pausada até você escolher. Recarregar baixa
+            a versão mais recente e descarta o que não foi salvo aqui. Manter
+            suas alterações vai sobrescrever a versão do outro dispositivo na
+            próxima vez que algo for salvo.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -41,7 +44,7 @@ export default function RemoteConflictBanner() {
             variant="subtle"
             onClick={() => acknowledgeRemoteConflict()}
           >
-            Ignorar
+            Manter minhas alterações
           </Button>
           <Button onClick={() => window.location.reload()}>Recarregar</Button>
         </div>

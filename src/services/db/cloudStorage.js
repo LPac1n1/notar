@@ -9,6 +9,8 @@ import {
   getUserStorageObjectPath,
   isSupabaseConfigured,
   supabase,
+  supabaseAnonKey,
+  supabaseUrl,
 } from "../supabaseClient.js";
 import { exportDatabaseSnapshot, restoreDatabaseSnapshot } from "./backup.js";
 import {
@@ -36,6 +38,12 @@ import { logError } from "../logger.js";
  */
 
 const FLUSH_DEBOUNCE_MS = 2000;
+
+// Browsers cap `fetch(..., { keepalive: true })` request bodies around 64KB
+// — there is no way to reliably deliver a larger payload after the tab has
+// actually closed. Stay comfortably under that so the request isn't silently
+// dropped by the browser instead of by our own code.
+const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
 
 // `JSON.stringify` replacer that downgrades JS BigInt to Number. DuckDB-WASM
 // returns BIGINT columns (e.g. `donation_notes.valor_cents`) as BigInt,
@@ -182,10 +190,18 @@ export async function checkForRemoteChanges() {
   }
 }
 
+// Called when the user picks "Manter minhas alterações" on the conflict
+// banner. Clearing the flag alone would leave whatever change triggered the
+// original (now-blocked) upload sitting unsent until the next unrelated
+// edit — push it immediately so the button's promise ("your changes win")
+// is actually true the moment it's clicked.
 export function acknowledgeRemoteConflict() {
   if (!remoteConflict) return;
   remoteConflict = false;
   notifyConflictListeners();
+  if (activeUserId) {
+    uploadSnapshotImmediate(activeUserId);
+  }
 }
 
 export function setActiveCloudUser(userId) {
@@ -308,6 +324,31 @@ async function uploadSnapshotImmediate(userId) {
     // the same promise. Otherwise schedule another flush right after.
     return pendingPromise;
   }
+
+  // Never overwrite a snapshot we know is stale. A live check here (not
+  // just the flag from the last focus/visibility event) closes the gap
+  // where another device writes while this tab never loses focus during a
+  // long session — previously the upload below ran unconditionally
+  // (`upsert: true`) and silently discarded the remote change.
+  await checkForRemoteChanges();
+  if (remoteConflict) {
+    status = "error";
+    lastError = new Error(
+      "Sincronização pausada: os dados foram atualizados em outro dispositivo. Recarregue ou escolha manter suas alterações no aviso no topo da tela.",
+    );
+    notifyListeners();
+    return;
+  }
+
+  return performUpload(userId);
+}
+
+// The actual upload, without the conflict gate. Split out so
+// `flushBeforeUnload`'s fallback can skip straight to it — a `beforeunload`
+// handler has very little time budget, and spending part of it on a
+// `checkForRemoteChanges()` round-trip (network) would only shrink the
+// already-slim chance the fallback fetch lands before the page is gone.
+async function performUpload(userId) {
   isUploading = true;
   status = "syncing";
   lastError = null;
@@ -359,6 +400,76 @@ async function uploadSnapshotImmediate(userId) {
   })();
 
   return pendingPromise;
+}
+
+// Best-effort delivery for the tab-close case. The Supabase storage-js SDK
+// (verified against the installed version) never sets `keepalive` on its
+// underlying fetch, so a normal `.upload()` call gets aborted the instant
+// the page unloads. This bypasses the SDK for just this one call and talks
+// to the Storage REST endpoint directly with `keepalive: true`, which lets
+// the browser finish the request after the page is gone — but only works
+// under the ~64KB body cap enforced by the browser itself (see
+// KEEPALIVE_BODY_LIMIT_BYTES). Mirrors the exact request shape the SDK uses
+// for `.upload(path, blob, { upsert: true })` (FormData with a `cacheControl`
+// field and the blob under an empty-string field name) so the server sees
+// an identical request.
+async function tryKeepaliveUpload(userId, blob) {
+  if (!supabaseUrl || !supabaseAnonKey) return false;
+  if (blob.size > KEEPALIVE_BODY_LIMIT_BYTES) return false;
+
+  try {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data?.session?.access_token;
+    if (!accessToken) return false;
+
+    const path = getUserStorageObjectPath(userId);
+    const form = new FormData();
+    form.append("cacheControl", "0");
+    form.append("", blob);
+
+    const response = await fetch(
+      `${supabaseUrl}/storage/v1/object/${STORAGE_BUCKET}/${path}`,
+      {
+        method: "POST",
+        keepalive: true,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: supabaseAnonKey,
+          "x-upsert": "true",
+        },
+        body: form,
+      },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Used only from the `beforeunload` handler. Tries the keepalive-backed
+// path first; if the payload is too large for it (or anything about it
+// fails), falls back to the normal SDK upload, which the browser may still
+// abort mid-flight — that residual risk is exactly why `beforeunload` also
+// warns the user before this runs, instead of assuming this function makes
+// the loss impossible.
+async function flushBeforeUnload(userId) {
+  if (!isSupabaseConfigured || !userId) return;
+  cancelPendingTimer();
+  try {
+    const snapshot = await exportDatabaseSnapshot();
+    const payload = createSnapshotPayload(snapshot);
+    const { blob } = await compressPayload(
+      JSON.stringify(payload, bigintToNumberReplacer),
+    );
+    const delivered = await tryKeepaliveUpload(userId, blob);
+    if (delivered) return;
+  } catch (error) {
+    logError("cloudStorage.flushBeforeUnload", error);
+  }
+  // Skip the conflict gate here on purpose — see the comment on
+  // `performUpload`. Every millisecond spent checking is a millisecond not
+  // spent trying to get the user's own work saved before the tab closes.
+  await performUpload(userId);
 }
 
 export function scheduleCloudFlush() {
@@ -480,14 +591,23 @@ function createEmptySnapshot() {
 // each `execute`/`executePrepared`/`runInTransaction` once the depth is 0.
 setOnAfterTransaction(scheduleCloudFlush);
 
-// Best-effort flush on tab close so the user doesn't lose changes that
-// were sitting in the debounce window. The browser doesn't await async work
-// here, but `keepalive: true` on the underlying fetch (Supabase SDK uses
-// fetch) lets the upload finish after the page is gone.
+// Flush on tab close so the user doesn't lose changes that were sitting in
+// the debounce window. Two layers, because neither one alone is reliable:
+//   1. `flushBeforeUnload` tries a keepalive-backed request that can survive
+//      the page actually closing (see its comment for the size caveat).
+//   2. The native "leave site?" prompt below gives the user an actual
+//      choice to stay and let the sync finish, instead of silently losing
+//      work if step 1 can't complete in time.
 if (typeof window !== "undefined") {
-  window.addEventListener("beforeunload", () => {
-    if (pendingTimer || isUploading) {
-      flushPendingCloudSync();
+  window.addEventListener("beforeunload", (event) => {
+    const hasPendingWork = Boolean(pendingTimer) || isUploading;
+    if (!hasPendingWork) return;
+
+    event.preventDefault();
+    event.returnValue = "";
+
+    if (pendingTimer && !isUploading) {
+      flushBeforeUnload(activeUserId);
     }
   });
 
