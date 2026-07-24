@@ -20,7 +20,7 @@ const TONE_STYLES = {
     bar: "bg-[color:var(--danger)]",
     button: "text-[color:var(--danger)] hover:bg-black/10",
     icon: WarningIcon,
-    iconWrap: "bg-[rgba(255,91,91,0.12)] text-[var(--danger)]",
+    iconWrap: "bg-[color:var(--danger-soft)] text-[var(--danger)]",
   },
   success: {
     container:
@@ -28,7 +28,7 @@ const TONE_STYLES = {
     bar: "bg-[color:var(--success)]",
     button: "text-[color:var(--success)] hover:bg-black/10",
     icon: ConnectedIcon,
-    iconWrap: "bg-[rgba(26,230,128,0.12)] text-[var(--success)]",
+    iconWrap: "bg-[color:var(--accent-2-soft)] text-[var(--success)]",
   },
   info: {
     container:
@@ -36,7 +36,7 @@ const TONE_STYLES = {
     bar: "bg-[color:var(--accent)]",
     button: "text-[var(--muted-strong)] hover:bg-black/10",
     icon: InfoIcon,
-    iconWrap: "bg-[rgba(255,210,77,0.1)] text-[var(--accent)]",
+    iconWrap: "bg-[color:var(--accent-soft)] text-[var(--accent)]",
   },
   warning: {
     container:
@@ -44,7 +44,7 @@ const TONE_STYLES = {
     bar: "bg-[color:var(--warning)]",
     button: "text-[color:var(--warning)] hover:bg-black/10",
     icon: DisconnectedIcon,
-    iconWrap: "bg-[rgba(245,158,11,0.12)] text-[var(--warning)]",
+    iconWrap: "bg-[color:var(--warning-soft)] text-[var(--warning)]",
   },
 };
 

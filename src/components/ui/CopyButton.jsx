@@ -139,18 +139,18 @@ export default function CopyButton({
 
   const buttonStyle = isCopied
     ? {
-        backgroundColor: "rgba(26, 230, 128, 0.14)",
-        borderColor: "rgba(26, 230, 128, 0.42)",
+        backgroundColor: "var(--accent-2-soft)",
+        borderColor: "var(--success-line)",
         color: "var(--success)",
         transform: "scale(1.02)",
-        boxShadow: "0 0 0 2px rgba(26, 230, 128, 0.1)",
+        boxShadow: "0 0 0 2px var(--accent-2-soft)",
       }
     : isError
       ? {
           backgroundColor: "var(--danger-soft)",
           borderColor: "var(--danger-line)",
           color: "var(--danger)",
-          boxShadow: "0 0 0 3px rgba(255, 91, 91, 0.12)",
+          boxShadow: "0 0 0 3px var(--danger-soft)",
         }
       : {
           backgroundColor: "var(--surface-strong)",
