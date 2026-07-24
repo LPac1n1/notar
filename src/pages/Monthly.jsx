@@ -172,13 +172,24 @@ export default function Monthly() {
   //
   // Não chumbamos para sobrescrever uma navegação intencional (back do
   // browser, deep-link com filtros) — só age quando o filtro está
-  // vazio. E só roda uma vez via guard `referenceMonth === ""` para não
-  // entrar em loop com a futura troca manual de mês.
+  // vazio. `hasAutoAnchoredRef` garante que isso rode no máximo uma vez
+  // por sessão da página: sem ele, limpar o mês manualmente (carrossel,
+  // "Meses importados") também deixa `referenceMonth` vazio e o efeito
+  // reiria imediatamente, tornando a visão consolidada "Abatimentos por
+  // doador" impossível de alcançar depois da primeira importação.
+  const hasAutoAnchoredRef = useRef(false);
   useEffect(() => {
-    if (filters.referenceMonth) return;
+    if (hasAutoAnchoredRef.current) return;
+    if (filters.referenceMonth) {
+      // Already has a month (e.g. seeded from a deep-link's location.state)
+      // — the auto-anchor decision point has passed, disarm permanently.
+      hasAutoAnchoredRef.current = true;
+      return;
+    }
     if (availableImports.length === 0) return;
     const mostRecentMonth = availableImports[0]?.referenceMonth ?? "";
     if (!mostRecentMonth) return;
+    hasAutoAnchoredRef.current = true;
     setFilters((current) =>
       current.referenceMonth
         ? current

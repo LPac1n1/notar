@@ -209,15 +209,14 @@ export default function ImportedMonthsCarousel({
         }}
       >
         {imports.map((item) => {
-          const referenceMonth = item.referenceMonth.slice(0, 7);
-          const isSelected = referenceMonth === selectedReferenceMonth;
+          const isSelected = item.referenceMonth === selectedReferenceMonth;
 
           return (
             <button
               key={item.id}
               role="listitem"
               type="button"
-              onClick={() => onSelectMonth(isSelected ? "" : referenceMonth)}
+              onClick={() => onSelectMonth(isSelected ? "" : item.referenceMonth)}
               aria-label={`${isSelected ? "Limpar seleção de" : "Selecionar"} ${formatMonthYear(item.referenceMonth)}`}
               aria-pressed={isSelected}
               className={`snap-start min-w-[250px] rounded-md border p-4 text-left transition ${
