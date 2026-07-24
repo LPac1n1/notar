@@ -8,7 +8,10 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
+  retries: process.env.CI ? 2 : 0,
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
+    trace: "on-first-retry",
     baseURL: "http://127.0.0.1:4173",
     headless: true,
     viewport: { width: 1280, height: 900 },
