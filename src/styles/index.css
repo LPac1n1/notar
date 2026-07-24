@@ -1,15 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Editorial Terminal type system ─────────────────────────────────
-   * font-display → Geist (headings / page titles)
-   * font-mono    → IBM Plex Mono (registers the `font-mono` utility for
-   *                every numeric value across the app — the "ledger feel")
-   * Eyebrows use Fraunces via the `.eyebrow` utility defined below.      */
+  /* Uma única família tipográfica pro sistema inteiro. Números usam a
+   * mesma Geist com font-variant-numeric: tabular-nums (.numeric),
+   * sem precisar de uma família monoespaçada separada. */
   --font-display:
     "Geist", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-mono:
-    "IBM Plex Mono", "SFMono-Regular", "Menlo", ui-monospace, monospace;
+
+  /* Radius — registrado aqui (não só em :root) pra que rounded-sm/md/lg/xl
+   * puxem de fato o valor customizado em vez do default do Tailwind. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
 }
 
 :root {
@@ -19,76 +22,63 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
-  /* Border radius scale — "ledger" dry corners: 6px dominant */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.75rem;
 
-  /* ── BASE — warm graphite (undertone marrom) ───────────────────────── */
-  --app-bg: #0a0c10;
-  --surface-deep: #0a0c10;
-  --surface: #0e1014;
-  --surface-strong: #1b1f26;
-  --surface-muted: #232831;
-  --surface-elevated: #14171c;
+  /* ── BASE — grafite frio e neutro ────────────────────────────────────── */
+  --app-bg: #0b0c0e;
+  --surface-deep: #0b0c0e;
+  --surface: #101113;
+  --surface-strong: #1a1b1f;
+  --surface-muted: #212226;
+  --surface-elevated: #16171a;
 
   /* ── LINHAS ─────────────────────────────────────────────────────────── */
-  --line-subtle: rgba(243, 240, 234, 0.05);
-  --line: rgba(243, 240, 234, 0.09);
-  --line-strong: rgba(243, 240, 234, 0.18);
-  /* warm hairline used under numeric values — barely-there copper */
-  --line-warm: rgba(211, 151, 80, 0.22);
+  --line-subtle: rgba(255, 255, 255, 0.05);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.17);
 
-  /* ── TEXTO — cream, não branco puro (sensação editorial/papel) ──────── */
-  --text-strong: #f3f0ea;
-  --text-main: #e1ddd4;
-  --text-soft: #b4afa3;
-  --muted: #7c7669;
-  --muted-strong: #9b958a;
+  /* ── TEXTO ──────────────────────────────────────────────────────────── */
+  --text-strong: #f7f7f8;
+  --text-main: #e2e2e6;
+  --text-soft: #adadb5;
+  --muted: #8f8f98;
+  --muted-strong: #aeaeb6;
 
-  /* ── ACCENT — cobre (única cor de identidade) ───────────────────────── */
-  --accent: #d39750;
-  --accent-strong: #b87838;
-  --accent-deep: #6e4621;
-  --accent-soft: rgba(211, 151, 80, 0.12);
-  /* Legacy alias: a few components reference --accent-2 / --accent-2-soft
-   * for "success-tinted" surfaces. Map them onto the sage-green family so
-   * the single-accent rule holds (copper is the only brand accent). */
-  --accent-2: #6da37f;
-  --accent-2-soft: rgba(109, 163, 127, 0.12);
+  /* ── ACCENT — índigo (única cor de identidade) ──────────────────────── */
+  --accent: #818cf8;
+  --accent-strong: #6366f1;
+  --accent-deep: #4f46e5;
+  --accent-soft: rgba(129, 140, 248, 0.14);
+  /* Legacy alias: alguns componentes ainda referenciam --accent-2 para
+   * superfícies "tingidas de sucesso" — mapeado pra família esmeralda. */
+  --accent-2: #34d399;
+  --accent-2-soft: rgba(52, 211, 153, 0.12);
 
-  /* ── SEMÂNTICAS (muted — maturidade, não florescente) ──────────────── */
-  --success: #6da37f;
-  --success-line: rgba(109, 163, 127, 0.4);
-  --danger: #c97366;
-  --danger-strong: #b35a4d;
-  --danger-line: rgba(201, 115, 102, 0.42);
-  --danger-soft: rgba(201, 115, 102, 0.12);
-  --warning: #d9a247;
-  --warning-line: rgba(217, 162, 71, 0.4);
-  --warning-soft: rgba(217, 162, 71, 0.12);
+  /* ── SEMÂNTICAS ─────────────────────────────────────────────────────── */
+  --success: #34d399;
+  --success-line: rgba(52, 211, 153, 0.4);
+  --danger: #f87171;
+  --danger-strong: #ef4444;
+  --danger-line: rgba(248, 113, 113, 0.42);
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --warning: #fbbf24;
+  --warning-line: rgba(251, 191, 36, 0.4);
+  --warning-soft: rgba(251, 191, 36, 0.12);
 
-  /* ── DADOS (séries de gráfico — paleta estável e aprendível) ────────── */
-  --data-1: #d39750; /* copper — sempre "valor do sistema" */
-  --data-2: #6da37f; /* sage   — sempre "valor NFP/crédito" */
-  --data-3: #8c9bb5; /* slate azul */
-  --data-4: #c97366; /* terra cota */
-  --data-5: #b4a18a; /* champagne */
-  --data-grid: rgba(228, 221, 212, 0.06);
+  /* ── DADOS (séries de gráfico — paleta categórica estável) ───────────── */
+  --data-1: #818cf8; /* índigo — sempre "valor do sistema" */
+  --data-2: #34d399; /* esmeralda — sempre "valor NFP/crédito" */
+  --data-3: #38bdf8; /* azul-céu */
+  --data-4: #fb923c; /* laranja */
+  --data-5: #a78bfa; /* violeta */
+  --data-grid: rgba(255, 255, 255, 0.06);
 
-  /* Standard elevations. Use these instead of inline shadow-[...] arbitrary
-   * values so spacing stays consistent across modals, popovers and toasts.
-   * Editorial shadow: deep drop + 1px inset highlight (paper edge). */
-  --shadow-elevated:
-    0 24px 60px -28px rgba(0, 0, 0, 0.78),
-    0 1px 0 rgba(243, 240, 234, 0.04) inset;
-  --shadow-popover: 0 18px 40px -26px rgba(0, 0, 0, 0.64);
-  --shadow-toast: 0 14px 32px -24px rgba(0, 0, 0, 0.58);
+  /* Elevações padrão — use em vez de shadow-[...] arbitrário pra manter
+   * consistência entre modais, popovers e toasts. */
+  --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.65);
+  --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.55);
+  --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.5);
   --font-sans:
     "Geist", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-mono:
-    "IBM Plex Mono", "SFMono-Regular", "Menlo", ui-monospace, monospace;
 }
 
 html,
@@ -124,58 +114,32 @@ textarea {
 }
 
 ::selection {
-  background: rgba(211, 151, 80, 0.26);
+  background: rgba(129, 140, 248, 0.28);
   color: var(--text-strong);
 }
 
-/* ── Editorial utilities ──────────────────────────────────────────────── */
+/* ── Utilities de tipografia ─────────────────────────────────────────── */
 
-/* Eyebrow — Fraunces uppercase com tracking generoso. Assinatura tipográfica
- * do sistema: cinco caracteres em serif sobre títulos sans. Usado em labels
- * de seção, headers de card de métrica e divisores editoriais. */
+/* Eyebrow — label uppercase discreto. Usado em rótulos de seção, headers
+ * de card de métrica e divisores. */
 .eyebrow {
-  font-family: "Fraunces", Georgia, serif;
-  font-optical-sizing: auto;
+  font-family: var(--font-sans);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   line-height: 1.4;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-/* Valor numérico — IBM Plex Mono tabular. Aplicar em qualquer número que o
- * usuário lê como dado (R$, contagens, percentuais). */
+/* Valor numérico tabular. Aplicar em qualquer número que o usuário lê
+ * como dado (R$, contagens, percentuais) pra alinhamento consistente. */
 .numeric {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
-  letter-spacing: -0.01em;
 }
 
-/* Hatched underline sob KPIs — referência a livro contábil. Ocupa a largura
- * do número e fica logo abaixo dele. Aplicar no wrapper do valor. */
-.kpi-rule {
-  position: relative;
-}
-.kpi-rule::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -6px;
-  width: 28px;
-  height: 3px;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--accent) 0,
-    var(--accent) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  opacity: 0.7;
-}
-
-/* Divisor editorial — traço que continua após o label da seção.
+/* Divisor — traço que continua após o label da seção.
  * <div class="section-rule"><span>EYEBROW</span></div> */
 .section-rule {
   display: flex;
@@ -360,7 +324,7 @@ textarea {
 }
 
 .note-rich-content [data-note-checklist="true"][data-checked="true"]::after {
-  color: #12151c;
+  color: #101113;
   content: "✓";
   font-size: 0.75rem;
   font-weight: 800;
@@ -406,42 +370,45 @@ textarea {
 /* Dark is the default (no class). Light overrides it via the .light class.   */
 
 .light {
-  --app-bg: #f0f1f4;
+  --app-bg: #f7f7f8;
   --surface: #ffffff;
-  --surface-strong: #f2f4f8;
-  --surface-muted: #e4e7ee;
-  --surface-elevated: #f2f4f8;
+  --surface-strong: #f1f1f4;
+  --surface-muted: #e8e8ec;
+  --surface-elevated: #ffffff;
   --line: rgba(0, 0, 0, 0.08);
   --line-strong: rgba(0, 0, 0, 0.16);
-  --text-main: #111214;
-  --text-strong: #0a0c10;
-  --text-soft: #3d4148;
-  --muted: #696d76; /* #7a7e88 was 4.06:1 on white — fails AA; #696d76 gives 5.18:1 */
-  --muted-strong: #555a64;
-  /* Accent kept in the same yellow-gold hue family as dark mode (#ffd24d)
-   * — only the lightness is adapted for legibility on a white surface.
-   * Hue ≈ 44° in both modes preserves brand identity across themes. */
-  --accent: #b08000;
-  --accent-strong: #8a6300;
-  --accent-soft: rgba(176, 128, 0, 0.12);
-  --accent-2: #059669;
-  --accent-2-soft: rgba(5, 150, 105, 0.1);
+  --text-main: #1c1c1f;
+  --text-strong: #0b0c0e;
+  --text-soft: #4b4b52;
+  --muted: #6b6b74; /* ~4.6:1 sobre branco — passa AA */
+  --muted-strong: #55555c;
+  --accent: #4f46e5;
+  --accent-strong: #4338ca;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --accent-2: #047857;
+  --accent-2-soft: rgba(4, 120, 87, 0.1);
   --danger: #dc2626;
   --danger-strong: #b91c1c;
   --danger-line: rgba(220, 38, 38, 0.35);
   --danger-soft: rgba(220, 38, 38, 0.08);
-  --success: #059669;
-  --success-line: rgba(5, 150, 105, 0.35);
+  --success: #047857; /* #059669 was 3.77:1 on white — fails AA; #047857 gives 5.48:1 */
+  --success-line: rgba(4, 120, 87, 0.35);
   --warning: #a16207; /* #d97706 was 3.1:1 on white — fails AA for small text; #a16207 gives 4.95:1 */
   --warning-line: rgba(161, 98, 7, 0.35);
   --warning-soft: rgba(161, 98, 7, 0.1);
+  --data-1: #4f46e5;
+  --data-2: #047857;
+  --data-3: #0284c7;
+  --data-4: #c2410c;
+  --data-5: #7c3aed;
+  --data-grid: rgba(0, 0, 0, 0.06);
   --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.16);
   --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.12);
   --shadow-toast: 0 12px 30px -24px rgba(0, 0, 0, 0.1);
 }
 
 .light ::selection {
-  background: rgba(176, 128, 0, 0.22);
+  background: rgba(79, 70, 229, 0.18);
   color: var(--text-main);
 }
 

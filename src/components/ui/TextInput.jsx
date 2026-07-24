@@ -47,7 +47,7 @@ export default function TextInput({
           id={inputId}
           aria-describedby={ariaDescribedBy || undefined}
           aria-invalid={Boolean(error)}
-          className={`w-full rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:bg-[var(--surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${success ? "pr-10" : ""} ${borderClass} ${className}`.trim()}
+          className={`w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:bg-[var(--surface-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${success ? "pr-10" : ""} ${borderClass} ${className}`.trim()}
           {...props}
         />
         {success ? (

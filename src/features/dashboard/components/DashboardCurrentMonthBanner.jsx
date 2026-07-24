@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../../components/ui/Button";
+import Eyebrow from "../../../components/ui/Eyebrow";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
@@ -30,28 +31,26 @@ export default function DashboardCurrentMonthBanner({ latestMonth }) {
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Último mês com dados
-          </p>
-          <h2 className="mt-1 font-display text-2xl font-bold text-[var(--text-main)]">
+          <Eyebrow>Último mês com dados</Eyebrow>
+          <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-[var(--text-strong)]">
             {formatMonthYear(latestMonth.referenceMonth)}
           </h2>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-sm">
             <span>
-              <span className="font-semibold text-[var(--text-main)]">
+              <span className="numeric font-medium text-[var(--text-strong)]">
                 {formatInteger(latestMonth.donorCount)}
               </span>{" "}
               <span className="text-[var(--muted)]">doador(es)</span>
             </span>
             <span>
-              <span className="font-semibold text-[var(--text-main)]">
+              <span className="numeric font-medium text-[var(--text-strong)]">
                 {formatCurrency(latestMonth.totalAbatement)}
               </span>{" "}
               <span className="text-[var(--muted)]">abatidos</span>
             </span>
             {totalCount > 0 ? (
               <span>
-                <span className="font-semibold text-[var(--text-main)]">
+                <span className="numeric font-medium text-[var(--text-strong)]">
                   {percentageApplied}%
                 </span>{" "}
                 <span className="text-[var(--muted)]">marcados</span>
