@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { FOOTER_NAV_ITEMS, MAIN_NAV_ITEMS } from "./navigation";
+import { FOOTER_NAV_ITEMS, MAIN_NAV_ITEMS, WORKSPACE_NAV_ITEMS } from "./navigation";
 import { CloseIcon } from "../ui/icons";
 
-// The 4 most-used pages get dedicated tabs; everything else goes in "Mais"
-const PRIMARY = [
-  MAIN_NAV_ITEMS[0], // Dashboard
-  MAIN_NAV_ITEMS[2], // Doadores
-  MAIN_NAV_ITEMS[4], // Gestão Mensal
-  MAIN_NAV_ITEMS[6], // Anotações
-];
+// The 4 workspace pages (Dashboard/Gestão Mensal/Importações/Anotações) get
+// dedicated tabs — they're the daily-use pages; everything else goes in "Mais".
+const PRIMARY = WORKSPACE_NAV_ITEMS;
 const OVERFLOW = [
   ...MAIN_NAV_ITEMS.filter((item) => !PRIMARY.includes(item)),
   ...FOOTER_NAV_ITEMS,
