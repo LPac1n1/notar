@@ -10,8 +10,6 @@ export {
   cancelCreditImportPreview,
   processCreditImport,
   listCreditImports,
-  listCreditNotes,
-  countCreditNotes,
   loadCreditSituacaoBreakdown,
   deleteCreditImport,
   prepareReimportCreditPreview,

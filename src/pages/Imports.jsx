@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -43,7 +43,6 @@ import { formatInteger } from "../utils/format";
  */
 export default function Imports() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
@@ -149,38 +148,6 @@ export default function Imports() {
 
   const handleExportPairsCsv = () =>
     runExport("pairs", exportReconciliationPairsCsv, "Pareamentos exportados");
-
-  // Deep-link actions vindas do CommandPalette ou do Dashboard. O state
-  // é consumido uma única vez por mount — usa ref pra garantir que
-  // re-renders não disparem a ação duas vezes. Logo após consumir,
-  // substitui o histórico pra remover o state da URL.
-  const hasConsumedDeepLinkRef = useRef(false);
-  useEffect(() => {
-    if (hasConsumedDeepLinkRef.current) return;
-    const state = location.state ?? {};
-    let consumed = false;
-    if (state.openDonationUpload) {
-      donations.openUpload();
-      consumed = true;
-    }
-    if (state.openCreditUpload) {
-      credits.openUpload();
-      consumed = true;
-    }
-    if (state.exportDonorCsv) {
-      handleExportDonorCsv();
-      consumed = true;
-    }
-    if (state.rerunReconciliation) {
-      handleRerunReconciliation();
-      consumed = true;
-    }
-    if (consumed) {
-      hasConsumedDeepLinkRef.current = true;
-      navigate(location.pathname, { replace: true, state: null });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ─────────── Render ───────────
 
