@@ -153,9 +153,21 @@ export async function query(sql) {
 
 export async function execute(sql, { domains, flush = true, source } = {}) {
   const connection = await initDB();
-  await connection.query(sql);
+  const result = await connection.query(sql);
+  const rowsAffected = extractRowsAffected(result);
 
-  if (flush && transactionDepth === 0) {
+  // Mirrors `executePrepared`: skip the cache wipe and change event when we
+  // can positively confirm the statement touched zero rows. `execute()` used
+  // to always fall through here regardless of `rowsAffected`, which meant
+  // any write going through this (non-prepared) path never invalidated
+  // `queryCache` — callers could keep reading stale cached rows after a real
+  // mutation, until some unrelated `executePrepared` call happened to wipe
+  // the cache first.
+  if (rowsAffected !== 0) {
+    invalidateCache();
+  }
+
+  if (flush && transactionDepth === 0 && rowsAffected !== 0) {
     await flushAfterTransaction();
     notifyDatabaseChanged(source || domains ? { source, domains } : undefined);
   }
