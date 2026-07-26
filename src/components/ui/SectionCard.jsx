@@ -28,9 +28,9 @@ export default function SectionCard({
                 <Icon className="h-4 w-4" />
               </div>
             ) : null}
-            <h3 className="font-display text-xl font-bold text-[var(--text-main)]">
+            <h2 className="font-display text-xl font-bold text-[var(--text-main)]">
               {title}
-            </h3>
+            </h2>
             {collapsible ? (
               <svg
                 aria-hidden="true"

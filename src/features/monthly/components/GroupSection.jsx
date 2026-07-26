@@ -22,7 +22,7 @@ export default function GroupSection({
             </span>
           ) : null}
           <div>
-            <h4 className="font-semibold text-[var(--text-main)]">{title}</h4>
+            <h3 className="font-semibold text-[var(--text-main)]">{title}</h3>
             {description ? (
               <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
             ) : null}
