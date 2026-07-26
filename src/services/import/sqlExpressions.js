@@ -1,5 +1,7 @@
-import { escapeSqlString } from "../db";
+import { escapeSqlString, normalizeCpfSqlExpression } from "../db";
 import { INVALID_ORDER_STATUS_PATTERNS } from "../../utils/import";
+
+export { normalizeCpfSqlExpression };
 
 /**
  * Pure SQL expression helpers shared by the donations import pipeline
@@ -62,34 +64,6 @@ export function brOrUsDoubleSqlExpression(columnName) {
       ELSE try_cast(replace(${stripped}, '.', '') AS DOUBLE)
     END
   )`;
-}
-
-/**
- * SQL expression that yields a CPF cleaned of common punctuation (dots,
- * hyphens, slashes, spaces, commas). The composed `replace` chain mirrors
- * `normalizeCpf` in `utils/cpf.js` so the parser and the JS validator
- * agree on what "11-digit CPF" means.
- */
-export function normalizeCpfSqlExpression(expression) {
-  return `
-    replace(
-      replace(
-        replace(
-          replace(
-            replace(trim(coalesce(${expression}, '')), '.', ''),
-            '-',
-            ''
-          ),
-          '/',
-          ''
-        ),
-        ' ',
-        ''
-      ),
-      ',',
-      ''
-    )
-  `;
 }
 
 /**
