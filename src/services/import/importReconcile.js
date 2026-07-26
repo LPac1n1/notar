@@ -1,10 +1,9 @@
 import { nanoid } from "nanoid";
 import {
-  escapeSqlString,
-  execute,
+  executePrepared,
   normalizeCpf,
   notifyDatabaseChanged,
-  query,
+  queryPrepared,
   runInTransaction,
 } from "../db";
 
@@ -21,15 +20,18 @@ import {
  */
 
 export async function reconcileImport(importId, { emitChange = true } = {}) {
-  const importRows = await query(`
+  const importRows = await queryPrepared(
+    `
     SELECT
       id,
       strftime(reference_month, '%Y-%m-01') AS reference_month,
       value_per_note
     FROM imports
-    WHERE id = '${escapeSqlString(importId)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [importId],
+  );
 
   if (importRows.length === 0) {
     return;
@@ -39,14 +41,17 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
 
   await runInTransaction(
     async () => {
-      const existingSummaries = await query(`
+      const existingSummaries = await queryPrepared(
+        `
         SELECT
           donor_id,
           abatement_status,
           strftime(abatement_marked_at, '%Y-%m-%d %H:%M:%S') AS abatement_marked_at
         FROM monthly_donor_summary
-        WHERE import_id = '${escapeSqlString(importId)}'
-      `);
+        WHERE import_id = ?
+      `,
+        [importId],
+      );
 
       const summaryStatusByDonorId = new Map(
         existingSummaries.map((row) => [
@@ -58,7 +63,8 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
         ]),
       );
 
-      await execute(`
+      await executePrepared(
+        `
         UPDATE import_cpf_summary
         SET
           matched_source_id = (
@@ -82,15 +88,21 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
               AND donor_cpf_links.is_active = TRUE
           ),
           updated_at = CURRENT_TIMESTAMP
-        WHERE import_id = '${escapeSqlString(importId)}'
-      `);
+        WHERE import_id = ?
+      `,
+        [importId],
+      );
 
-      await execute(`
+      await executePrepared(
+        `
         DELETE FROM monthly_donor_summary
-        WHERE import_id = '${escapeSqlString(importId)}'
-      `);
+        WHERE import_id = ?
+      `,
+        [importId],
+      );
 
-      const matchedRows = await query(`
+      const matchedRows = await queryPrepared(
+        `
         SELECT
           import_cpf_summary.import_id,
           strftime(import_cpf_summary.reference_month, '%Y-%m-01') AS reference_month,
@@ -105,7 +117,7 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
           ON donor_cpf_links.id = import_cpf_summary.matched_source_id
         INNER JOIN donors
           ON donors.id = donor_cpf_links.donor_id
-        WHERE import_cpf_summary.import_id = '${escapeSqlString(importId)}'
+        WHERE import_cpf_summary.import_id = ?
           AND donors.is_active = TRUE
           AND donor_cpf_links.is_active = TRUE
         GROUP BY
@@ -115,7 +127,9 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
           donors.cpf,
           donors.name,
           donors.demand
-      `);
+      `,
+        [importId],
+      );
 
       if (matchedRows.length > 0) {
         // Bulk insert in chunks to avoid running 1k+ statements one-by-one
@@ -123,7 +137,8 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
         // each SQL string under a comfortable limit even for the largest
         // historical imports we have observed.
         const BULK_INSERT_CHUNK_SIZE = 200;
-        const buildValuesClause = (row) => {
+        const ROW_PLACEHOLDER = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+        const buildRowValues = (row) => {
           const notesCount = Number(row.notes_count ?? 0);
           const invalidNotesCount = Number(row.invalid_notes_count ?? 0);
           const valuePerNote = importValuePerNote;
@@ -132,22 +147,21 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
           const abatementStatus = existingSummary?.abatementStatus ?? "pending";
           const abatementMarkedAt = existingSummary?.abatementMarkedAt ?? "";
 
-          return `(
-            '${escapeSqlString(nanoid())}',
-            '${escapeSqlString(row.import_id)}',
-            '${escapeSqlString(row.donor_id)}',
-            '${escapeSqlString(row.reference_month)}',
-            '${escapeSqlString(row.donor_cpf)}',
-            '${escapeSqlString(row.donor_name)}',
-            '${escapeSqlString(row.demand ?? "")}',
-            ${notesCount},
-            ${invalidNotesCount},
-            ${valuePerNote},
-            ${abatementAmount},
-            '${escapeSqlString(abatementStatus)}',
-            ${abatementMarkedAt ? `'${escapeSqlString(abatementMarkedAt)}'` : "NULL"},
-            CURRENT_TIMESTAMP
-          )`;
+          return [
+            nanoid(),
+            row.import_id,
+            row.donor_id,
+            row.reference_month,
+            row.donor_cpf,
+            row.donor_name,
+            row.demand ?? "",
+            notesCount,
+            invalidNotesCount,
+            valuePerNote,
+            abatementAmount,
+            abatementStatus,
+            abatementMarkedAt || null,
+          ];
         };
 
         for (
@@ -159,9 +173,11 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
             chunkStart,
             chunkStart + BULK_INSERT_CHUNK_SIZE,
           );
-          const valuesSql = chunk.map(buildValuesClause).join(",\n");
+          const valuesSql = chunk.map(() => ROW_PLACEHOLDER).join(",\n");
+          const params = chunk.flatMap(buildRowValues);
 
-          await execute(`
+          await executePrepared(
+            `
             INSERT INTO monthly_donor_summary (
               id,
               import_id,
@@ -179,37 +195,42 @@ export async function reconcileImport(importId, { emitChange = true } = {}) {
               updated_at
             )
             VALUES ${valuesSql}
-          `);
+          `,
+            params,
+          );
         }
       }
 
-      await execute(`
+      await executePrepared(
+        `
         UPDATE imports
         SET
           matched_rows = coalesce((
             SELECT sum(notes_count)
             FROM import_cpf_summary
-            WHERE import_id = '${escapeSqlString(importId)}'
+            WHERE import_id = ?
               AND is_registered_donor = TRUE
           ), 0),
           matched_donors = coalesce((
             SELECT count(DISTINCT matched_donor_id)
             FROM import_cpf_summary
-            WHERE import_id = '${escapeSqlString(importId)}'
+            WHERE import_id = ?
               AND is_registered_donor = TRUE
               AND matched_donor_id IS NOT NULL
           ), 0),
           status = 'processed',
           updated_at = CURRENT_TIMESTAMP
-        WHERE id = '${escapeSqlString(importId)}'
-      `);
+        WHERE id = ?
+      `,
+        [importId, importId, importId],
+      );
     },
     { emitChange, changeSource: "reconcile-import" },
   );
 }
 
 export async function reconcileAllImports({ emitChange = true } = {}) {
-  const imports = await query(`
+  const imports = await queryPrepared(`
     SELECT id
     FROM imports
     ORDER BY reference_month ASC, imported_at ASC
@@ -237,15 +258,16 @@ export async function reconcileImportsForCpfs(cpfs = []) {
     return;
   }
 
-  const cpfList = normalizedCpfs
-    .map((cpf) => `'${escapeSqlString(cpf)}'`)
-    .join(", ");
-  const imports = await query(`
+  const cpfPlaceholders = normalizedCpfs.map(() => "?").join(", ");
+  const imports = await queryPrepared(
+    `
     SELECT DISTINCT import_id AS id
     FROM import_cpf_summary
-    WHERE cpf IN (${cpfList})
+    WHERE cpf IN (${cpfPlaceholders})
     ORDER BY import_id ASC
-  `);
+  `,
+    normalizedCpfs,
+  );
 
   for (const importRow of imports) {
     await reconcileImport(importRow.id, { emitChange: false });

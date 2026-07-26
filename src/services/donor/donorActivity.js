@@ -1,8 +1,7 @@
 import { nanoid } from "nanoid";
 import {
-  escapeSqlString,
-  execute,
-  query,
+  executePrepared,
+  queryPrepared,
   runInTransaction,
 } from "../db";
 import { createActionHistoryEntry } from "../actionHistoryService";
@@ -34,29 +33,35 @@ function formatMonthLabel(monthIso) {
 }
 
 async function getDonorActivityContext(donorId) {
-  const donorRows = await query(`
+  const donorRows = await queryPrepared(
+    `
     SELECT
       id,
       name,
       is_active,
       strftime(donation_start_date, '%Y-%m-01') AS donation_start_date
     FROM donors
-    WHERE id = '${escapeSqlString(donorId)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [donorId],
+  );
 
   if (donorRows.length === 0) {
     throw new Error("Doador não encontrado.");
   }
 
-  const activityRows = await query(`
+  const activityRows = await queryPrepared(
+    `
     SELECT
       event_type,
       strftime(reference_month, '%Y-%m-01') AS reference_month
     FROM donor_activity_history
-    WHERE donor_id = '${escapeSqlString(donorId)}'
+    WHERE donor_id = ?
     ORDER BY reference_month DESC, created_at DESC
-  `);
+  `,
+    [donorId],
+  );
 
   return {
     donor: donorRows[0],
@@ -93,22 +98,22 @@ export async function deactivateDonor(donorId, referenceMonth) {
   }
 
   await runInTransaction(async () => {
-    await execute(`
+    await executePrepared(
+      `
       UPDATE donors
       SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(donorId)}'
-    `);
+      WHERE id = ?
+    `,
+      [donorId],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       INSERT INTO donor_activity_history (id, donor_id, event_type, reference_month, created_at)
-      VALUES (
-        '${escapeSqlString(nanoid())}',
-        '${escapeSqlString(donorId)}',
-        'deactivated',
-        '${escapeSqlString(normalizedMonth)}',
-        CURRENT_TIMESTAMP
-      )
-    `);
+      VALUES (?, ?, 'deactivated', ?, CURRENT_TIMESTAMP)
+    `,
+      [nanoid(), donorId, normalizedMonth],
+    );
   });
 
   await createActionHistoryEntry({
@@ -149,22 +154,22 @@ export async function reactivateDonor(donorId, referenceMonth) {
   }
 
   await runInTransaction(async () => {
-    await execute(`
+    await executePrepared(
+      `
       UPDATE donors
       SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(donorId)}'
-    `);
+      WHERE id = ?
+    `,
+      [donorId],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       INSERT INTO donor_activity_history (id, donor_id, event_type, reference_month, created_at)
-      VALUES (
-        '${escapeSqlString(nanoid())}',
-        '${escapeSqlString(donorId)}',
-        'activated',
-        '${escapeSqlString(normalizedMonth)}',
-        CURRENT_TIMESTAMP
-      )
-    `);
+      VALUES (?, ?, 'activated', ?, CURRENT_TIMESTAMP)
+    `,
+      [nanoid(), donorId, normalizedMonth],
+    );
   });
 
   await createActionHistoryEntry({

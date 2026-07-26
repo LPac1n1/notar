@@ -1,8 +1,7 @@
 import {
-  escapeSqlString,
-  execute,
+  executePrepared,
   normalizeCpf,
-  query,
+  queryPrepared,
   runInTransaction,
 } from "../db";
 import { createActionHistoryEntry } from "../actionHistoryService";
@@ -94,7 +93,8 @@ export async function createDonor({
   const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
 
   await runInTransaction(async () => {
-    await execute(`
+    await executePrepared(
+      `
       INSERT INTO donors (
         id,
         person_id,
@@ -108,22 +108,23 @@ export async function createDonor({
         is_active,
         updated_at
       )
-      VALUES (
-        '${escapeSqlString(id)}',
-        '${escapeSqlString(person.id)}',
-        '${escapeSqlString(person.name)}',
-        '${escapeSqlString(person.cpfValue)}',
-        '${escapeSqlString(resolvedDemand)}',
-        '${escapeSqlString(normalizedDonorType)}',
-        ${normalizedDonorType === "auxiliary" && holderContext?.holderDonorId ? `'${escapeSqlString(holderContext.holderDonorId)}'` : "NULL"},
-        ${normalizedDonorType === "auxiliary" && holderContext ? `'${escapeSqlString(holderContext.id)}'` : "NULL"},
-        ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
-        TRUE,
-        CURRENT_TIMESTAMP
-      )
-    `);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP)
+    `,
+      [
+        id,
+        person.id,
+        person.name,
+        person.cpfValue,
+        resolvedDemand,
+        normalizedDonorType,
+        normalizedDonorType === "auxiliary" ? holderContext?.holderDonorId || null : null,
+        normalizedDonorType === "auxiliary" ? holderContext?.id || null : null,
+        normalizedStartDate || null,
+      ],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       INSERT INTO donor_cpf_links (
         id,
         donor_id,
@@ -134,17 +135,16 @@ export async function createDonor({
         is_active,
         updated_at
       )
-      VALUES (
-        '${escapeSqlString(`${id}-titular`)}',
-        '${escapeSqlString(id)}',
-        '${escapeSqlString(person.name)}',
-        '${escapeSqlString(person.cpfValue)}',
-        ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
-        'holder',
-        TRUE,
-        CURRENT_TIMESTAMP
-      )
-    `);
+      VALUES (?, ?, ?, ?, ?, 'holder', TRUE, CURRENT_TIMESTAMP)
+    `,
+      [
+        `${id}-titular`,
+        id,
+        person.name,
+        person.cpfValue,
+        normalizedStartDate || null,
+      ],
+    );
   });
 
   await syncAuxiliaryHolderDonorIds([person.id]);
@@ -179,7 +179,8 @@ export async function updateDonor({
     throw new Error("O identificador do doador é obrigatório.");
   }
 
-  const donorRows = await query(`
+  const donorRows = await queryPrepared(
+    `
     SELECT
       id,
       person_id,
@@ -187,9 +188,11 @@ export async function updateDonor({
       donor_type,
       holder_person_id
     FROM donors
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (donorRows.length === 0) {
     throw new Error("Doador não encontrado.");
@@ -249,13 +252,16 @@ export async function updateDonor({
   const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
 
   if (normalizedStartDate) {
-    const conflictingActivityRows = await query(`
+    const conflictingActivityRows = await queryPrepared(
+      `
       SELECT strftime(reference_month, '%Y-%m-01') AS reference_month
       FROM donor_activity_history
-      WHERE donor_id = '${escapeSqlString(id)}'
+      WHERE donor_id = ?
       ORDER BY reference_month ASC
       LIMIT 1
-    `);
+    `,
+      [id],
+    );
     const earliestEventMonth = conflictingActivityRows[0]?.reference_month ?? "";
 
     if (earliestEventMonth && earliestEventMonth < normalizedStartDate) {
@@ -267,36 +273,55 @@ export async function updateDonor({
   }
 
   await runInTransaction(async () => {
-    await execute(`
+    await executePrepared(
+      `
       UPDATE people
       SET
-        name = '${escapeSqlString(normalizedName)}',
-        cpf = '${escapeSqlString(normalizedCpf)}',
+        name = ?,
+        cpf = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(currentPerson.id)}'
-    `);
+      WHERE id = ?
+    `,
+      [normalizedName, normalizedCpf, currentPerson.id],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       UPDATE donors
       SET
-        name = '${escapeSqlString(normalizedName)}',
-        cpf = '${escapeSqlString(normalizedCpf)}',
-        demand = '${escapeSqlString(resolvedDemand)}',
-        donor_type = '${escapeSqlString(normalizedDonorType)}',
-        holder_donor_id = ${normalizedDonorType === "auxiliary" && holderContext?.holderDonorId ? `'${escapeSqlString(holderContext.holderDonorId)}'` : "NULL"},
-        holder_person_id = ${normalizedDonorType === "auxiliary" && holderContext ? `'${escapeSqlString(holderContext.id)}'` : "NULL"},
-        donation_start_date = ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
+        name = ?,
+        cpf = ?,
+        demand = ?,
+        donor_type = ?,
+        holder_donor_id = ?,
+        holder_person_id = ?,
+        donation_start_date = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(id)}'
-    `);
+      WHERE id = ?
+    `,
+      [
+        normalizedName,
+        normalizedCpf,
+        resolvedDemand,
+        normalizedDonorType,
+        normalizedDonorType === "auxiliary" ? holderContext?.holderDonorId || null : null,
+        normalizedDonorType === "auxiliary" ? holderContext?.id || null : null,
+        normalizedStartDate || null,
+        id,
+      ],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM donor_cpf_links
-      WHERE donor_id = '${escapeSqlString(id)}'
+      WHERE donor_id = ?
         AND link_type = 'holder'
-    `);
+    `,
+      [id],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       INSERT INTO donor_cpf_links (
         id,
         donor_id,
@@ -307,17 +332,16 @@ export async function updateDonor({
         is_active,
         updated_at
       )
-      VALUES (
-        '${escapeSqlString(`${id}-titular`)}',
-        '${escapeSqlString(id)}',
-        '${escapeSqlString(normalizedName)}',
-        '${escapeSqlString(normalizedCpf)}',
-        ${normalizedStartDate ? `'${escapeSqlString(normalizedStartDate)}'` : "NULL"},
-        'holder',
-        TRUE,
-        CURRENT_TIMESTAMP
-      )
-    `);
+      VALUES (?, ?, ?, ?, ?, 'holder', TRUE, CURRENT_TIMESTAMP)
+    `,
+      [
+        `${id}-titular`,
+        id,
+        normalizedName,
+        normalizedCpf,
+        normalizedStartDate || null,
+      ],
+    );
   });
 
   await syncAuxiliaryHolderDonorIds([currentPerson.id]);
@@ -340,7 +364,8 @@ export async function updateDonor({
 }
 
 export async function deleteDonor(id) {
-  const donorRows = await query(`
+  const donorRows = await queryPrepared(
+    `
     SELECT
       id,
       person_id,
@@ -355,9 +380,11 @@ export async function deleteDonor(id) {
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM donors
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (donorRows.length === 0) {
     return;
@@ -365,7 +392,8 @@ export async function deleteDonor(id) {
 
   const donor = donorRows[0];
   const personRows = donor.person_id
-    ? await query(`
+    ? await queryPrepared(
+        `
       SELECT
         id,
         name,
@@ -374,11 +402,14 @@ export async function deleteDonor(id) {
         CAST(created_at AS VARCHAR) AS created_at,
         CAST(updated_at AS VARCHAR) AS updated_at
       FROM people
-      WHERE id = '${escapeSqlString(donor.person_id)}'
+      WHERE id = ?
       LIMIT 1
-    `)
+    `,
+        [donor.person_id],
+      )
     : [];
-  const cpfRows = await query(`
+  const cpfRows = await queryPrepared(
+    `
     SELECT
       id,
       donor_id,
@@ -390,8 +421,10 @@ export async function deleteDonor(id) {
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM donor_cpf_links
-    WHERE donor_id = '${escapeSqlString(id)}'
-  `);
+    WHERE donor_id = ?
+  `,
+    [id],
+  );
   let trashItemId = "";
 
   await runInTransaction(async () => {
@@ -406,47 +439,65 @@ export async function deleteDonor(id) {
       },
     });
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM monthly_donor_summary
-      WHERE donor_id = '${escapeSqlString(id)}'
-    `);
+      WHERE donor_id = ?
+    `,
+      [id],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM donor_cpf_links
-      WHERE donor_id = '${escapeSqlString(id)}'
-    `);
+      WHERE donor_id = ?
+    `,
+      [id],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM donors
-      WHERE id = '${escapeSqlString(id)}'
-    `);
+      WHERE id = ?
+    `,
+      [id],
+    );
 
     if (donor.person_id) {
-      await execute(`
+      await executePrepared(
+        `
         UPDATE donors
         SET
           holder_donor_id = NULL,
           updated_at = CURRENT_TIMESTAMP
-        WHERE holder_person_id = '${escapeSqlString(donor.person_id)}'
+        WHERE holder_person_id = ?
           AND donor_type = 'auxiliary'
-          AND holder_donor_id = '${escapeSqlString(id)}'
-      `);
+          AND holder_donor_id = ?
+      `,
+        [donor.person_id, id],
+      );
 
-      const stillReferencedRows = await query(`
+      const stillReferencedRows = await queryPrepared(
+        `
         SELECT count(*) AS cnt
         FROM donors
-        WHERE holder_person_id = '${escapeSqlString(donor.person_id)}'
+        WHERE holder_person_id = ?
           AND donor_type = 'auxiliary'
           AND is_active = TRUE
-      `);
+      `,
+        [donor.person_id],
+      );
 
       const isStillReferenced = Number(stillReferencedRows[0]?.cnt ?? 0) > 0;
 
       if (!isStillReferenced) {
-        await execute(`
+        await executePrepared(
+          `
           DELETE FROM people
-          WHERE id = '${escapeSqlString(donor.person_id)}'
-        `);
+          WHERE id = ?
+        `,
+          [donor.person_id],
+        );
       }
     }
   });
@@ -477,12 +528,15 @@ export async function createAuxiliaryDonor({
   cpf,
   donationStartDate = "",
 }) {
-  const donorRows = await query(`
+  const donorRows = await queryPrepared(
+    `
     SELECT person_id
     FROM donors
-    WHERE id = '${escapeSqlString(donorId)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [donorId],
+  );
 
   if (donorRows.length === 0) {
     throw new Error("O titular selecionado não existe mais.");
@@ -505,23 +559,29 @@ export async function updateAuxiliaryDonor({
   cpf,
   donationStartDate = "",
 }) {
-  const sourceRows = await query(`
+  const sourceRows = await queryPrepared(
+    `
     SELECT donor_id
     FROM donor_cpf_links
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (sourceRows.length === 0) {
     throw new Error("O auxiliar selecionado não existe mais.");
   }
 
-  const donorRows = await query(`
+  const donorRows = await queryPrepared(
+    `
     SELECT person_id
     FROM donors
-    WHERE id = '${escapeSqlString(donorId)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [donorId],
+  );
 
   if (donorRows.length === 0) {
     throw new Error("O titular selecionado não existe mais.");
@@ -538,12 +598,15 @@ export async function updateAuxiliaryDonor({
 }
 
 export async function deleteAuxiliaryDonor(sourceId) {
-  const sourceRows = await query(`
+  const sourceRows = await queryPrepared(
+    `
     SELECT donor_id
     FROM donor_cpf_links
-    WHERE id = '${escapeSqlString(sourceId)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [sourceId],
+  );
 
   if (sourceRows.length === 0) {
     return;
