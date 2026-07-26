@@ -42,7 +42,6 @@ import { usePaginatedResource } from "../hooks/usePaginatedResource";
 import { logError } from "../services/logger";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { formatCpf } from "../utils/cpf";
-import { getErrorMessage, isUserFacingError } from "../utils/error";
 import { formatInteger } from "../utils/format";
 import {
   getFirstValidationError,
@@ -52,6 +51,7 @@ import {
 import { buildSelectOptions } from "../utils/select";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
+import { useMutationAction } from "../hooks/useMutationAction";
 
 const EMPTY_DONOR_FORM = {
   name: "",
@@ -247,21 +247,50 @@ export default function Donors() {
     domains: ["demands", "donors", "imports", "monthly", "people"],
   });
 
+  // Four runners share the boilerplate: form mutations (create/update) route
+  // errors to the modal-scoped `formError`, page-level deletes and
+  // activation toggles route to the page-level `error`. Deactivate/reactivate
+  // reload only the donor list (`reloadDonors`) — unlike create/update/delete
+  // they can't affect the "linkable people" list, so there's no need to also
+  // reload people/demands via `refreshDonors`.
+  const runFormMutation = useMutationAction({
+    setError: setFormError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsSubmitting,
+    reload: refreshDonors,
+  });
+  const runDeleteMutation = useMutationAction({
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsDeleting,
+    reload: refreshDonors,
+  });
+  const runDeactivateMutation = useMutationAction({
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsDeactivating,
+    reload: reloadDonors,
+  });
+  const runReactivateMutation = useMutationAction({
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+    setBusy: setIsReactivating,
+    reload: reloadDonors,
+  });
+
   const handleRestoreDeletedDonor = useCallback(
-    async (trashItemId) => {
-      try {
-        setError("");
-        setSuccessMessage("");
-        setSuccessAction(null);
-        await restoreTrashItem(trashItemId);
-        await refreshDonors();
-        setSuccessMessage("Doador restaurado com sucesso.");
-      } catch (err) {
-        logError("DonorsPage.restore", err);
-        setError(getErrorMessage(err, "Não foi possível restaurar o doador."));
-      }
-    },
-    [refreshDonors, setError],
+    (trashItemId) =>
+      runDeleteMutation({
+        scope: "DonorsPage.restore",
+        run: () => restoreTrashItem(trashItemId),
+        successMessage: "Doador restaurado com sucesso.",
+        errorMessage: "Não foi possível restaurar o doador.",
+      }),
+    [runDeleteMutation],
   );
 
   useEffect(() => {
@@ -339,34 +368,23 @@ export default function Donors() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsSubmitting(true);
-      await createDonor({
-        id: nanoid(),
-        name: createForm.name,
-        cpf: createForm.cpf,
-        demand: createForm.demand,
-        donationStartDate: createForm.donationStartDate,
-        donorType: createForm.donorType,
-        holderPersonId: createForm.holderPersonId,
-      });
-      handleCloseCreateModal();
-      setSuccessMessage(
+    await runFormMutation({
+      scope: "DonorsPage.create",
+      run: () =>
+        createDonor({
+          id: nanoid(),
+          name: createForm.name,
+          cpf: createForm.cpf,
+          demand: createForm.demand,
+          donationStartDate: createForm.donationStartDate,
+          donorType: createForm.donorType,
+          holderPersonId: createForm.holderPersonId,
+        }),
+      successMessage:
         "Doador cadastrado e reconciliado com as importações existentes.",
-      );
-      await refreshDonors();
-    } catch (err) {
-      if (!isUserFacingError(err)) {
-        logError("DonorsPage.create", err);
-      }
-      setFormError(getErrorMessage(err, "Não foi possível adicionar o doador."));
-    } finally {
-      setIsSubmitting(false);
-    }
+      errorMessage: "Não foi possível adicionar o doador.",
+      onSuccess: handleCloseCreateModal,
+    });
   };
 
   const handleOpenEditModal = (donor) => {
@@ -406,34 +424,23 @@ export default function Donors() {
       return;
     }
 
-    try {
-      setError("");
-      setFormError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsSubmitting(true);
-      await updateDonor({
-        id: editingDonor.id,
-        name: editForm.name,
-        cpf: editForm.cpf,
-        demand: editForm.demand,
-        donationStartDate: editForm.donationStartDate,
-        donorType: editForm.donorType,
-        holderPersonId: editForm.holderPersonId,
-      });
-      handleCloseEditModal();
-      setSuccessMessage(
+    await runFormMutation({
+      scope: "DonorsPage.update",
+      run: () =>
+        updateDonor({
+          id: editingDonor.id,
+          name: editForm.name,
+          cpf: editForm.cpf,
+          demand: editForm.demand,
+          donationStartDate: editForm.donationStartDate,
+          donorType: editForm.donorType,
+          holderPersonId: editForm.holderPersonId,
+        }),
+      successMessage:
         "Doador atualizado e reconciliado com as importações existentes.",
-      );
-      await refreshDonors();
-    } catch (err) {
-      if (!isUserFacingError(err)) {
-        logError("DonorsPage.update", err);
-      }
-      setFormError(getErrorMessage(err, "Não foi possível atualizar o doador."));
-    } finally {
-      setIsSubmitting(false);
-    }
+      errorMessage: "Não foi possível atualizar o doador.",
+      onSuccess: handleCloseEditModal,
+    });
   };
 
   const handleConfirmRemove = async () => {
@@ -441,27 +448,15 @@ export default function Donors() {
       return;
     }
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsDeleting(true);
-      const trashItemId = await deleteDonor(donorPendingRemoval.id);
-      await refreshDonors();
-      setDonorPendingRemoval(null);
-      setSuccessMessage("Doador enviado para a lixeira com sucesso.");
-      if (trashItemId) {
-        setSuccessAction({
-          label: "Desfazer",
-          onAction: () => handleRestoreDeletedDonor(trashItemId),
-        });
-      }
-    } catch (err) {
-      logError("DonorsPage.delete", err);
-      setError("Não foi possível remover o doador.");
-    } finally {
-      setIsDeleting(false);
-    }
+    await runDeleteMutation({
+      scope: "DonorsPage.delete",
+      run: () => deleteDonor(donorPendingRemoval.id),
+      successMessage: "Doador enviado para a lixeira com sucesso.",
+      errorMessage: "Não foi possível remover o doador.",
+      onSuccess: () => setDonorPendingRemoval(null),
+      buildUndo: (trashItemId) =>
+        trashItemId ? () => handleRestoreDeletedDonor(trashItemId) : null,
+    });
   };
 
   const handleExport = async () => {
@@ -494,41 +489,25 @@ export default function Donors() {
   const handleConfirmDeactivate = async (referenceMonth) => {
     if (!donorPendingDeactivation) return;
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsDeactivating(true);
-      await deactivateDonor(donorPendingDeactivation.id, referenceMonth);
-      setDonorPendingDeactivation(null);
-      setSuccessMessage(`${donorPendingDeactivation.name} foi desativado com sucesso.`);
-      await reloadDonors();
-    } catch (err) {
-      logError("DonorsPage.deactivate", err);
-      setError(getErrorMessage(err, "Não foi possível desativar o doador."));
-    } finally {
-      setIsDeactivating(false);
-    }
+    await runDeactivateMutation({
+      scope: "DonorsPage.deactivate",
+      run: () => deactivateDonor(donorPendingDeactivation.id, referenceMonth),
+      successMessage: `${donorPendingDeactivation.name} foi desativado com sucesso.`,
+      errorMessage: "Não foi possível desativar o doador.",
+      onSuccess: () => setDonorPendingDeactivation(null),
+    });
   };
 
   const handleConfirmReactivate = async (referenceMonth) => {
     if (!donorPendingReactivation) return;
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsReactivating(true);
-      await reactivateDonor(donorPendingReactivation.id, referenceMonth);
-      setDonorPendingReactivation(null);
-      setSuccessMessage(`${donorPendingReactivation.name} foi reativado com sucesso.`);
-      await reloadDonors();
-    } catch (err) {
-      logError("DonorsPage.reactivate", err);
-      setError(getErrorMessage(err, "Não foi possível reativar o doador."));
-    } finally {
-      setIsReactivating(false);
-    }
+    await runReactivateMutation({
+      scope: "DonorsPage.reactivate",
+      run: () => reactivateDonor(donorPendingReactivation.id, referenceMonth),
+      successMessage: `${donorPendingReactivation.name} foi reativado com sucesso.`,
+      errorMessage: "Não foi possível reativar o doador.",
+      onSuccess: () => setDonorPendingReactivation(null),
+    });
   };
 
   const handleClearFilters = () => {
