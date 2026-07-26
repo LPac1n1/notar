@@ -25,7 +25,7 @@ export default function DashboardReviewSection({
           Nenhum ponto importante de revisão foi encontrado com os dados atuais.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <MetricCard
             label="Antes do início"
             value={formatInteger(inconsistencies.donationStartConflictCount)}
@@ -49,6 +49,18 @@ export default function DashboardReviewSection({
             value={formatInteger(inconsistencies.emptyImportCount)}
             helper="Planilhas processadas sem linhas válidas consolidadas."
             onClick={() => onOpenModal("inconsistency-empty-imports")}
+          />
+          <MetricCard
+            label="Importações com erro"
+            value={formatInteger(inconsistencies.importErrorCount)}
+            helper="Planilhas que falharam ao processar e continuam sem dados."
+            onClick={() => onOpenModal("inconsistency-import-errors")}
+          />
+          <MetricCard
+            label="Abatimento acima do crédito"
+            value={formatInteger(inconsistencies.exceededAbatementCount)}
+            helper="Doadores com mais abatido do que o crédito real recebido até agora."
+            onClick={() => onOpenModal("inconsistency-exceeded-abatement")}
           />
         </div>
       )}

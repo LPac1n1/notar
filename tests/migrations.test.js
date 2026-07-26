@@ -1757,3 +1757,63 @@ test("matched requires exact valor_cents — strict equality", async () => {
     conn.close();
   }
 });
+
+test("dashboard exceeded-abatement query flags donors abated past their matched credit", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedReconciliationFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    // Mirror of the exceeded-abatement query in
+    // src/services/dashboardService.js — keep in sync if that query changes.
+    const rows = (
+      await conn.query(`
+        WITH donor_applied AS (
+          SELECT donor_id, sum(abatement_amount) AS total_applied
+          FROM monthly_donor_summary
+          WHERE abatement_status = 'applied'
+          GROUP BY donor_id
+        ),
+        donor_credit AS (
+          SELECT
+            donor_cpf_links.donor_id,
+            sum(credit_notes.credito) AS total_credit
+          FROM credit_reconciliation
+          INNER JOIN donation_notes
+            ON donation_notes.id = credit_reconciliation.donation_note_id
+          INNER JOIN credit_notes
+            ON credit_notes.id = credit_reconciliation.credit_note_id
+          INNER JOIN donor_cpf_links
+            ON donor_cpf_links.cpf = donation_notes.cpf
+            AND donor_cpf_links.is_active = TRUE
+          WHERE credit_reconciliation.match_status IN ('matched', 'divergent')
+          GROUP BY donor_cpf_links.donor_id
+        )
+        SELECT
+          donor_applied.donor_id,
+          donors.name AS donor_name,
+          donor_applied.total_applied,
+          coalesce(donor_credit.total_credit, 0) AS total_credit
+        FROM donor_applied
+        INNER JOIN donors
+          ON donors.id = donor_applied.donor_id
+        LEFT JOIN donor_credit
+          ON donor_credit.donor_id = donor_applied.donor_id
+        WHERE donor_applied.total_applied > coalesce(donor_credit.total_credit, 0)
+        ORDER BY (donor_applied.total_applied - coalesce(donor_credit.total_credit, 0)) DESC
+      `)
+    ).toArray();
+
+    // Alice: R$1.00 applied vs R$0.20 matched credit → exceeded. Bruno has
+    // no monthly_donor_summary row at all (nothing applied), so he must not
+    // appear even though he has a divergent credit note.
+    assert.equal(rows.length, 1);
+    assert.equal(String(rows[0].donor_id), "donor-1");
+    assert.equal(String(rows[0].donor_name), "Alice Doadora");
+    assert.equal(Number(rows[0].total_applied), 1);
+    assert.equal(Number(rows[0].total_credit), 0.2);
+  } finally {
+    conn.close();
+  }
+});

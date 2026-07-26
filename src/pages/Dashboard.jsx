@@ -108,16 +108,22 @@ export default function Dashboard() {
     donorWithoutDemandCount: 0,
     donorWithoutStartDateCount: 0,
     emptyImportCount: 0,
+    importErrorCount: 0,
+    exceededAbatementCount: 0,
     donationStartConflictSamples: [],
     donorWithoutDemandSamples: [],
     donorWithoutStartDateSamples: [],
     emptyImportSamples: [],
+    importErrorSamples: [],
+    exceededAbatementSamples: [],
   };
   const totalInconsistencyCount =
     inconsistencies.donationStartConflictCount +
     inconsistencies.donorWithoutDemandCount +
     inconsistencies.donorWithoutStartDateCount +
-    inconsistencies.emptyImportCount;
+    inconsistencies.emptyImportCount +
+    inconsistencies.importErrorCount +
+    inconsistencies.exceededAbatementCount;
   const hasAnyData =
     totals.donorCount > 0 ||
     totals.demandCount > 0 ||

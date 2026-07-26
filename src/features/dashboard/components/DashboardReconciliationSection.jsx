@@ -80,7 +80,7 @@ export default function DashboardReconciliationSection({
   return (
     <SectionCard
       title="Conciliação de créditos"
-      description="Cruzamento entre planilhas de doações e créditos da NFP por (CNPJ, número da nota, data de emissão)."
+      description="Cruzamento entre planilhas de doações e créditos da NFP por (CNPJ, número da nota, valor)."
     >
       {!hasAnyData ? (
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">

@@ -46,6 +46,8 @@ async function _fetchDashboardOverview() {
     donorWithoutDemandRows,
     donorWithoutStartDateRows,
     emptyImportRows,
+    importErrorRows,
+    exceededAbatementRows,
     reconciliationStats,
   ] = await Promise.all([
     query(`
@@ -130,7 +132,10 @@ async function _fetchDashboardOverview() {
         (SELECT count(*)
          FROM imports
          WHERE status = 'processed'
-           AND coalesce(total_rows, 0) = 0) AS empty_import_count
+           AND coalesce(total_rows, 0) = 0) AS empty_import_count,
+        (SELECT count(*)
+         FROM imports
+         WHERE status = 'error') AS import_error_count
     `),
     query(`
       SELECT
@@ -191,6 +196,58 @@ async function _fetchDashboardOverview() {
         AND coalesce(total_rows, 0) = 0
       ORDER BY reference_month DESC, imported_at DESC
       LIMIT 5
+    `),
+    query(`
+      SELECT
+        id,
+        strftime(reference_month, '%Y-%m-01') AS reference_month,
+        file_name,
+        notes
+      FROM imports
+      WHERE status = 'error'
+      ORDER BY updated_at DESC
+      LIMIT 5
+    `),
+    // Donors whose cumulative applied abatement exceeds the credit NFP has
+    // actually released for them so far. `donor_credit` mirrors the same
+    // (donor × matched/divergent credit) join `getDonor6MonthHistory` uses
+    // per-month, just rolled up across all time instead of one donor's
+    // trailing window. Returns every offending donor (not just a sample)
+    // so the count and the top-5 detail list come from a single query.
+    query(`
+      WITH donor_applied AS (
+        SELECT donor_id, sum(abatement_amount) AS total_applied
+        FROM monthly_donor_summary
+        WHERE abatement_status = 'applied'
+        GROUP BY donor_id
+      ),
+      donor_credit AS (
+        SELECT
+          donor_cpf_links.donor_id,
+          sum(credit_notes.credito) AS total_credit
+        FROM credit_reconciliation
+        INNER JOIN donation_notes
+          ON donation_notes.id = credit_reconciliation.donation_note_id
+        INNER JOIN credit_notes
+          ON credit_notes.id = credit_reconciliation.credit_note_id
+        INNER JOIN donor_cpf_links
+          ON donor_cpf_links.cpf = donation_notes.cpf
+          AND donor_cpf_links.is_active = TRUE
+        WHERE credit_reconciliation.match_status IN ('matched', 'divergent')
+        GROUP BY donor_cpf_links.donor_id
+      )
+      SELECT
+        donor_applied.donor_id,
+        donors.name AS donor_name,
+        donor_applied.total_applied,
+        coalesce(donor_credit.total_credit, 0) AS total_credit
+      FROM donor_applied
+      INNER JOIN donors
+        ON donors.id = donor_applied.donor_id
+      LEFT JOIN donor_credit
+        ON donor_credit.donor_id = donor_applied.donor_id
+      WHERE donor_applied.total_applied > coalesce(donor_credit.total_credit, 0)
+      ORDER BY (donor_applied.total_applied - coalesce(donor_credit.total_credit, 0)) DESC
     `),
     getReconciliationStats(),
   ]);
@@ -413,6 +470,10 @@ async function _fetchDashboardOverview() {
       emptyImportCount: toNumber(
         inconsistencyCounts.empty_import_count,
       ),
+      importErrorCount: toNumber(
+        inconsistencyCounts.import_error_count,
+      ),
+      exceededAbatementCount: exceededAbatementRows.length,
       donationStartConflictSamples: donationStartConflictRows.map((row) => ({
         sourceName: row.source_name,
         donorId: row.donor_id,
@@ -441,6 +502,18 @@ async function _fetchDashboardOverview() {
         referenceMonth: row.reference_month,
         fileName: row.file_name,
         totalRows: toNumber(row.total_rows),
+      })),
+      importErrorSamples: importErrorRows.map((row) => ({
+        importId: row.id,
+        referenceMonth: row.reference_month,
+        fileName: row.file_name,
+        notes: row.notes ?? "",
+      })),
+      exceededAbatementSamples: exceededAbatementRows.slice(0, 5).map((row) => ({
+        donorId: row.donor_id,
+        donorName: row.donor_name,
+        totalApplied: toNumber(row.total_applied),
+        totalCredit: toNumber(row.total_credit),
       })),
     },
     reconciliation: reconciliationStats,

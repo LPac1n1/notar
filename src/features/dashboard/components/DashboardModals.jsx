@@ -384,5 +384,68 @@ export default function DashboardModals({
     );
   }
 
+  if (activeModal === "inconsistency-import-errors") {
+    return (
+      <Modal
+        title="Importações com erro"
+        description="Planilhas que falharam durante o processamento e continuam sem dados consolidados."
+        icon={<ImportIcon className="h-5 w-5" />}
+        onClose={onClose}
+      >
+        <DetailList emptyMessage="Nenhuma importação com erro encontrada.">
+          {inconsistencies.importErrorSamples.map((item) => (
+            <div
+              key={item.importId}
+              className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+            >
+              <p className="font-medium text-[var(--text-main)]">
+                {item.referenceMonth ? formatMonthYear(item.referenceMonth) : "Mês não identificado"}
+              </p>
+              <p className="mt-1 break-all text-sm text-[var(--muted)]">
+                {item.fileName}
+              </p>
+              {item.notes ? (
+                <p className="mt-1 text-sm text-[var(--danger)]">{item.notes}</p>
+              ) : null}
+            </div>
+          ))}
+        </DetailList>
+      </Modal>
+    );
+  }
+
+  if (activeModal === "inconsistency-exceeded-abatement") {
+    return (
+      <Modal
+        title="Abatimento acima do crédito"
+        description="Doadores cujo total abatido (realizado) já ultrapassa o crédito real que a NFP liberou para eles até o momento."
+        icon={<WarningIcon className="h-5 w-5" />}
+        onClose={onClose}
+      >
+        <DetailList emptyMessage="Nenhum doador com abatimento acima do crédito.">
+          {inconsistencies.exceededAbatementSamples.map((item) => (
+            <div
+              key={item.donorId}
+              className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+            >
+              <CopyableDonorName
+                name={item.donorName}
+                onClick={() => openDonorProfile(item.donorId)}
+              />
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                Abatido: {formatCurrency(item.totalApplied)} · Crédito real:{" "}
+                {formatCurrency(item.totalCredit)}
+              </p>
+              <p className="mt-1 text-sm text-[var(--danger)]">
+                {formatCurrency(item.totalApplied - item.totalCredit)} a mais
+                que o crédito gerado.
+              </p>
+            </div>
+          ))}
+        </DetailList>
+      </Modal>
+    );
+  }
+
   return null;
 }

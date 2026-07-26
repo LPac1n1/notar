@@ -4,6 +4,28 @@ import Eyebrow from "../../../components/ui/Eyebrow";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
+// How many calendar months the latest processed import can trail the
+// current month before we call it out. 1 month behind is normal (this
+// month's spreadsheet may simply not exist yet); 2+ means the operator
+// likely forgot to import for a while, and every dashboard number is
+// quietly describing a past state without saying so.
+const STALE_MONTHS_THRESHOLD = 2;
+
+function monthsBehindCurrent(referenceMonth) {
+  const parts = String(referenceMonth ?? "").match(/^(\d{4})-(\d{2})/);
+  if (!parts) return 0;
+
+  const now = new Date();
+  const latestYear = Number(parts[1]);
+  const latestMonthNumber = Number(parts[2]);
+  const currentYear = now.getFullYear();
+  const currentMonthNumber = now.getMonth() + 1;
+
+  return (
+    (currentYear - latestYear) * 12 + (currentMonthNumber - latestMonthNumber)
+  );
+}
+
 /**
  * Inline banner that sits between the attention zone and the workflow
  * checklist. Reduces the "Maio/2026 · 287 doadores · R$ 4.350 abatidos"
@@ -23,6 +45,8 @@ export default function DashboardCurrentMonthBanner({ latestMonth }) {
   const totalCount = appliedCount + pendingCount;
   const percentageApplied =
     totalCount > 0 ? Math.round((appliedCount / totalCount) * 100) : 0;
+  const monthsBehind = monthsBehindCurrent(latestMonth.referenceMonth);
+  const isStale = monthsBehind >= STALE_MONTHS_THRESHOLD;
 
   return (
     <section
@@ -57,6 +81,12 @@ export default function DashboardCurrentMonthBanner({ latestMonth }) {
               </span>
             ) : null}
           </div>
+          {isStale ? (
+            <p className="mt-2 text-sm text-[var(--warning)]">
+              Já se passaram {formatInteger(monthsBehind)} meses desde este
+              mês — os números acima podem não refletir a atividade recente.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2 lg:shrink-0">
