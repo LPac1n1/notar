@@ -74,15 +74,15 @@ export async function createActionHistoryEntry({
   return id;
 }
 
-export async function listActionHistory({
-  actionType = "",
-  entityType = "",
-  label = "",
-  limit = 20,
-} = {}) {
+/**
+ * Shared WHERE-clause builder for `listActionHistory`/`countActionHistory`.
+ * The label search matches against user-typed free text in the History
+ * page, so it's bound as a parameter — including any literal `%`/`_` the
+ * user types, which is treated as plain text rather than a LIKE wildcard.
+ */
+function buildActionHistoryFilters({ actionType = "", entityType = "", label = "" }) {
   const conditions = [];
   const params = [];
-  const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
 
   if (actionType.trim()) {
     conditions.push("action_type = ?");
@@ -95,19 +95,42 @@ export async function listActionHistory({
   }
 
   if (label.trim()) {
-    // The label search runs against the user-typed query in the History page.
-    // Bind the LIKE pattern as a parameter so any input — including SQL
-    // wildcards — is treated as literal text.
     conditions.push("(lower(label) LIKE lower(?) OR lower(description) LIKE lower(?))");
     const labelPattern = `%${label.trim()}%`;
     params.push(labelPattern, labelPattern);
   }
 
+  return { conditions, params };
+}
+
+/**
+ * Paginated action history. `limit`/`offset` used to be a single hardcoded
+ * `limit: 100` with client-side pagination on top — searching for something
+ * older than the 100 most recent actions would silently find nothing, with
+ * no way to page further back. Now a real server-side page: the WHERE
+ * clause (including the free-text search) is evaluated before LIMIT/OFFSET,
+ * so a search can reach the full history, not just the most recent slice.
+ */
+export async function listActionHistory({
+  actionType = "",
+  entityType = "",
+  label = "",
+  limit = 25,
+  offset = 0,
+} = {}) {
+  const { conditions, params } = buildActionHistoryFilters({
+    actionType,
+    entityType,
+    label,
+  });
+  const normalizedLimit = Math.min(Math.max(Number(limit) || 25, 1), 200);
+  const normalizedOffset = Math.max(Number(offset) || 0, 0);
+
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  // `LIMIT` is an integer literal here, not user-supplied — `normalizedLimit`
-  // is clamped to [1, 100] above.
+  // `LIMIT`/`OFFSET` are integer literals here, not user-supplied —
+  // both are clamped above.
   const rows = await queryPrepared(
     `
       SELECT
@@ -122,10 +145,31 @@ export async function listActionHistory({
       FROM action_history
       ${whereClause}
       ORDER BY created_at DESC, id DESC
-      LIMIT ${normalizedLimit}
+      LIMIT ${normalizedLimit} OFFSET ${normalizedOffset}
     `,
     params,
   );
 
   return rows.map(mapActionHistoryRow);
+}
+
+export async function countActionHistory({
+  actionType = "",
+  entityType = "",
+  label = "",
+} = {}) {
+  const { conditions, params } = buildActionHistoryFilters({
+    actionType,
+    entityType,
+    label,
+  });
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const rows = await queryPrepared(
+    `SELECT count(*) AS total FROM action_history ${whereClause}`,
+    params,
+  );
+
+  return Number(rows[0]?.total ?? 0);
 }

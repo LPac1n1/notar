@@ -87,6 +87,11 @@ export function useDataResource({
 
   const requestIdRef = useRef(0);
   const hasInitializedRef = useRef(false);
+  // Content signature of the last option-source filters actually applied.
+  // Paginating changes `filters` identity (new `limit`/`offset`) without
+  // changing the neutralized option filters' content, which used to
+  // re-fetch the full unfiltered option list on every page turn.
+  const lastOptionFiltersKeyRef = useRef(null);
   const debouncedFilters = useDebouncedValue(filters, debounceMs);
 
   // Stabilize neutralizedKeys by *content* — callers can pass an inline
@@ -130,13 +135,16 @@ export function useDataResource({
         }
 
         const optionFilters = buildOptionFilters(safeFilters);
+        const optionFiltersKey = optionFilters ? JSON.stringify(optionFilters) : null;
+        const shouldReloadOptions =
+          Boolean(optionFilters) && optionFiltersKey !== lastOptionFiltersKeyRef.current;
         // countLoader receives filters without pagination params.
         const { limit: _l, offset: _o, ...countFilters } = safeFilters;
         const [primary, options, count] = await Promise.all([
           loader(safeFilters),
-          optionFilters
+          shouldReloadOptions
             ? (optionLoader ?? loader)(optionFilters)
-            : Promise.resolve(null),
+            : Promise.resolve(undefined),
           countLoader ? countLoader(countFilters) : Promise.resolve(null),
         ]);
 
@@ -145,8 +153,9 @@ export function useDataResource({
         }
 
         setData(primary ?? fallbackValue);
-        if (optionFilters) {
+        if (shouldReloadOptions) {
           setOptionSource(options ?? []);
+          lastOptionFiltersKeyRef.current = optionFiltersKey;
         }
         if (countLoader) {
           setTotalCount(count ?? 0);

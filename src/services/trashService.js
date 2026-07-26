@@ -106,7 +106,13 @@ export async function createTrashItem({
   return id;
 }
 
-export async function listTrashItems() {
+export async function listTrashItems({ limit = 0, offset = 0 } = {}) {
+  // LIMIT 0 means "no limit" (default — every existing caller lists
+  // everything). DuckDB doesn't accept LIMIT NULL, so the clause is only
+  // added when a real page size was requested.
+  const limitClause =
+    Number(limit) > 0 ? `LIMIT ${Number(limit)} OFFSET ${Number(offset) || 0}` : "";
+
   const rows = await query(`
     SELECT
       id,
@@ -117,6 +123,7 @@ export async function listTrashItems() {
       strftime(deleted_at, '%Y-%m-%d %H:%M:%S') AS deleted_at
     FROM trash_items
     ORDER BY deleted_at DESC
+    ${limitClause}
   `);
 
   return rows.map((row) => ({

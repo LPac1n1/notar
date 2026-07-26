@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -7,8 +7,10 @@ import EmptyState from "../components/ui/EmptyState";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
+import PaginationControls from "../components/ui/PaginationControls";
 import SectionCard from "../components/ui/SectionCard";
 import {
+  countTrashItems,
   deleteAllTrashItemsPermanently,
   deleteTrashItemPermanently,
   listTrashItems,
@@ -17,7 +19,7 @@ import {
 import { formatInteger } from "../utils/format";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
-import { useDataResource } from "../hooks/useDataResource";
+import { usePaginatedResource } from "../hooks/usePaginatedResource";
 import { useMutationAction } from "../hooks/useMutationAction";
 
 export default function Trash() {
@@ -28,15 +30,19 @@ export default function Trash() {
     useState(null);
   const [isClearTrashConfirmOpen, setIsClearTrashConfirmOpen] = useState(false);
 
+  const filters = useMemo(() => ({}), []);
   const {
     data: trashItems,
     isLoading,
     isRefreshing,
     error,
     reload: reloadTrash,
-  } = useDataResource({
-    loader: () => listTrashItems(),
-    filters: {},
+    pagination: trashPagination,
+  } = usePaginatedResource({
+    loader: listTrashItems,
+    countLoader: countTrashItems,
+    filters,
+    initialPageSize: 25,
     errorMessage: "Não foi possível carregar os itens da lixeira.",
     scope: "TrashPage",
   });
@@ -108,7 +114,7 @@ export default function Trash() {
     <div>
       <PageHeader
         title="Lixeira"
-        subtitle={`${formatInteger(trashItems.length)} item(ns) disponível(is) para restauração.`}
+        subtitle={`${formatInteger(trashPagination.totalItems)} item(ns) disponível(is) para restauração.`}
         className="mb-6"
       />
       <FeedbackMessage message={displayError} tone="error" />
@@ -136,6 +142,16 @@ export default function Trash() {
                 Apagar tudo
               </Button>
             </div>
+
+            <PaginationControls
+              endItem={trashPagination.endItem}
+              onPageChange={trashPagination.setPage}
+              onPageSizeChange={trashPagination.handlePageSizeChange}
+              page={trashPagination.page}
+              pageSize={trashPagination.pageSize}
+              totalItems={trashPagination.totalItems}
+              totalPages={trashPagination.totalPages}
+            />
 
             {trashItems.map((item) => (
               <div
@@ -169,6 +185,16 @@ export default function Trash() {
                 </div>
               </div>
             ))}
+
+            <PaginationControls
+              endItem={trashPagination.endItem}
+              onPageChange={trashPagination.setPage}
+              onPageSizeChange={trashPagination.handlePageSizeChange}
+              page={trashPagination.page}
+              pageSize={trashPagination.pageSize}
+              totalItems={trashPagination.totalItems}
+              totalPages={trashPagination.totalPages}
+            />
           </div>
         )}
       </SectionCard>

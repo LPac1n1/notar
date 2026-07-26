@@ -14,11 +14,13 @@ import {
   ACTION_HISTORY_ENTITY_OPTIONS,
   ACTION_HISTORY_TYPE_OPTIONS,
 } from "../features/history/constants";
-import { listActionHistory } from "../services/actionHistoryService";
+import {
+  countActionHistory,
+  listActionHistory,
+} from "../services/actionHistoryService";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
-import { useDataResource } from "../hooks/useDataResource";
-import { usePagination } from "../hooks/usePagination";
+import { usePaginatedResource } from "../hooks/usePaginatedResource";
 import { formatInteger } from "../utils/format";
 
 const INITIAL_FILTERS = {
@@ -26,8 +28,6 @@ const INITIAL_FILTERS = {
   entityType: "",
   label: "",
 };
-
-const loadHistory = (f) => listActionHistory({ ...f, limit: 100 });
 
 export default function ActionHistory() {
   const location = useLocation();
@@ -40,14 +40,21 @@ export default function ActionHistory() {
     ...(location.state?.actionHistoryFilters ?? {}),
   }));
 
-  const { data: actions, isLoading, isRefreshing, error, reload } = useDataResource({
-    loader: loadHistory,
+  const {
+    data: actions,
+    isLoading,
+    isRefreshing,
+    error,
+    reload,
+    pagination: historyPagination,
+  } = usePaginatedResource({
+    loader: listActionHistory,
+    countLoader: countActionHistory,
     filters,
+    initialPageSize: 25,
     scope: "ActionHistory",
     errorMessage: "Não foi possível carregar o histórico de ações.",
   });
-
-  const historyPagination = usePagination(actions, { initialPageSize: 25 });
   const { dataSyncFeedback, showDataRefreshLoading } = useDataRefreshIndicator(isRefreshing);
 
   useDatabaseChangeEffect(reload, { domains: ["history"] });
@@ -84,7 +91,7 @@ export default function ActionHistory() {
     <div>
       <PageHeader
         title="Histórico"
-        subtitle={`${formatInteger(actions.length)} ação(ões) encontrada(s).`}
+        subtitle={`${formatInteger(historyPagination.totalItems)} ação(ões) encontrada(s).`}
         className="mb-6"
       />
 
@@ -122,7 +129,11 @@ export default function ActionHistory() {
             Limpar filtros
           </Button>
           <p className="text-xs text-[var(--muted)]">
-            As últimas 100 ações ficam disponíveis para consulta rápida.
+            {showDataRefreshLoading
+              ? dataSyncFeedback.label
+              : isRefreshing
+                ? "Atualizando resultados..."
+                : `${formatInteger(historyPagination.totalItems)} resultado(s) na lista.`}
           </p>
         </div>
       </SectionCard>
@@ -145,7 +156,7 @@ export default function ActionHistory() {
               totalPages={historyPagination.totalPages}
             />
 
-            <ActionHistoryList actions={historyPagination.visibleItems} />
+            <ActionHistoryList actions={actions} />
 
             <PaginationControls
               endItem={historyPagination.endItem}
