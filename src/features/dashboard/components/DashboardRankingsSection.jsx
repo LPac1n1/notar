@@ -93,7 +93,7 @@ export default function DashboardRankingsSection({
                   <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-[var(--warning)]">
                     {formatInteger(item.pendingCount)} pendente(s)
                   </span>
-                  <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--success)]">
+                  <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--success-soft)] px-2 py-1 text-[var(--success)]">
                     {formatInteger(item.appliedCount)} realizado(s)
                   </span>
                 </div>

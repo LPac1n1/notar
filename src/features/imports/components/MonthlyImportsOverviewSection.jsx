@@ -347,7 +347,7 @@ export default function MonthlyImportsOverviewSection({
                 onClick={() => setStatusFilter(option.value)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                   isActive
-                    ? "border-[var(--accent)] bg-[var(--accent-2-soft)] text-[var(--accent-strong)]"
+                    ? "border-[var(--accent)] bg-[var(--accent-selected)] text-[var(--accent-strong)]"
                     : "border-[var(--line)] bg-[var(--surface-elevated)] text-[var(--text-soft)] hover:border-[var(--line-strong)]"
                 }`}
               >
@@ -410,7 +410,7 @@ export default function MonthlyImportsOverviewSection({
                   key={row.referenceMonth}
                   className={`align-top ${
                     isCurrent
-                      ? "bg-[var(--accent-2-soft)]/30"
+                      ? "bg-[var(--accent-selected)]"
                       : ""
                   }`}
                 >

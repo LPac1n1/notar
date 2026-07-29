@@ -581,7 +581,7 @@ export default function SelectInput({
                                 option.disabled
                                   ? "cursor-not-allowed text-[var(--muted)]/60"
                                   : isSelected
-                                    ? `${option.tone === "warning" ? "bg-[color:var(--warning-soft)] text-[var(--warning)]" : option.tone === "success" ? "bg-[color:var(--accent-2-soft)] text-[var(--success)]" : "bg-[var(--surface-muted)] text-[var(--text-main)]"}`
+                                    ? `${option.tone === "warning" ? "bg-[color:var(--warning-soft)] text-[var(--warning)]" : option.tone === "success" ? "bg-[color:var(--success-soft)] text-[var(--success)]" : "bg-[var(--surface-muted)] text-[var(--text-main)]"}`
                                     : `${optionToneTextClassName || "text-[var(--text-soft)]"} hover:bg-[color:var(--surface-muted)] hover:text-[var(--text-main)]`
                               }`}
                             >

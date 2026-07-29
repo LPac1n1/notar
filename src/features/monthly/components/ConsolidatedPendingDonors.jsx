@@ -10,7 +10,7 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
 
 function getMonthButtonClassName(isApplied) {
   if (isApplied) {
-    return "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]";
+    return "border-[var(--success-line)] bg-[color:var(--success-soft)] text-[var(--success)]";
   }
 
   return "border-[var(--warning-line)] bg-[color:var(--warning-soft)] text-[var(--warning)] hover:border-[var(--line-strong)]";
@@ -81,7 +81,7 @@ export default function ConsolidatedPendingDonors({
                       </div>
 
                       <div className="flex flex-wrap gap-1.5 text-[11px] font-medium">
-                        <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-2 py-1 text-[var(--success)]">
+                        <span className="rounded-md border border-[var(--success-line)] bg-[color:var(--success-soft)] px-2 py-1 text-[var(--success)]">
                           Realizado
                         </span>
                         <span className="rounded-md border border-[var(--warning-line)] bg-[color:var(--warning-soft)] px-2 py-1 text-[var(--warning)]">
@@ -238,7 +238,7 @@ export default function ConsolidatedPendingDonors({
                         Abater todas as pendências
                       </Button>
                     ) : (
-                      <div className="rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-3 py-2 text-center text-sm font-semibold text-[var(--success)]">
+                      <div className="rounded-md border border-[var(--success-line)] bg-[color:var(--success-soft)] px-3 py-2 text-center text-sm font-semibold text-[var(--success)]">
                         Todas as pendências abatidas
                       </div>
                     )}

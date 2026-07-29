@@ -33,7 +33,7 @@ const STATUS_META = {
 function statusClasses(tone) {
   switch (tone) {
     case "success":
-      return "border-[var(--success-line)] bg-[var(--accent-2-soft)] text-[var(--success)]";
+      return "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]";
     case "danger":
       return "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]";
     case "warning":

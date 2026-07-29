@@ -24,11 +24,11 @@ const TONE_STYLES = {
   },
   success: {
     container:
-      "border-[color:var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--text-main)]",
+      "border-[color:var(--success-line)] bg-[color:var(--success-soft)] text-[color:var(--text-main)]",
     bar: "bg-[color:var(--success)]",
     button: "text-[color:var(--success)] hover:bg-black/10",
     icon: ConnectedIcon,
-    iconWrap: "bg-[color:var(--accent-2-soft)] text-[var(--success)]",
+    iconWrap: "bg-[color:var(--success-soft)] text-[var(--success)]",
   },
   info: {
     container:

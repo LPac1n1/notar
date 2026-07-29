@@ -48,14 +48,14 @@
   --accent-strong: #6366f1;
   --accent-deep: #4f46e5;
   --accent-soft: rgba(129, 140, 248, 0.14);
-  /* Legacy alias: alguns componentes ainda referenciam --accent-2 para
-   * superfícies "tingidas de sucesso" — mapeado pra família esmeralda. */
-  --accent-2: #34d399;
-  --accent-2-soft: rgba(52, 211, 153, 0.12);
+  /* Superfície de seleção — "este item está selecionado/ativo". Sempre da
+   * família do accent, nunca semântica (verde = sucesso, não = selecionado). */
+  --accent-selected: rgba(129, 140, 248, 0.1);
 
   /* ── SEMÂNTICAS ─────────────────────────────────────────────────────── */
   --success: #34d399;
   --success-line: rgba(52, 211, 153, 0.4);
+  --success-soft: rgba(52, 211, 153, 0.12);
   --danger: #f87171;
   --danger-strong: #ef4444;
   --danger-line: rgba(248, 113, 113, 0.42);
@@ -385,14 +385,14 @@ textarea {
   --accent: #4f46e5;
   --accent-strong: #4338ca;
   --accent-soft: rgba(79, 70, 229, 0.1);
-  --accent-2: #047857;
-  --accent-2-soft: rgba(4, 120, 87, 0.1);
+  --accent-selected: rgba(79, 70, 229, 0.07);
   --danger: #dc2626;
   --danger-strong: #b91c1c;
   --danger-line: rgba(220, 38, 38, 0.35);
   --danger-soft: rgba(220, 38, 38, 0.08);
   --success: #047857; /* #059669 was 3.77:1 on white — fails AA; #047857 gives 5.48:1 */
   --success-line: rgba(4, 120, 87, 0.35);
+  --success-soft: rgba(4, 120, 87, 0.1);
   --warning: #a16207; /* #d97706 was 3.1:1 on white — fails AA for small text; #a16207 gives 4.95:1 */
   --warning-line: rgba(161, 98, 7, 0.35);
   --warning-soft: rgba(161, 98, 7, 0.1);

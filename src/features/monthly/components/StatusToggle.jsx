@@ -21,7 +21,7 @@ export default function StatusToggle({
         aria-hidden="true"
         className={`pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-6px)] rounded-md border transition-all duration-200 ease-in-out ${
           value === "applied"
-            ? "translate-x-[calc(100%+4px)] border-[var(--success-line)] bg-[var(--accent-2-soft)]"
+            ? "translate-x-[calc(100%+4px)] border-[var(--success-line)] bg-[var(--success-soft)]"
             : "translate-x-0 border-[var(--warning-line)] bg-[var(--warning-soft)]"
         }`}
       />

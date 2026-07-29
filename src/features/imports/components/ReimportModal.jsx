@@ -15,7 +15,7 @@ function DiffBadge({ tone, count, label }) {
       : tone === "danger"
       ? "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]"
       : tone === "success"
-      ? "border-[var(--success-line)] bg-[var(--accent-2-soft)] text-[var(--success)]"
+      ? "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]"
       : "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--text-soft)]";
 
   return (

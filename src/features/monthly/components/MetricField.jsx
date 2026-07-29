@@ -8,7 +8,7 @@ export default function MetricField({
     <div className="min-w-0">
       <p className="text-sm text-[var(--muted)]">{label}</p>
       <p
-        className={`mt-1 font-semibold text-[var(--text-main)] ${valueClassName}`.trim()}
+        className={`numeric mt-1 font-semibold break-words text-[var(--text-main)] ${valueClassName}`.trim()}
       >
         {value}
       </p>

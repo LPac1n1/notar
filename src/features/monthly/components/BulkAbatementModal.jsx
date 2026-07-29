@@ -41,7 +41,7 @@ function MonthRow({ group, isSelected, onToggle }) {
       onClick={() => onToggle(group.referenceMonth)}
       className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition ${
         isSelected
-          ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)]"
+          ? "border-[var(--success-line)] bg-[color:var(--success-soft)]"
           : "border-[var(--line)] bg-[var(--surface-elevated)] hover:border-[var(--line-strong)]"
       }`}
     >
@@ -76,7 +76,7 @@ function SelectAllRow({ allSelected, someSelected, onToggle }) {
       onClick={onToggle}
       className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition ${
         allSelected
-          ? "border-[var(--success-line)] bg-[color:var(--accent-2-soft)]"
+          ? "border-[var(--success-line)] bg-[color:var(--success-soft)]"
           : "border-[var(--line)] bg-[var(--surface-strong)] hover:border-[var(--line-strong)]"
       }`}
     >
@@ -185,7 +185,7 @@ export default function BulkAbatementModal({ summaries, onApply, onClose, isAppl
       </div>
 
       {selectedSummaryIds.length > 0 ? (
-        <div className="mt-4 rounded-md border border-[var(--success-line)] bg-[color:var(--accent-2-soft)] px-4 py-3 text-sm text-[var(--success)]">
+        <div className="mt-4 rounded-md border border-[var(--success-line)] bg-[color:var(--success-soft)] px-4 py-3 text-sm text-[var(--success)]">
           <span className="font-semibold">
             {formatInteger(selectedMonths.size)} mês(es) selecionado(s)
           </span>

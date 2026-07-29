@@ -23,7 +23,7 @@ export default function MonthlySummaryToolbar({
 }) {
   return (
     <div className="mb-5 grid gap-4">
-      <div className={`grid gap-3 ${metrics.length > 2 ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-2"}`}>
+      <div className={`grid gap-3 ${metrics.length > 2 ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "sm:grid-cols-2"}`}>
         {metrics.map((metric) => (
           <OverviewMetric
             key={metric.label}

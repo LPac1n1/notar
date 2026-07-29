@@ -29,7 +29,7 @@ function describeStatus(status, lastSyncedAt) {
   }
   return {
     className:
-      "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[color:var(--success)]",
+      "border-[var(--success-line)] bg-[color:var(--success-soft)] text-[color:var(--success)]",
     label: lastSyncedAt
       ? `Sincronizado às ${formatSyncTime(lastSyncedAt)}`
       : "Sincronizado",

@@ -20,7 +20,7 @@ export const ICON_TONE_CLASS_NAMES = {
   default:
     "border-[var(--line)] bg-[color:var(--surface-strong)] text-[var(--text-soft)]",
   success:
-    "border-[var(--success-line)] bg-[color:var(--accent-2-soft)] text-[var(--success)]",
+    "border-[var(--success-line)] bg-[color:var(--success-soft)] text-[var(--success)]",
   warning:
     "border-[var(--warning-line)] bg-[color:var(--warning-soft)] text-[var(--warning)]",
 };
