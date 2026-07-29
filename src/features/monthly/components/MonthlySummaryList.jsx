@@ -3,6 +3,7 @@ import {
   MonthlyIcon,
   WarningIcon,
 } from "../../../components/ui/icons";
+import { buildDonorMonthKey } from "../../../services/reconciliation/creditReconciliationService";
 import { formatInteger } from "../../../utils/format";
 import GroupSection from "./GroupSection";
 import MonthlySummaryRow from "./MonthlySummaryRow";
@@ -15,14 +16,26 @@ export default function MonthlySummaryList({
   onNavigate,
   onStatusChange,
   reconciliationByDonor,
+  inactivityByDonor,
+  latestImportedMonth = "",
   showReferenceMonth,
   selectedIds,
   onToggleSelect,
 }) {
   const resolveReconciliation = (summary) =>
     reconciliationByDonor && summary.donorId
-      ? reconciliationByDonor.get(summary.donorId)
+      ? reconciliationByDonor.get(
+          buildDonorMonthKey(summary.donorId, summary.referenceMonth),
+        )
       : null;
+  const resolveInactivity = (summary) =>
+    inactivityByDonor && summary.donorId
+      ? inactivityByDonor.get(summary.donorId)
+      : null;
+  const isLatestImportedMonth = (summary) =>
+    Boolean(latestImportedMonth) &&
+    String(summary.referenceMonth ?? "").slice(0, 10) ===
+      String(latestImportedMonth).slice(0, 10);
   const isSelected = (summary) =>
     Boolean(selectedIds && selectedIds.has(summary.id));
   const paginationProps = {
@@ -55,6 +68,8 @@ export default function MonthlySummaryList({
               onNavigate={onNavigate}
               onStatusChange={onStatusChange}
               reconciliation={resolveReconciliation(summary)}
+              inactivity={resolveInactivity(summary)}
+              isLatestImportedMonth={isLatestImportedMonth(summary)}
               showReferenceMonth={showReferenceMonth}
               isSelected={isSelected(summary)}
               onToggleSelect={onToggleSelect}
@@ -79,6 +94,8 @@ export default function MonthlySummaryList({
               onNavigate={onNavigate}
               onStatusChange={onStatusChange}
               reconciliation={resolveReconciliation(summary)}
+              inactivity={resolveInactivity(summary)}
+              isLatestImportedMonth={isLatestImportedMonth(summary)}
               showReferenceMonth={showReferenceMonth}
               isSelected={isSelected(summary)}
               onToggleSelect={onToggleSelect}

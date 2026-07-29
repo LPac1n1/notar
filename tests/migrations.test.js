@@ -5,6 +5,7 @@ import {
   MIGRATIONS,
   runMigrations,
 } from "../src/services/db/migrations.js";
+import { DONOR_INACTIVITY_STREAKS_SQL } from "../src/services/monthly/inactivityStreaksSql.js";
 
 test("prepared statements bind parameters via ? placeholders", async () => {
   const conn = await createTestConnection();
@@ -1915,6 +1916,147 @@ test("createDonor rolls back the newly-inserted person when a later validation s
       )
     ).toArray();
     assert.equal(retryRows.length, 1);
+  } finally {
+    conn.close();
+  }
+});
+
+test("donor inactivity streaks count consecutive imported months without notes", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Four processed months. The streak must be measured against THESE,
+    // not the calendar.
+    const months = ["2025-12-01", "2026-01-01", "2026-02-01", "2026-03-01"];
+    for (const month of months) {
+      await conn.query(`
+        INSERT INTO imports (id, reference_month, file_name, value_per_note, status)
+        VALUES ('imp-${month}', DATE '${month}', 'f.csv', 10, 'processed')
+      `);
+    }
+    // A pending import must be ignored by the month grid entirely.
+    await conn.query(`
+      INSERT INTO imports (id, reference_month, file_name, value_per_note, status)
+      VALUES ('imp-pending', DATE '2026-04-01', 'p.csv', 10, 'pending')
+    `);
+
+    const donors = [
+      // donated every month -> streak 0
+      ["always", "SEMPRE DOA", "11111111111", "2025-12-01"],
+      // last donated in the oldest month -> streak 3
+      ["stopped", "PAROU DE DOAR", "22222222222", "2025-12-01"],
+      // never donated at all -> streak = eligible months (4)
+      ["never", "NUNCA DOOU", "33333333333", "2025-12-01"],
+      // only started in the latest month and did donate -> streak 0, 1 eligible
+      ["newcomer", "ENTROU AGORA", "44444444444", "2026-03-01"],
+    ];
+    for (const [id, name, cpf, start] of donors) {
+      await conn.query(`
+        INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, donation_start_date, is_active)
+        VALUES ('${id}', 'p-${id}', '${name}', '${cpf}', 'D', 'holder', DATE '${start}', TRUE)
+      `);
+      await conn.query(`
+        INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active)
+        VALUES ('${id}-titular', '${id}', '${name}', '${cpf}', 'holder', TRUE)
+      `);
+    }
+
+    const activity = [
+      ["always", months],
+      ["stopped", ["2025-12-01"]],
+      ["newcomer", ["2026-03-01"]],
+    ];
+    for (const [donorId, activeMonths] of activity) {
+      for (const month of activeMonths) {
+        await conn.query(`
+          INSERT INTO import_cpf_summary
+            (id, import_id, reference_month, cpf, notes_count, matched_donor_id, matched_source_id, is_registered_donor)
+          VALUES
+            ('ics-${donorId}-${month}', 'imp-${month}', DATE '${month}',
+             (SELECT cpf FROM donors WHERE id = '${donorId}'),
+             5, '${donorId}', '${donorId}-titular', TRUE)
+        `);
+      }
+    }
+
+    const rows = (await conn.query(DONOR_INACTIVITY_STREAKS_SQL)).toArray();
+    const byId = new Map(rows.map((row) => [String(row.donor_id), row]));
+
+    assert.equal(Number(byId.get("always").months_without_donating), 0);
+    assert.equal(Number(byId.get("stopped").months_without_donating), 3);
+    assert.equal(Number(byId.get("never").months_without_donating), 4);
+    assert.equal(Number(byId.get("newcomer").months_without_donating), 0);
+
+    // Months before donation_start_date must not be counted against a donor.
+    assert.equal(Number(byId.get("newcomer").eligible_months), 1);
+    assert.equal(Number(byId.get("never").eligible_months), 4);
+
+    // The pending April import must not appear in anyone's grid.
+    assert.equal(Number(byId.get("always").eligible_months), 4);
+
+    assert.equal(String(byId.get("stopped").last_donation_month), "2025-12-01");
+    assert.equal(byId.get("never").last_donation_month, null);
+
+    // Ordering puts the longest streak first — this IS the call list.
+    assert.equal(String(rows[0].donor_id), "never");
+  } finally {
+    conn.close();
+  }
+});
+
+test("donor inactivity streaks resolve auxiliaries by their own CPF", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    for (const month of ["2026-01-01", "2026-02-01"]) {
+      await conn.query(`
+        INSERT INTO imports (id, reference_month, file_name, value_per_note, status)
+        VALUES ('imp-${month}', DATE '${month}', 'f.csv', 10, 'processed')
+      `);
+    }
+
+    // Holder + auxiliary. Only the auxiliary keeps donating in February; the
+    // holder personally stopped. monthly_donor_summary would hide this
+    // (auxiliary notes roll up into the holder's row), which is exactly why
+    // the query resolves activity per CPF link instead.
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, donation_start_date, is_active)
+      VALUES ('h1', 'p-h1', 'TITULAR', '11111111111', 'D', 'holder', DATE '2026-01-01', TRUE)
+    `);
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, holder_person_id, donation_start_date, is_active)
+      VALUES ('a1', 'p-a1', 'AUXILIAR', '22222222222', 'D', 'auxiliary', 'p-h1', DATE '2026-01-01', TRUE)
+    `);
+    await conn.query(`
+      INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active)
+      VALUES ('h1-titular', 'h1', 'TITULAR', '11111111111', 'holder', TRUE),
+             ('a1-titular', 'a1', 'AUXILIAR', '22222222222', 'holder', TRUE)
+    `);
+
+    // January: both donate. February: only the auxiliary.
+    await conn.query(`
+      INSERT INTO import_cpf_summary
+        (id, import_id, reference_month, cpf, notes_count, matched_donor_id, matched_source_id, is_registered_donor)
+      VALUES
+        ('i1', 'imp-2026-01-01', DATE '2026-01-01', '11111111111', 3, 'h1', 'h1-titular', TRUE),
+        ('i2', 'imp-2026-01-01', DATE '2026-01-01', '22222222222', 2, 'h1', 'a1-titular', TRUE),
+        ('i3', 'imp-2026-02-01', DATE '2026-02-01', '22222222222', 2, 'h1', 'a1-titular', TRUE)
+    `);
+    // The holder's summary row still shows notes in February (the auxiliary's).
+    await conn.query(`
+      INSERT INTO monthly_donor_summary
+        (id, import_id, donor_id, reference_month, cpf, donor_name, demand, notes_count, value_per_note, abatement_amount, abatement_status)
+      VALUES ('m1', 'imp-2026-02-01', 'h1', DATE '2026-02-01', '11111111111', 'TITULAR', 'D', 2, 10, 20, 'pending')
+    `);
+
+    const rows = (await conn.query(DONOR_INACTIVITY_STREAKS_SQL)).toArray();
+    const byId = new Map(rows.map((row) => [String(row.donor_id), row]));
+
+    // The holder stopped in February even though their summary row has notes.
+    assert.equal(Number(byId.get("h1").months_without_donating), 1);
+    assert.equal(Number(byId.get("a1").months_without_donating), 0);
   } finally {
     conn.close();
   }

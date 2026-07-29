@@ -84,6 +84,32 @@ export const MONTHLY_HOLDER_JOINS = `
 `;
 
 /**
+ * Auxiliaries attached to the row's donor, as "name|cpf" tuples.
+ *
+ * Only ever non-empty for holders: auxiliaries point at their holder through
+ * `holder_person_id`, and `ensurePersonCanBeAuxiliary` blocks a person that
+ * already has auxiliaries from becoming one, so the chain never nests.
+ *
+ * Correlates on `donors.person_id`, so every query embedding this must have
+ * `donors` in scope under that exact alias.
+ */
+export const MONTHLY_AUXILIARY_SUBSELECT = `
+  coalesce((
+    SELECT string_agg(aux_rows.aux_name || '|' || aux_rows.aux_cpf, ';;')
+    FROM (
+      SELECT
+        auxiliary_donors.name AS aux_name,
+        auxiliary_donors.cpf AS aux_cpf
+      FROM donors AS auxiliary_donors
+      WHERE auxiliary_donors.holder_person_id = donors.person_id
+        AND auxiliary_donors.donor_type = 'auxiliary'
+        AND auxiliary_donors.is_active = TRUE
+      ORDER BY auxiliary_donors.name ASC
+    ) AS aux_rows
+  ), '') AS auxiliary_details
+`;
+
+/**
  * Donor metadata columns projected by both listings. Excludes the
  * `monthly_donor_summary` core columns (id, donor_id, etc.) which differ in
  * how the two queries select them.
@@ -95,7 +121,8 @@ export const MONTHLY_DONOR_PROJECTION = `
   holder_people.name AS holder_name,
   holder_people.cpf AS holder_cpf,
   holder_active_donors.id AS active_holder_donor_id,
-  strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date
+  strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
+  ${MONTHLY_AUXILIARY_SUBSELECT}
 `;
 
 export function parseSourceCpfs(value) {
@@ -103,6 +130,16 @@ export function parseSourceCpfs(value) {
     .split(",")
     .map((cpfValue) => cpfValue.trim())
     .filter(Boolean);
+}
+
+export function parseAuxiliaries(value) {
+  return String(value ?? "")
+    .split(";;")
+    .map((entry) => {
+      const [name = "", cpfValue = ""] = entry.split("|");
+      return { name, cpf: cpfValue };
+    })
+    .filter((auxiliary) => auxiliary.name || auxiliary.cpf);
 }
 
 export function parseSources(value) {
@@ -148,6 +185,7 @@ export function mapSummaryRow(row) {
     holderCpf: row.holder_cpf ?? "",
     holderIsActiveDonor: Boolean(row.active_holder_donor_id),
     donationStartDate: row.donation_start_date ?? "",
+    auxiliaries: parseAuxiliaries(row.auxiliary_details),
     sourceCpfs: parseSourceCpfs(row.source_cpfs),
     sources: parseSources(row.source_details),
     sourceCpfCount: Number(row.source_cpf_count ?? 0),
@@ -183,6 +221,7 @@ export function mapDonorWithoutDonation(
     holderCpf: row.holder_cpf ?? "",
     holderIsActiveDonor: Boolean(row.active_holder_donor_id),
     donationStartDate: row.donation_start_date ?? "",
+    auxiliaries: parseAuxiliaries(row.auxiliary_details),
     sourceCpfs: parseSourceCpfs(row.source_cpfs),
     sources: parseSources(row.source_details),
     sourceCpfCount: Number(row.source_cpf_count ?? 0),
@@ -492,6 +531,7 @@ export function synthesizeAdjustmentOnlyRow(adjustment, donorContext = {}) {
     holderCpf: donorContext.holderCpf ?? "",
     holderIsActiveDonor: Boolean(donorContext.holderIsActiveDonor),
     donationStartDate: donorContext.donationStartDate ?? "",
+    auxiliaries: donorContext.auxiliaries ?? [],
     sourceCpfs: [],
     sources: [],
     sourceCpfCount: 0,

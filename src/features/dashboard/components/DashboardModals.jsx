@@ -10,6 +10,7 @@ import {
 } from "../../../components/ui/icons";
 import CopyableCpf from "../../donors/components/CopyableCpf";
 import CopyableDonorName from "../../donors/components/CopyableDonorName";
+import { describeInactivity } from "../../../services/monthly/inactivityStreaks";
 import { formatDatePtBR, formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import DetailList from "./DetailList";
@@ -439,6 +440,53 @@ export default function DashboardModals({
               <p className="mt-1 text-sm text-[var(--danger)]">
                 {formatCurrency(item.totalApplied - item.totalCredit)} a mais
                 que o crédito gerado.
+              </p>
+            </div>
+          ))}
+        </DetailList>
+      </Modal>
+    );
+  }
+
+  if (activeModal === "inconsistency-inactive-donors") {
+    return (
+      <Modal
+        title="Doadores que pararam de doar"
+        description="Doadores ativos sem nenhuma nota nos últimos meses importados. Use como lista de contato para confirmar se o CPF segue cadastrado nos estabelecimentos."
+        icon={<WarningIcon className="h-5 w-5" />}
+        onClose={onClose}
+        size="lg"
+      >
+        <DetailList emptyMessage="Todos os doadores ativos enviaram notas recentemente.">
+          {inconsistencies.inactiveDonors?.map((item) => (
+            <div
+              key={item.donorId}
+              className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <CopyableDonorName
+                  name={item.donorName}
+                  onClick={() => openDonorProfile(item.donorId)}
+                />
+                <span
+                  className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${
+                    describeInactivity(item).tone === "danger"
+                      ? "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]"
+                      : "border-[var(--warning-line)] bg-[color:var(--warning-soft)] text-[var(--warning)]"
+                  }`}
+                >
+                  {describeInactivity(item).label}
+                </span>
+              </div>
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
+                <CopyableCpf value={item.cpf} />
+                <span>• {item.donorType === "auxiliary" ? "Auxiliar" : "Titular"}</span>
+                <span>• Demanda: {item.demand || "Não informada"}</span>
+              </p>
+              <p className="mt-1.5 text-sm text-[var(--muted)]">
+                {item.hasNeverDonated
+                  ? "Nenhuma nota registrada desde o início das doações informado."
+                  : `Última doação em ${formatMonthYear(item.lastDonationMonth)}.`}
               </p>
             </div>
           ))}

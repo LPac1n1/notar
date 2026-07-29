@@ -4,6 +4,7 @@ import {
   listAllAdjustments,
 } from "../abatementAdjustmentService";
 import {
+  MONTHLY_AUXILIARY_SUBSELECT,
   MONTHLY_DONOR_PROJECTION,
   MONTHLY_HOLDER_JOINS,
   MONTHLY_SOURCE_SUBSELECTS,
@@ -112,6 +113,7 @@ export async function listMonthlySummariesByMonth({
           holder_people.cpf AS holder_cpf,
           holder_active_donors.id AS active_holder_donor_id,
           strftime(donors.donation_start_date, '%Y-%m-%d') AS donation_start_date,
+          ${MONTHLY_AUXILIARY_SUBSELECT},
           coalesce((
             SELECT string_agg(DISTINCT donor_cpf_links.cpf, ',')
             FROM donor_cpf_links

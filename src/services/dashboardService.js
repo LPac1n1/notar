@@ -1,5 +1,10 @@
 import { query, queryPrepared } from "./db";
 import { getReconciliationStats } from "./reconciliation/creditReconciliationService";
+import {
+  INACTIVITY_ALERT_THRESHOLD,
+  mapInactivityRow,
+} from "./monthly/inactivityStreaks";
+import { DONOR_INACTIVITY_STREAKS_SQL } from "./monthly/inactivityStreaksSql";
 import { getCached, setCached } from "./queryCache.js";
 
 const DASHBOARD_CACHE_KEY = "dashboard:overview";
@@ -48,6 +53,7 @@ async function _fetchDashboardOverview() {
     emptyImportRows,
     importErrorRows,
     exceededAbatementRows,
+    inactivityStreakRows,
     reconciliationStats,
   ] = await Promise.all([
     query(`
@@ -249,8 +255,19 @@ async function _fetchDashboardOverview() {
       WHERE donor_applied.total_applied > coalesce(donor_credit.total_credit, 0)
       ORDER BY (donor_applied.total_applied - coalesce(donor_credit.total_credit, 0)) DESC
     `),
+    query(DONOR_INACTIVITY_STREAKS_SQL),
     getReconciliationStats(),
   ]);
+
+  // Donors that stopped sending notes for N consecutive imported months.
+  // The SQL returns every active donor (streak 0 included) already sorted by
+  // streak desc, so the "call list" is just the head of it above the alert
+  // threshold — no second query needed.
+  const inactiveDonors = inactivityStreakRows
+    .map(mapInactivityRow)
+    .filter(
+      (row) => row.monthsWithoutDonating >= INACTIVITY_ALERT_THRESHOLD,
+    );
 
   const latestImport = recentImportsRows[0] ?? null;
 
@@ -474,6 +491,10 @@ async function _fetchDashboardOverview() {
         inconsistencyCounts.import_error_count,
       ),
       exceededAbatementCount: exceededAbatementRows.length,
+      inactiveDonorCount: inactiveDonors.length,
+      // Full list, not a 5-row sample: this one is meant to be worked
+      // through (call each donor and check if they're still registered).
+      inactiveDonors,
       donationStartConflictSamples: donationStartConflictRows.map((row) => ({
         sourceName: row.source_name,
         donorId: row.donor_id,

@@ -110,12 +110,14 @@ export default function Dashboard() {
     emptyImportCount: 0,
     importErrorCount: 0,
     exceededAbatementCount: 0,
+    inactiveDonorCount: 0,
     donationStartConflictSamples: [],
     donorWithoutDemandSamples: [],
     donorWithoutStartDateSamples: [],
     emptyImportSamples: [],
     importErrorSamples: [],
     exceededAbatementSamples: [],
+    inactiveDonors: [],
   };
   const totalInconsistencyCount =
     inconsistencies.donationStartConflictCount +
@@ -123,7 +125,8 @@ export default function Dashboard() {
     inconsistencies.donorWithoutStartDateCount +
     inconsistencies.emptyImportCount +
     inconsistencies.importErrorCount +
-    inconsistencies.exceededAbatementCount;
+    inconsistencies.exceededAbatementCount +
+    inconsistencies.inactiveDonorCount;
   const hasAnyData =
     totals.donorCount > 0 ||
     totals.demandCount > 0 ||

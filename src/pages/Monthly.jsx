@@ -41,7 +41,11 @@ const loadJpegReportExporter = () =>
   );
 import { listImports } from "../services/importService";
 import { listMonthlySummaries } from "../services/monthlyService";
-import { listDonorReconciliationStatuses } from "../services/reconciliation/creditReconciliationService";
+import {
+  buildDonorMonthKey,
+  listDonorMonthReconciliationStatuses,
+} from "../services/reconciliation/creditReconciliationService";
+import { getDonorInactivityStreakMap } from "../services/monthly/inactivityStreaks";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
@@ -159,6 +163,7 @@ export default function Monthly() {
     });
 
   const [reconciliationByDonor, setReconciliationByDonor] = useState(new Map());
+  const [inactivityByDonor, setInactivityByDonor] = useState(new Map());
 
   const loadAvailableImports = useCallback(async () => {
     const rows = await listImports({ status: "processed" });
@@ -197,27 +202,49 @@ export default function Monthly() {
     );
   }, [availableImports, filters.referenceMonth]);
 
+  // Keyed by (donor, month) so each row's "Crédito real" / "Saldo" describe
+  // the month that row is about. The previous all-time rollup repeated the
+  // donor's lifetime total on every one of their months.
   const loadReconciliationStatuses = useCallback(async () => {
     try {
-      const map = await listDonorReconciliationStatuses();
+      const map = await listDonorMonthReconciliationStatuses();
       setReconciliationByDonor(map);
     } catch (err) {
       logError("Monthly.reconciliation", err);
     }
   }, []);
 
+  // "Há quantos meses seguidos este doador não manda nota?" — rendered as a
+  // badge on the row so the user spots a stalled donor while working the
+  // month, instead of having to cross-reference months by hand.
+  const loadInactivityStreaks = useCallback(async () => {
+    try {
+      const map = await getDonorInactivityStreakMap();
+      setInactivityByDonor(map);
+    } catch (err) {
+      logError("Monthly.inactivityStreaks", err);
+    }
+  }, []);
+
   useEffect(() => {
     loadAvailableImports();
     loadReconciliationStatuses();
-  }, [loadAvailableImports, loadReconciliationStatuses]);
+    loadInactivityStreaks();
+  }, [loadAvailableImports, loadReconciliationStatuses, loadInactivityStreaks]);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([
       loadAvailableImports(),
       reloadSummaries(),
       loadReconciliationStatuses(),
+      loadInactivityStreaks(),
     ]);
-  }, [loadAvailableImports, reloadSummaries, loadReconciliationStatuses]);
+  }, [
+    loadAvailableImports,
+    reloadSummaries,
+    loadReconciliationStatuses,
+    loadInactivityStreaks,
+  ]);
 
   // Monthly cares about almost every database mutation (donor/import/abate
   // change can shift summary rows), but ignore notes — saving an annotation
@@ -631,7 +658,9 @@ export default function Monthly() {
     }
     return summaries.filter((summary) => {
       const status =
-        reconciliationByDonor.get(summary.donorId)?.status ?? "no-credit";
+        reconciliationByDonor.get(
+          buildDonorMonthKey(summary.donorId, summary.referenceMonth),
+        )?.status ?? "no-credit";
       return status === filters.reconciliationStatus;
     });
   }, [summaries, reconciliationByDonor, filters.reconciliationStatus]);
@@ -849,6 +878,8 @@ export default function Monthly() {
               onNavigate={handleOpenDonorProfile}
               onStatusChange={handleStatusChange}
               reconciliationByDonor={reconciliationByDonor}
+              inactivityByDonor={inactivityByDonor}
+              latestImportedMonth={availableImports[0]?.referenceMonth ?? ""}
               showReferenceMonth={!hasSelectedReferenceMonth}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}

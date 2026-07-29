@@ -481,6 +481,9 @@ export async function getDonorReconciliationSummary(donorId) {
  * Used by the monthly management view to flag donors with credit
  * inconsistencies without firing N queries. Returns a Map keyed by donor id
  * for O(1) lookup at render time.
+ *
+ * All-time rollup. For the per-month numbers the monthly rows actually
+ * describe, use `listDonorMonthReconciliationStatuses`.
  */
 export async function listDonorReconciliationStatuses() {
   const rows = await query(`
@@ -523,6 +526,98 @@ export async function listDonorReconciliationStatuses() {
     const totalAbated = toNumber(row.total_abated);
     statuses.set(String(row.id), {
       donorId: String(row.id),
+      totalCredit,
+      totalAbated,
+      difference: totalAbated - totalCredit,
+      status: computeReconciliationStatus(totalCredit, totalAbated),
+      matchedNoteCount: toNumber(row.matched_count),
+    });
+  }
+  return statuses;
+}
+
+/**
+ * Reconciliation snapshot broken down per (donor, reference month).
+ *
+ * The monthly listing renders one row per donor-month, so the all-time
+ * rollup above was showing the same credit/saldo on every month of a given
+ * donor — a donor with four months of history saw four identical "Crédito
+ * real" values. This keys on the month the numbers actually describe.
+ *
+ * Both sides are scoped by their own month column: credits through
+ * `donation_notes.reference_month` (the month a donation was imported
+ * under) and abatements through `monthly_donor_summary.reference_month`.
+ * They must move together — scoping one and not the other would compare a
+ * single month's credit against an all-time abatement and report bogus
+ * "exceeded" statuses.
+ *
+ * Returns a Map keyed `${donorId}|${referenceMonth}` (month as 'YYYY-MM-DD').
+ * A pair with neither credit nor applied abatement is simply absent, which
+ * the UI already renders as "—".
+ */
+export function buildDonorMonthKey(donorId, referenceMonth) {
+  return `${donorId ?? ""}|${String(referenceMonth ?? "").slice(0, 10)}`;
+}
+
+export async function listDonorMonthReconciliationStatuses() {
+  const rows = await query(`
+    WITH credit_by_month AS (
+      SELECT
+        donor_cpf_links.donor_id AS donor_id,
+        strftime(donation_notes.reference_month, '%Y-%m-%d') AS reference_month,
+        sum(credit_notes.credito) AS total_credit,
+        count(*) AS matched_count
+      FROM credit_reconciliation
+      INNER JOIN donation_notes
+        ON donation_notes.id = credit_reconciliation.donation_note_id
+      INNER JOIN donor_cpf_links
+        ON donor_cpf_links.cpf = donation_notes.cpf
+        AND donor_cpf_links.is_active = TRUE
+      INNER JOIN credit_notes
+        ON credit_notes.id = credit_reconciliation.credit_note_id
+      WHERE credit_reconciliation.match_status = 'matched'
+      GROUP BY
+        donor_cpf_links.donor_id,
+        strftime(donation_notes.reference_month, '%Y-%m-%d')
+    ),
+    abated_by_month AS (
+      SELECT
+        donor_id,
+        strftime(reference_month, '%Y-%m-%d') AS reference_month,
+        sum(abatement_amount) AS total_abated
+      FROM monthly_donor_summary
+      WHERE abatement_status = 'applied'
+      GROUP BY donor_id, strftime(reference_month, '%Y-%m-%d')
+    ),
+    donor_months AS (
+      SELECT donor_id, reference_month FROM credit_by_month
+      UNION
+      SELECT donor_id, reference_month FROM abated_by_month
+    )
+    SELECT
+      donor_months.donor_id,
+      donor_months.reference_month,
+      coalesce(credit_by_month.total_credit, 0) AS total_credit,
+      coalesce(credit_by_month.matched_count, 0) AS matched_count,
+      coalesce(abated_by_month.total_abated, 0) AS total_abated
+    FROM donor_months
+    LEFT JOIN credit_by_month
+      ON credit_by_month.donor_id = donor_months.donor_id
+      AND credit_by_month.reference_month = donor_months.reference_month
+    LEFT JOIN abated_by_month
+      ON abated_by_month.donor_id = donor_months.donor_id
+      AND abated_by_month.reference_month = donor_months.reference_month
+  `);
+
+  const statuses = new Map();
+  for (const row of rows) {
+    const totalCredit = toNumber(row.total_credit);
+    const totalAbated = toNumber(row.total_abated);
+    const donorId = String(row.donor_id);
+    const referenceMonth = String(row.reference_month ?? "");
+    statuses.set(buildDonorMonthKey(donorId, referenceMonth), {
+      donorId,
+      referenceMonth,
       totalCredit,
       totalAbated,
       difference: totalAbated - totalCredit,

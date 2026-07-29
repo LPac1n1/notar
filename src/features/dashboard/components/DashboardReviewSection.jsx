@@ -62,6 +62,12 @@ export default function DashboardReviewSection({
             helper="Doadores com mais abatido do que o crédito real recebido até agora."
             onClick={() => onOpenModal("inconsistency-exceeded-abatement")}
           />
+          <MetricCard
+            label="Pararam de doar"
+            value={formatInteger(inconsistencies.inactiveDonorCount)}
+            helper="Doadores sem nenhuma nota há 2 meses ou mais. Vale ligar e confirmar o cadastro."
+            onClick={() => onOpenModal("inconsistency-inactive-donors")}
+          />
         </div>
       )}
     </SectionCard>
