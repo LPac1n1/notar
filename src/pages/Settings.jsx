@@ -489,7 +489,7 @@ export default function Settings() {
             confirmLabel="Restaurar backup"
             feedbackMessage={error}
             isDisabled={isSubmitting}
-            onCancel={() => setIsImportBackupConfirmOpen(false)}
+            onClose={() => setIsImportBackupConfirmOpen(false)}
             onConfirm={handleImportBackup}
             tone="danger"
           />
@@ -503,7 +503,7 @@ export default function Settings() {
             description="Você será desconectado desta sessão. Para entrar novamente será necessário usar o link mágico enviado por e-mail."
             confirmLabel="Sair"
             isLoading={isSubmitting}
-            onCancel={() => setIsSignOutConfirmOpen(false)}
+            onClose={() => setIsSignOutConfirmOpen(false)}
             onConfirm={handleSignOut}
             tone="danger"
           />

@@ -497,7 +497,7 @@ export default function Demands() {
             confirmLabel="Remover demanda"
             feedbackMessage={error}
             isLoading={isDeleting}
-            onCancel={() => removeModal.close()}
+            onClose={() => removeModal.close()}
             onConfirm={handleConfirmRemove}
           />
         ) : null}

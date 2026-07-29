@@ -293,7 +293,7 @@ export default function Imports() {
             confirmLabel="Excluir importação"
             feedbackMessage={pageError}
             isLoading={donations.deletingId === donations.deleteModal.value.id}
-            onCancel={donations.deleteModal.close}
+            onClose={donations.deleteModal.close}
             onConfirm={donations.confirmDelete}
           />
         ) : null}
@@ -307,7 +307,7 @@ export default function Imports() {
             confirmLabel="Excluir importação"
             feedbackMessage={pageError}
             isLoading={credits.deletingId === credits.deleteModal.value.id}
-            onCancel={credits.deleteModal.close}
+            onClose={credits.deleteModal.close}
             onConfirm={credits.confirmDelete}
           />
         ) : null}

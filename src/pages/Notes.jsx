@@ -639,7 +639,7 @@ export default function Notes() {
             confirmLabel="Excluir anotação"
             feedbackMessage={error}
             isLoading={isDeleting}
-            onCancel={() => setNotePendingRemoval(null)}
+            onClose={() => setNotePendingRemoval(null)}
             onConfirm={handleConfirmRemove}
           />
         ) : null}

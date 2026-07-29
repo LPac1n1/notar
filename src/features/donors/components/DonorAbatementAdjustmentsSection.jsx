@@ -90,7 +90,7 @@ export default function DonorAbatementAdjustmentsSection({
           description={`Tem certeza que deseja remover o acumulado de ${pendingRemoval.referenceMonthFormatted}? Essa ação pode ser desfeita logo em seguida, pelo botão "Desfazer".`}
           confirmLabel="Remover"
           isLoading={isSubmitting}
-          onCancel={() => setPendingRemoval(null)}
+          onClose={() => setPendingRemoval(null)}
           onConfirm={handleConfirmRemoval}
         />
       ) : null}

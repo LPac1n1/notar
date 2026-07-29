@@ -665,7 +665,7 @@ export default function People() {
             confirmLabel="Remover pessoa"
             feedbackMessage={error}
             isLoading={isDeleting}
-            onCancel={() => removeModal.close()}
+            onClose={() => removeModal.close()}
             onConfirm={handleDelete}
           />
         ) : null}

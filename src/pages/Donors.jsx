@@ -752,7 +752,7 @@ export default function Donors() {
             confirmLabel="Remover doador"
             feedbackMessage={error}
             isLoading={isDeleting}
-            onCancel={() => setDonorPendingRemoval(null)}
+            onClose={() => setDonorPendingRemoval(null)}
             onConfirm={handleConfirmRemove}
           />
         ) : null}

@@ -207,7 +207,7 @@ export default function Trash() {
             confirmLabel="Apagar tudo"
             feedbackMessage={formError}
             isLoading={isSubmitting}
-            onCancel={() => setIsClearTrashConfirmOpen(false)}
+            onClose={() => setIsClearTrashConfirmOpen(false)}
             onConfirm={handleClearTrash}
             tone="danger"
           />
@@ -222,7 +222,7 @@ export default function Trash() {
             confirmLabel="Excluir permanentemente"
             feedbackMessage={formError}
             isLoading={isSubmitting}
-            onCancel={() => setTrashItemPendingPermanentDelete(null)}
+            onClose={() => setTrashItemPendingPermanentDelete(null)}
             onConfirm={handlePermanentDeleteTrashItem}
             tone="danger"
           />

@@ -20,7 +20,7 @@ export default function ConfirmModal({
   feedbackTone = "error",
   isLoading = false,
   loadingMessage = "",
-  onCancel,
+  onClose,
   onConfirm,
   title,
   tone = "danger",
@@ -32,7 +32,7 @@ export default function ConfirmModal({
       title={title}
       description={description}
       icon={<ConfirmModalIcon tone={tone} />}
-      onClose={isLoading ? undefined : onCancel}
+      onClose={isLoading ? undefined : onClose}
       size="sm"
     >
       <FeedbackMessage
@@ -53,7 +53,7 @@ export default function ConfirmModal({
       ) : null}
 
       <div className="flex flex-wrap justify-end gap-3">
-        <Button variant="subtle" onClick={onCancel} disabled={areActionsDisabled}>
+        <Button variant="subtle" onClick={onClose} disabled={areActionsDisabled}>
           Cancelar
         </Button>
         <Button variant={tone} onClick={onConfirm} disabled={areActionsDisabled}>
