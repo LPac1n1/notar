@@ -512,18 +512,30 @@ export default function People() {
           rows={4}
         />
       ) : !isLoading && people.length === 0 ? (
-        <EmptyState
-          title="Nenhuma pessoa sem papel de doador"
-          description="Cadastre pessoas que possam ser usadas como referência em vínculos de auxiliares."
-          action={
-            <Button
-              leftIcon={<PlusIcon className="h-4 w-4" />}
-              onClick={createModal.open}
-            >
-              Cadastrar pessoa
-            </Button>
-          }
-        />
+        JSON.stringify(filters) !== JSON.stringify(INITIAL_FILTERS) ? (
+          <EmptyState
+            title="Nenhuma pessoa encontrada"
+            description="Nenhuma pessoa corresponde aos filtros aplicados. Ajuste ou limpe os filtros para ver outros resultados."
+            action={
+              <Button variant="subtle" onClick={handleClearFilters}>
+                Limpar filtros
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="Nenhuma pessoa sem papel de doador"
+            description="Cadastre pessoas que possam ser usadas como referência em vínculos de auxiliares."
+            action={
+              <Button
+                leftIcon={<PlusIcon className="h-4 w-4" />}
+                onClick={createModal.open}
+              >
+                Cadastrar pessoa
+              </Button>
+            }
+          />
+        )
       ) : !isLoading ? (
         <ul className="space-y-2">
           <li>

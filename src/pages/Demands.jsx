@@ -325,18 +325,30 @@ export default function Demands() {
           rows={4}
         />
       ) : !isLoading && demands.length === 0 ? (
-        <EmptyState
-          title="Nenhuma demanda cadastrada"
-          description="Cadastre uma demanda para poder vinculá-la aos doadores."
-          action={
-            <Button
-              leftIcon={<PlusIcon className="h-4 w-4" />}
-              onClick={createModal.open}
-            >
-              Cadastrar demanda
-            </Button>
-          }
-        />
+        JSON.stringify(filters) !== JSON.stringify(INITIAL_DEMAND_FILTERS) ? (
+          <EmptyState
+            title="Nenhuma demanda encontrada"
+            description="Nenhuma demanda corresponde aos filtros aplicados. Ajuste ou limpe os filtros para ver outros resultados."
+            action={
+              <Button variant="subtle" onClick={handleClearFilters}>
+                Limpar filtros
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="Nenhuma demanda cadastrada"
+            description="Cadastre uma demanda para poder vinculá-la aos doadores."
+            action={
+              <Button
+                leftIcon={<PlusIcon className="h-4 w-4" />}
+                onClick={createModal.open}
+              >
+                Cadastrar demanda
+              </Button>
+            }
+          />
+        )
       ) : !isLoading ? (
         <ul className="space-y-2">
           <li>

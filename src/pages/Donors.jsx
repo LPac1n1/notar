@@ -644,18 +644,30 @@ export default function Donors() {
           rows={4}
         />
       ) : !isLoading && donors.length === 0 ? (
-        <EmptyState
-          title="Nenhum doador cadastrado"
-          description="Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."
-          action={
-            <Button
-              leftIcon={<PlusIcon className="h-4 w-4" />}
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              Cadastrar doador
-            </Button>
-          }
-        />
+        JSON.stringify(filters) !== JSON.stringify(INITIAL_DONOR_FILTERS) ? (
+          <EmptyState
+            title="Nenhum doador encontrado"
+            description="Nenhum doador corresponde aos filtros aplicados. Ajuste ou limpe os filtros para ver outros resultados."
+            action={
+              <Button variant="subtle" onClick={handleClearFilters}>
+                Limpar filtros
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="Nenhum doador cadastrado"
+            description="Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."
+            action={
+              <Button
+                leftIcon={<PlusIcon className="h-4 w-4" />}
+                onClick={() => setIsCreateModalOpen(true)}
+              >
+                Cadastrar doador
+              </Button>
+            }
+          />
+        )
       ) : !isLoading ? (
         <ul className="space-y-2">
           <li>
