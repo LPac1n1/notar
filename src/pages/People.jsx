@@ -591,6 +591,7 @@ export default function People() {
                 label="CPF"
                 name="cpf"
                 placeholder="CPF"
+                inputMode="numeric"
                 value={createForm.cpf}
                 onChange={handleFormChange(setCreateForm, setCreateFormErrors)}
                 error={createFormErrors.cpf}
@@ -629,6 +630,7 @@ export default function People() {
                 label="CPF"
                 name="cpf"
                 placeholder="CPF"
+                inputMode="numeric"
                 value={editForm.cpf}
                 onChange={handleFormChange(setEditForm, setEditFormErrors)}
                 error={editFormErrors.cpf}

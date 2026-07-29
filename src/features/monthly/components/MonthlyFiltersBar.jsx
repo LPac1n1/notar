@@ -21,7 +21,7 @@ export default function MonthlyFiltersBar({
   return (
     <>
       <div
-        className={`mb-5 grid gap-3 md:grid-cols-2 ${
+        className={`mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3 ${
           hasSelectedReferenceMonth ? "xl:grid-cols-5" : "xl:grid-cols-4"
         }`}
       >
@@ -83,7 +83,7 @@ export default function MonthlyFiltersBar({
         />
       </div>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <SelectInput
           label="Tipo"
           name="donorType"

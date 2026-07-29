@@ -25,7 +25,7 @@ export default function DashboardOverviewCards({
         role="status"
         aria-live="polite"
         aria-busy="true"
-        className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+        className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
         {Array.from({ length: 4 }).map((_, index) => (
           <SkeletonCard key={index} />
@@ -39,7 +39,7 @@ export default function DashboardOverviewCards({
   }
 
   return (
-    <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <MetricCard
         compact={compact}
         label="Doadores ativos"

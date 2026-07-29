@@ -21,7 +21,7 @@ export default function DashboardLatestMonthSection({ latestMonth, onOpenModal }
         />
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <MetricCard
               label="Notas no mês"
               value={formatInteger(latestMonth.totalNotes)}

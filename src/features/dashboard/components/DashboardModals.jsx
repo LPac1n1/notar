@@ -139,7 +139,7 @@ export default function DashboardModals({
         onClose={onClose}
         size="xl"
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <MetricCard label="Notas no mês" value={formatInteger(latestMonth.totalNotes)} />
           <MetricCard label="Valor por nota" value={formatCurrency(latestMonth.valuePerNote)} />
           <MetricCard label="Total a abater" value={formatCurrency(latestMonth.totalAbatement)} />

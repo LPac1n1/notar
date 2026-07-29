@@ -75,6 +75,7 @@ export default function DonorForm({
         label="CPF"
         name="cpf"
         placeholder="CPF"
+        inputMode="numeric"
         value={form.cpf}
         onChange={onChange}
         error={errors.cpf}
