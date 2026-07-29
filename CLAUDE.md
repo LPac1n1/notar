@@ -312,9 +312,19 @@ Depois da simplificação + identidade visual, usuário pediu um roadmap único 
 
 **Estado atual: as 7 fases do roadmap consolidado (pós-simplificação + identidade visual) estão completas.** Itens adiados intencionalmente ao longo do roadmap, cada um com justificativa na sua própria seção acima: paginação server-side do Monthly (Fase 5), tokens de cor dentro do namespace `@theme` do Tailwind (Fase 6), unificação dos hooks de import + autosave de notas (Fase 6), unificação de `DonorListItem` e máscara de moeda (Fase 7).
 
+## Bug fix — CPF bloqueado permanentemente após excluir pessoa/doador (commit 207)
+
+Usuário reportou: CPF de uma pessoa cadastrada e depois excluída continuava acusando "já existe"/"já está vinculado" tanto pra recriar a pessoa quanto pelo botão "Converter" (Pessoas → tornar em doador). Investigação por leitura de código + reprodução real contra DuckDB-Node (migrations reais, não só teoria) achou 3 causas concretas — nenhuma mutuamente exclusiva, os 3 fixes são complementares:
+
+- **`deletePerson` só bloqueava por doador ATIVO** (`personService.js`): um doador DESATIVADO (não excluído, `donors.is_active = FALSE`) ainda referencia a pessoa via `person_id`, mas o guard de `deletePerson` só checava `is_active = TRUE`. Dava pra excluir a pessoa com um doador inativo ainda pendurado, deixando `donors`/`donor_cpf_links` órfãos (`person_id` apontando pra um registro que não existe mais) e o CPF bloqueado pra sempre. Corrigido: guard agora bloqueia por QUALQUER doador vinculado (ativo ou inativo), com mensagem distinta orientando a reativar/excluir o doador pela tela de Doadores antes de remover a pessoa.
+- **`createDonor` não era atômico** (`donorWriter.js`): `resolveCreatePersonContext` podia criar (e commitar imediatamente, fora de qualquer transaction) uma pessoa nova ANTES de validações que ainda podiam falhar (demanda inexistente, auxiliar já vinculado, etc.). Se essas validações falhassem depois, a pessoa recém-criada não era desfeita — sobrava uma "pessoa fantasma" bloqueando aquele CPF pra sempre, com uma mensagem de erro que não tinha nada a ver com o efeito colateral real (ex.: "selecione uma demanda" não avisa que uma pessoa ficou órfã no banco). Corrigido: `resolveCreatePersonContext` + todas as validações + os 2 INSERTs finais agora rodam dentro de uma única `runInTransaction` — qualquer falha desfaz tudo, inclusive a pessoa. Mensagens de erro pro usuário continuam idênticas; só o estado do banco em caso de falha que mudou.
+- **`ensureDonationCpfIsAvailable` usava LEFT JOIN** (`donorChecks.js`): uma linha órfã em `donor_cpf_links` (sem `donors` correspondente — por qualquer causa histórica, incluindo as duas acima) bloqueava o CPF pra sempre e era invisível na tela de Doadores (que só encontra por CPF via `EXISTS` contra um `donors.id` existente). Trocado pra INNER JOIN — link órfão deixa de contar como "CPF em uso". Esse é o fix que resolve retroativamente qualquer órfão pré-existente assim que o usuário atualizar o app, sem precisar de ação manual — não foi possível confirmar qual das 3 causas gerou o caso específico reportado (dado é local-first, sem acesso ao banco do usuário em produção).
+
+2 testes de integração novos em `tests/migrations.test.js`, reproduzindo cada cenário contra DuckDB-Node real com as migrations reais (não SQL inventado). 121/121 testes, 15/15 e2e — incluindo `auxiliary-reference-person.spec.js`, que exercita "Converter pessoa em doador" ponta a ponta e confirma zero regressão no fluxo normal — lint 0 erros, build OK.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 205**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 207**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
