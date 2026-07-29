@@ -301,9 +301,20 @@ Depois da simplificação + identidade visual, usuário pediu um roadmap único 
 - **Unificar hooks de import (`useDonationImportFlow`/`useCreditImportFlow`) e autosave de notas — adiados de propósito**: mesmo perfil de risco da paginação do Monthly (779 linhas de pipeline de import CRÍTICO, funcionando, sem teste de regressão dedicado). O autosave de notas já tinha sido adiado numa fase anterior pela mesma razão (duas máquinas de estado paralelas entrelaçadas, sem cobertura E2E). Mantive a mesma decisão sem reabrir a pergunta ao usuário, já que o precedente documentado é claro.
 - 119/119 testes, 15/15 e2e (múltiplas rodadas), lint 0 erros, build OK em cada commit.
 
+### Fase 7 — Polimento final ✅ CONCLUÍDA (commits 204-205) — 2 itens investigados e descartados
+
+- **Breakpoint `lg:` ausente em grids de filtro/estatística** (commit 204): confirmado ao vivo por screenshot que grids pulando direto de `md:grid-cols-2` pra `xl:grid-cols-4`/`5` deixavam uma "zona morta" entre 1024-1279px onde a contagem de colunas não acompanhava a largura disponível — 2 colunas até 1280px, depois pulava direto pra 4/5. Adicionado `lg:grid-cols-3` em 6 grids: `MonthlyFiltersBar.jsx` (a versão com classe dinâmica por template literal + a estática), `DashboardOverviewCards.jsx` (2 grids), `DashboardLatestMonthSection.jsx`, `DashboardModals.jsx` (grid do modal de detalhe do último mês) e `DashboardReconciliationSection.jsx` (grid dos 5 cards de conciliação).
+- **`inputMode="numeric"` em campos de CPF** (commit 204): teclado numérico em mobile pros 3 pontos de entrada de CPF restantes (`DonorForm.jsx`, compartilhado entre criar/editar doador; `People.jsx` criar + editar).
+- **Distinção de empty state "sem cadastro" vs "filtro sem resultado"** (commit 205): `Donors.jsx`/`People.jsx`/`Demands.jsx` mostravam o MESMO empty state ("nada cadastrado, clique aqui pra criar o primeiro") tanto quando a lista estava genuinamente vazia quanto quando só os filtros aplicados não bateram com nada — usuário via um CTA de "cadastrar" quando só precisava limpar um filtro. Corrigido comparando `JSON.stringify(filters)` contra o `INITIAL_*_FILTERS` de cada página: se diferente, mostra "Nenhum X encontrado" + botão "Limpar filtros" (reusa o `handleClearFilters` que cada página já tinha); se igual (filtros no estado inicial), mantém o empty state original de "cadastre o primeiro".
+- **Unificar `DonorListItem` com o padrão de `PersonListItem`/Demands/Trash — investigado e descartado**: `DonorListItem` usa um `DonorActionMenu` (dropdown mobile) porque expõe 5 ações; os outros usam botões sempre visíveis porque têm só 2-3 ações. A diferença de padrão é justificada pela diferença de contagem de ações, não é inconsistência acidental. Não fiz.
+- **Máscara de moeda no campo `valuePerNote` — investigado e descartado**: ganho é cosmético (formatar dígitos como centavos enquanto digita); o risco é mexer em parsing de valor monetário que já funciona e já tem teste dedicado (`parseValuePerNote`). Custo/benefício não favorece a mudança agora.
+- 119/119 testes (nenhum novo — mudanças são JSX condicional/classe CSS, sem lógica nova), 15/15 e2e, lint 0 erros, build OK em cada commit.
+
+**Estado atual: as 7 fases do roadmap consolidado (pós-simplificação + identidade visual) estão completas.** Itens adiados intencionalmente ao longo do roadmap, cada um com justificativa na sua própria seção acima: paginação server-side do Monthly (Fase 5), tokens de cor dentro do namespace `@theme` do Tailwind (Fase 6), unificação dos hooks de import + autosave de notas (Fase 6), unificação de `DonorListItem` e máscara de moeda (Fase 7).
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 151**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 205**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
