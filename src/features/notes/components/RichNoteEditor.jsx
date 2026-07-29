@@ -131,11 +131,23 @@ function createEmptyList(tagName) {
   return { list, item };
 }
 
+function markChecklistAccessibility(element, checked) {
+  element.setAttribute("role", "checkbox");
+  element.setAttribute("aria-checked", checked ? "true" : "false");
+  // Ctrl+Enter toggles the checklist item the caret is inside (see
+  // handleKeyDown) — plain Enter/Space keep their normal text-editing
+  // meaning, so the toggle can't live on those. `aria-keyshortcuts` lets
+  // assistive tech announce the actual shortcut for a keyboard/AT user who
+  // can't see the mouse-only checkbox glyph in the ::before pseudo-element.
+  element.setAttribute("aria-keyshortcuts", "Control+Enter");
+}
+
 function createChecklist(checked = false) {
   const checklist = document.createElement("div");
   checklist.dataset.noteChecklist = "true";
   checklist.dataset.checked = checked ? "true" : "false";
   checklist.innerHTML = "<br>";
+  markChecklistAccessibility(checklist, checked);
   return checklist;
 }
 
@@ -414,15 +426,16 @@ export default function RichNoteEditor({
     document.execCommand(
       "insertHTML",
       false,
-      '<div data-note-checklist="true" data-checked="false"><br></div>',
+      '<div data-note-checklist="true" data-checked="false" role="checkbox" aria-checked="false" aria-keyshortcuts="Control+Enter"><br></div>',
     );
     emitChange();
     saveSelection();
   };
 
   const toggleChecklist = (checklistElement) => {
-    checklistElement.dataset.checked =
-      checklistElement.dataset.checked === "true" ? "false" : "true";
+    const nextChecked = checklistElement.dataset.checked !== "true";
+    checklistElement.dataset.checked = nextChecked ? "true" : "false";
+    checklistElement.setAttribute("aria-checked", nextChecked ? "true" : "false");
     emitChange();
     saveSelection();
   };
@@ -524,7 +537,7 @@ export default function RichNoteEditor({
   };
 
   const handleKeyDown = (event) => {
-    if (event.key !== "Enter" || event.shiftKey) {
+    if (event.key !== "Enter") {
       return;
     }
 
@@ -535,6 +548,20 @@ export default function RichNoteEditor({
     );
 
     if (!checklistElement) {
+      return;
+    }
+
+    // Ctrl+Enter toggles the checklist item under the caret instead of
+    // breaking the line — the only keyboard path to check/uncheck an item,
+    // since the mouse path only responds to clicks within 28px of the left
+    // edge (see handleMouseDown) and there's no per-item Tab stop.
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      toggleChecklist(checklistElement);
+      return;
+    }
+
+    if (event.shiftKey) {
       return;
     }
 
@@ -554,6 +581,7 @@ export default function RichNoteEditor({
     nextChecklist.dataset.noteChecklist = "true";
     nextChecklist.dataset.checked = "false";
     nextChecklist.innerHTML = "<br>";
+    markChecklistAccessibility(nextChecklist, false);
     checklistElement.after(nextChecklist);
     placeCaretAtEnd(nextChecklist);
     emitChange();

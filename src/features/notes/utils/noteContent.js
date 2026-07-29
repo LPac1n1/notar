@@ -152,7 +152,8 @@ function sanitizeNode(node) {
 
   if (tagName === "DIV" && node.dataset.noteChecklist === "true") {
     const isChecked = node.dataset.checked === "true";
-    return `<div data-note-checklist="true" data-checked="${isChecked ? "true" : "false"}">${children || "<br>"}</div>`;
+    const checkedAttr = isChecked ? "true" : "false";
+    return `<div data-note-checklist="true" data-checked="${checkedAttr}" role="checkbox" aria-checked="${checkedAttr}" aria-keyshortcuts="Control+Enter">${children || "<br>"}</div>`;
   }
 
   const safeTagName = tagName.toLowerCase();
