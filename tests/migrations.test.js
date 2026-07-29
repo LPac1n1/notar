@@ -1817,3 +1817,105 @@ test("dashboard exceeded-abatement query flags donors abated past their matched 
     conn.close();
   }
 });
+
+test("deletePerson guard blocks removal when the person still has an inactive donor linked", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO people (id, name, cpf, is_active, updated_at)
+      VALUES ('person-1', 'FULANO DE TAL', '36499229830', TRUE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, is_active, updated_at)
+      VALUES ('donor-1', 'person-1', 'FULANO DE TAL', '36499229830', 'Demanda X', 'holder', FALSE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, updated_at)
+      VALUES ('donor-1-titular', 'donor-1', 'FULANO DE TAL', '36499229830', 'holder', TRUE, CURRENT_TIMESTAMP)
+    `);
+
+    // Mirrors personService.js's deletePerson guard query.
+    const linkedDonorRows = (
+      await conn.query(`
+        SELECT id, is_active
+        FROM donors
+        WHERE person_id = 'person-1'
+        LIMIT 1
+      `)
+    ).toArray();
+
+    // An inactive (deactivated, not deleted) donor must still block the
+    // person from being removed — deleting the person while a donor record
+    // still references it would strand `donor_cpf_links`/`donors` rows that
+    // point at a `person_id` which no longer exists, permanently blocking
+    // that CPF from ever being registered again with no UI path to fix it.
+    assert.equal(linkedDonorRows.length, 1);
+    assert.equal(Boolean(linkedDonorRows[0].is_active), false);
+
+    // The correct unblock path — delete the donor first (mirrors deleteDonor's
+    // real cleanup) — must fully free the CPF.
+    await conn.query(`DELETE FROM donor_cpf_links WHERE donor_id = 'donor-1'`);
+    await conn.query(`DELETE FROM donors WHERE id = 'donor-1'`);
+    await conn.query(`DELETE FROM people WHERE id = 'person-1'`);
+
+    const remainingLinks = (
+      await conn.query(
+        `SELECT id FROM donor_cpf_links WHERE cpf = '36499229830' LIMIT 1`,
+      )
+    ).toArray();
+    assert.equal(remainingLinks.length, 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("createDonor rolls back the newly-inserted person when a later validation step fails", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Mirrors donorWriter.js's createDonor(): resolveCreatePersonContext's
+    // INSERT INTO people and every validation check after it now share one
+    // transaction, so a later throw (e.g. an invalid/deleted demand) rolls
+    // back the person insert too instead of leaving an orphan that silently
+    // blocks that CPF from ever being registered again.
+    await conn.query("BEGIN TRANSACTION");
+    let rejected = false;
+    try {
+      await conn.query(`
+        INSERT INTO people (id, name, cpf, is_active, updated_at)
+        VALUES ('person-2', 'CICLANO DA SILVA', '11144477735', TRUE, CURRENT_TIMESTAMP)
+      `);
+      throw new Error("A demanda selecionada não existe mais.");
+    } catch {
+      rejected = true;
+      await conn.query("ROLLBACK");
+    }
+
+    assert.equal(rejected, true);
+
+    const orphanRows = (
+      await conn.query(
+        `SELECT id FROM people WHERE cpf = '11144477735' AND is_active = TRUE LIMIT 1`,
+      )
+    ).toArray();
+    assert.equal(orphanRows.length, 0);
+
+    // A retry with the same CPF must proceed cleanly (no leftover person
+    // blocking a fresh INSERT or a legitimate reconciliation).
+    await conn.query(`
+      INSERT INTO people (id, name, cpf, is_active, updated_at)
+      VALUES ('person-2-retry', 'CICLANO DA SILVA', '11144477735', TRUE, CURRENT_TIMESTAMP)
+    `);
+    const retryRows = (
+      await conn.query(
+        `SELECT id FROM people WHERE cpf = '11144477735' AND is_active = TRUE`,
+      )
+    ).toArray();
+    assert.equal(retryRows.length, 1);
+  } finally {
+    conn.close();
+  }
+});

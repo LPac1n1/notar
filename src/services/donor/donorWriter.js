@@ -54,45 +54,56 @@ export async function createDonor({
     await ensureDonationCpfIsAvailable(normalizedInputCpf);
   }
 
-  const person = await resolveCreatePersonContext({
-    personId,
-    name,
-    cpf,
-  });
+  let person;
+  let holderContext;
+  let resolvedDemand;
+  let normalizedStartDate;
 
-  const existingDonorForPerson = await findActiveDonorByPersonId(person.id);
-
-  if (existingDonorForPerson) {
-    throw new Error("Esta pessoa já está cadastrada como doador.");
-  }
-
-  if (normalizedDonorType === "auxiliary") {
-    await ensurePersonCanBeAuxiliary(person.id);
-  }
-
-  if (personId || person.cpfValue !== normalizedInputCpf) {
-    await ensureDonationCpfIsAvailable(person.cpfValue);
-  }
-
-  const holderContext =
-    normalizedDonorType === "auxiliary"
-      ? await findHolderPersonContext({
-          holderPersonId,
-          holderDonorId,
-        })
-      : null;
-
-  if (normalizedDonorType === "auxiliary" && holderContext?.id === person.id) {
-    throw new Error("Um auxiliar não pode ser vinculado a si mesmo.");
-  }
-
-  const resolvedDemand = await ensureDemandExists(
-    demand.trim() || holderContext?.holderDemand || "",
-    { required: normalizedDonorType === "holder" },
-  );
-  const normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
-
+  // `resolveCreatePersonContext` can INSERT a brand-new `people` row (when no
+  // existing person matches the CPF). That write and every validation check
+  // below it must share one transaction — otherwise a later throw (e.g. an
+  // invalid demand) leaves the just-created person permanently committed,
+  // silently blocking that CPF from ever being registered again even though
+  // the donor creation itself reported failure.
   await runInTransaction(async () => {
+    person = await resolveCreatePersonContext({
+      personId,
+      name,
+      cpf,
+    });
+
+    const existingDonorForPerson = await findActiveDonorByPersonId(person.id);
+
+    if (existingDonorForPerson) {
+      throw new Error("Esta pessoa já está cadastrada como doador.");
+    }
+
+    if (normalizedDonorType === "auxiliary") {
+      await ensurePersonCanBeAuxiliary(person.id);
+    }
+
+    if (personId || person.cpfValue !== normalizedInputCpf) {
+      await ensureDonationCpfIsAvailable(person.cpfValue);
+    }
+
+    holderContext =
+      normalizedDonorType === "auxiliary"
+        ? await findHolderPersonContext({
+            holderPersonId,
+            holderDonorId,
+          })
+        : null;
+
+    if (normalizedDonorType === "auxiliary" && holderContext?.id === person.id) {
+      throw new Error("Um auxiliar não pode ser vinculado a si mesmo.");
+    }
+
+    resolvedDemand = await ensureDemandExists(
+      demand.trim() || holderContext?.holderDemand || "",
+      { required: normalizedDonorType === "holder" },
+    );
+    normalizedStartDate = normalizeOptionalStartDate(donationStartDate);
+
     await executePrepared(
       `
       INSERT INTO donors (

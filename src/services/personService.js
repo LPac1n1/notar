@@ -391,16 +391,19 @@ export async function deletePerson(id) {
     return;
   }
 
-  const activeDonor = await query(`
-    SELECT id
+  const linkedDonor = await query(`
+    SELECT id, is_active
     FROM donors
     WHERE person_id = '${escapeSqlString(id)}'
-      AND is_active = TRUE
     LIMIT 1
   `);
 
-  if (activeDonor.length > 0) {
-    throw new Error("Esta pessoa já possui um cadastro de doador ativo.");
+  if (linkedDonor.length > 0) {
+    throw new Error(
+      linkedDonor[0].is_active
+        ? "Esta pessoa já possui um cadastro de doador ativo."
+        : "Esta pessoa possui um cadastro de doador inativo vinculado. Reative ou exclua o doador pela tela de Doadores antes de remover esta pessoa.",
+    );
   }
 
   const linkedAuxiliaries = await query(`

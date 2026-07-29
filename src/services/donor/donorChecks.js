@@ -25,6 +25,10 @@ export async function ensureDonationCpfIsAvailable(
     params.push(ignoreDonorId);
   }
 
+  // INNER JOIN on purpose: a `donor_cpf_links` row whose `donor_id` no longer
+  // matches any `donors` row is orphaned data (e.g. from a donor deleted
+  // through a path that didn't clean up in sync) and must not permanently
+  // block that CPF from being registered again.
   const existingLink = await queryPrepared(
     `
       SELECT
@@ -33,7 +37,7 @@ export async function ensureDonationCpfIsAvailable(
         donor_cpf_links.name,
         donors.name AS donor_name
       FROM donor_cpf_links
-      LEFT JOIN donors
+      INNER JOIN donors
         ON donors.id = donor_cpf_links.donor_id
       WHERE ${conditions.join(" AND ")}
       LIMIT 1
