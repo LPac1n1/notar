@@ -322,9 +322,26 @@ Usuário reportou: CPF de uma pessoa cadastrada e depois excluída continuava ac
 
 2 testes de integração novos em `tests/migrations.test.js`, reproduzindo cada cenário contra DuckDB-Node real com as migrations reais (não SQL inventado). 121/121 testes, 15/15 e2e — incluindo `auxiliary-reference-person.spec.js`, que exercita "Converter pessoa em doador" ponta a ponta e confirma zero regressão no fluxo normal — lint 0 erros, build OK.
 
+## Rodada de melhorias pedidas pelo usuário (commits 209-210)
+
+Quatro pedidos diretos: auxiliares visíveis no titular, rastreio de quem parou de doar, crédito por mês, e correção de problemas visuais.
+
+**Commit 209 — dados e features**:
+- **Auxiliares no card do titular**: novo `MONTHLY_AUXILIARY_SUBSELECT` em `monthly/sharedFragments.js` (correlaciona `donors.person_id` ← `auxiliary_donors.holder_person_id`), embutido em `MONTHLY_DONOR_PROJECTION` (cobre `listByMonth` + `listHistorical`) e também na query de `donorRows` do `listByMonth` (o caminho "sem doação no mês", que não usa a projection). `parseAuxiliaries` + campo `auxiliaries` nos 3 mappers. Render: bloco "N auxiliar(es) vinculado(s)" com os nomes, espelhando o "Vinculado a:" que já existia no sentido oposto.
+- **Crédito por mês** (era o total de TODOS os meses): `listDonorReconciliationStatuses` voltou a ser só o rollup all-time (consumido por `countDonorReconciliationIssues`); novo `listDonorMonthReconciliationStatuses()` agrega por `(doador, mês)` com CTEs `credit_by_month` (via `donation_notes.reference_month`) + `abated_by_month` (via `monthly_donor_summary.reference_month`) unidas por `UNION` das chaves. Os DOIS lados são escopados juntos — escopar só o crédito compararia um mês contra o abatimento all-time e geraria "excedido" falso. `buildDonorMonthKey()` exportado para o lookup não divergir entre o filtro de `Monthly.jsx` e o `MonthlySummaryList`. Corrige também a visão histórica, onde cada linha é um mês mas mostrava o total de vida do doador repetido.
+- **Meses consecutivos sem doar**: `services/monthly/inactivityStreaks.js` + `inactivityStreaksSql.js` (SQL isolado, zero imports, para o teste rodar a query REAL contra DuckDB-Node em vez de espelhá-la e divergir). Grade de meses vem de `imports` processados (não do calendário — mês sem planilha não é evidência de que alguém parou). Atividade resolvida por CPF via `import_cpf_summary` → `donor_cpf_links`, NÃO por `monthly_donor_summary`: as linhas de summary são por titular (nota de auxiliar sobe pro titular), então usar summary reportaria todo auxiliar como "nunca doou" e esconderia um titular que parou enquanto o auxiliar continua. Meses anteriores ao `donation_start_date` são excluídos. Superfícies: badge no card da Gestão Mensal (só no mês mais recente — a métrica é "estado atual", exibi-la num mês antigo seria mentira) + card "Pararam de doar" e modal-lista de contato no Dashboard (lista completa, não amostra de 5). `describeInactivity()` compartilhado para o mesmo doador nunca aparecer vermelho num lugar e laranja no outro.
+- 4 testes de integração novos (2 de streak incluindo o caso do auxiliar, cobrindo também que import `pending` não entra na grade e que `donation_start_date` limita os meses elegíveis).
+
+**Commit 210 — visual**:
+- **Colunas quebradas/sobrepostas no card de doador** (o problema mais grave, confirmado por screenshot): as 5-6 métricas viviam numa coluna `minmax(0,1fr)` do meio de um grid de 3 colunas — sobravam ~55px por métrica e "R$ 22.222,08" / "Crédito" / "Saldo" se sobrepunham literalmente. O grid virou 2 colunas (identidade | ações) e as métricas ganharam uma faixa de largura total separada por divisória, com ~180px cada.
+- **Seleção verde com borda azul**: `--accent-2-soft` (verde) era usado como fundo de seleção junto de uma borda `--accent` (índigo) — dois matizes brigando, e o verde ainda colidia com o significado de "sucesso/realizado" dos badges do mesmo card. Novo token `--accent-selected` (índigo sutil, ambos os temas). Mesmo bug corrigido na aba ativa e na linha do mês corrente de `MonthlyImportsOverviewSection`.
+- **Padronização do token de sucesso**: `--accent-2`/`--accent-2-soft` eram um alias legado com nome de "acento secundário" usado como "sucesso" em ~15 arquivos. Criado `--success-soft` semântico, os 15 usos migrados e os aliases legados removidos (auditado: zero consumidores de `var(--accent-2)` puro).
+- **Overflow no Dashboard/toolbar**: `OverviewMetric` dividia largura com o ícone, deixando ~110px pro número — "R$ 1.938.259,20" vazava do card. Ícone movido pra linha do rótulo, valor usa a largura inteira. `MetricValue` ganhou tamanho responsivo (`text-[2rem] lg:text-[2.5rem]`) + `break-words` + `max-w-full`; `MetricField` idem. `MonthlySummaryToolbar` ganhou o `lg:grid-cols-3` que faltava.
+- 123/123 testes, 15/15 e2e, lint 0 erros, build OK. Verificação visual antes/depois por screenshot com dataset semeado (nomes longos, R$ 1,9M, titular com 2 auxiliares, 4 meses com lacunas).
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 207**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 210**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
