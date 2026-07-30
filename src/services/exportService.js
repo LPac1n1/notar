@@ -6,8 +6,10 @@ import {
   listReconciliationByDonor,
   listReconciliationPairs,
 } from "./reconciliation/creditReconciliationService.js";
+import { createZipArchive } from "../features/reports/utils/simpleZip.js";
 import { buildCsvContent } from "../utils/csv.js";
 import { downloadFile } from "../utils/download.js";
+import { buildSlug } from "../utils/slug.js";
 
 // `incomplete` was retired — surplus credit folds into `ok` because the
 // user established that credit > abated is normal NFP behaviour. Kept
@@ -24,10 +26,13 @@ const MATCH_STATUS_LABEL = {
   divergent: "Valor divergente",
 };
 
+// UTF-8 BOM. Sem ele o Excel abre o CSV em ANSI e quebra os acentos.
+const CSV_BOM = "\uFEFF";
+
 function downloadCsv(fileName, csvContent) {
   downloadFile({
     fileName,
-    content: `\uFEFF${csvContent}`,
+    content: `${CSV_BOM}${csvContent}`,
     mimeType: "text/csv;charset=utf-8",
   });
 }
@@ -250,30 +255,83 @@ export async function exportReconciliationPairsCsv(filters = {}) {
   return { rowCount: rows.length };
 }
 
+const ABATEMENT_SHEET_COLUMNS = [
+  { key: "cpf", label: "CPF" },
+  { key: "donorName", label: "Nome completo" },
+  { key: "demand", label: "Demanda" },
+  { key: "description", label: "Descrição" },
+  { key: "notesCount", label: "Quantidade de doações" },
+];
+
 /**
  * Planilha de abatimento para importar no sistema externo que dá baixa nas
  * doações. Uma linha por CPF de doador com notas no mês — inclusive auxiliares,
  * que no resumo mensal aparecem somados ao titular mas aqui precisam de linha
  * própria porque o abatimento lá é por CPF.
  *
+ * Sai UM ARQUIVO POR DEMANDA, porque a importação no outro sistema é feita
+ * demanda a demanda. Demandas sem nenhuma doação no mês simplesmente não
+ * geram arquivo — a query já só devolve CPFs com notas, então o agrupamento
+ * nunca produz um grupo vazio.
+ *
+ * Com mais de uma demanda os arquivos vão num .zip (mesmo padrão dos
+ * relatórios PDF/JPEG por demanda); com uma só, baixa o CSV direto.
+ *
  * A coluna "Descrição" já vem pronta no formato que o outro sistema espera
  * (ver `buildAbatementDescription`), então o operador só sobe o arquivo.
  */
 export async function exportAbatementSheetCsv({ referenceMonth } = {}) {
   const rows = await listAbatementSheetRows({ referenceMonth });
-  const csvContent = buildCsvContent(
-    [
-      { key: "cpf", label: "CPF" },
-      { key: "donorName", label: "Nome completo" },
-      { key: "demand", label: "Demanda" },
-      { key: "description", label: "Descrição" },
-      { key: "notesCount", label: "Quantidade de doações" },
-    ],
-    rows,
-  );
+  const monthSuffix = referenceMonth
+    ? `-${String(referenceMonth).slice(0, 7)}`
+    : "";
 
-  const monthSuffix = referenceMonth ? `-${String(referenceMonth).slice(0, 7)}` : "";
-  downloadCsv(`notar-abatimento${monthSuffix}.csv`, csvContent);
+  if (rows.length === 0) {
+    return { rowCount: 0, demandCount: 0, fileNames: [] };
+  }
 
-  return { rowCount: rows.length };
+  // Agrupa preservando a ordem em que as demandas aparecem (a query já vem
+  // ordenada por nome do doador, então o Map mantém uma ordem estável).
+  const rowsByDemand = new Map();
+  for (const row of rows) {
+    const demandName = row.demand?.trim() || "Sem demanda";
+    if (!rowsByDemand.has(demandName)) {
+      rowsByDemand.set(demandName, []);
+    }
+    rowsByDemand.get(demandName).push(row);
+  }
+
+  const files = Array.from(rowsByDemand.entries())
+    .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
+    .map(([demandName, demandRows]) => ({
+      fileName: `notar-abatimento-${buildSlug(demandName) || "demanda"}${monthSuffix}.csv`,
+      demandName,
+      rowCount: demandRows.length,
+      csvContent: buildCsvContent(ABATEMENT_SHEET_COLUMNS, demandRows),
+    }));
+
+  if (files.length === 1) {
+    downloadCsv(files[0].fileName, files[0].csvContent);
+  } else {
+    const encoder = new TextEncoder();
+    const archiveName = `notar-abatimento${monthSuffix}.zip`;
+    downloadFile({
+      fileName: archiveName,
+      // BOM por arquivo: cada CSV é aberto individualmente no Excel depois de
+      // descompactado, e sem ele os acentos quebram — igual ao `downloadCsv`.
+      content: createZipArchive(
+        files.map((file) => ({
+          name: file.fileName,
+          bytes: encoder.encode(CSV_BOM + file.csvContent),
+        })),
+      ),
+      mimeType: "application/zip",
+    });
+  }
+
+  return {
+    rowCount: rows.length,
+    demandCount: files.length,
+    fileNames: files.map((file) => file.fileName),
+  };
 }

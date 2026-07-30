@@ -13,6 +13,7 @@ import PaginationControls from "../components/ui/PaginationControls";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import SelectInput from "../components/ui/SelectInput";
+import TextInput from "../components/ui/TextInput";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import {
   ACTIVE_STATUS_OPTIONS,
@@ -63,6 +64,7 @@ const EMPTY_DONOR_FORM = {
 };
 
 const INITIAL_DONOR_FILTERS = {
+  search: "",
   donorId: "",
   cpf: "",
   demand: "",
@@ -115,7 +117,7 @@ export default function Donors() {
     initialPageSize: location.state?.donorPageSize ?? 25,
     errorMessage: "Não foi possível carregar os doadores.",
     scope: "DonorsPage",
-    neutralizedKeys: ["donorId", "cpf", "demand"],
+    neutralizedKeys: ["search", "donorId", "cpf", "demand"],
   });
   const { dataSyncFeedback, showDataRefreshLoading } =
     useDataRefreshIndicator(isRefreshing);
@@ -556,6 +558,16 @@ export default function Donors() {
       </div>
 
       <SectionCard title="Buscar doadores" className="mb-4">
+        <TextInput
+          label="Busca"
+          name="search"
+          type="search"
+          placeholder="Digite nome, CPF ou demanda..."
+          value={filters.search}
+          onChange={handleFilterChange}
+          description="Busca por parte do texto. Os campos abaixo filtram por seleção exata."
+          wrapperClassName="mb-3"
+        />
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <SelectInput
             label="Doador"

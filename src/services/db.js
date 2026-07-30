@@ -22,7 +22,11 @@ export {
   getStorageInfoSnapshot,
 } from "./db/events.js";
 
-export { escapeSqlString, normalizeCpfSqlExpression } from "./db/sql.js";
+export {
+  buildTextSearchCondition,
+  escapeSqlString,
+  normalizeCpfSqlExpression,
+} from "./db/sql.js";
 
 export {
   initDB,

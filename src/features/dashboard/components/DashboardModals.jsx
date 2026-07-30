@@ -415,39 +415,6 @@ export default function DashboardModals({
     );
   }
 
-  if (activeModal === "inconsistency-exceeded-abatement") {
-    return (
-      <Modal
-        title="Abatimento acima do crédito"
-        description="Doadores cujo total abatido (realizado) já ultrapassa o crédito real que a NFP liberou para eles até o momento."
-        icon={<WarningIcon className="h-5 w-5" />}
-        onClose={onClose}
-      >
-        <DetailList emptyMessage="Nenhum doador com abatimento acima do crédito.">
-          {inconsistencies.exceededAbatementSamples.map((item) => (
-            <div
-              key={item.donorId}
-              className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-            >
-              <CopyableDonorName
-                name={item.donorName}
-                onClick={() => openDonorProfile(item.donorId)}
-              />
-              <p className="mt-2 text-sm text-[var(--muted)]">
-                Abatido: {formatCurrency(item.totalApplied)} · Crédito real:{" "}
-                {formatCurrency(item.totalCredit)}
-              </p>
-              <p className="mt-1 text-sm text-[var(--danger)]">
-                {formatCurrency(item.totalApplied - item.totalCredit)} a mais
-                que o crédito gerado.
-              </p>
-            </div>
-          ))}
-        </DetailList>
-      </Modal>
-    );
-  }
-
   if (activeModal === "inconsistency-inactive-donors") {
     return (
       <Modal

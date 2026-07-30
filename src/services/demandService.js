@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import {
+  buildTextSearchCondition,
   escapeSqlString,
   execute,
   executePrepared,
@@ -25,13 +26,22 @@ import { normalizeDemandName } from "../utils/normalize";
 const LIST_DEMANDS_TTL_MS = 30_000;
 
 async function _listDemandsUncached(filters = {}) {
-  const { demandId = "" } = filters;
+  const { demandId = "", search = "" } = filters;
   const conditions = [];
   const params = [];
 
   if (demandId.trim()) {
     conditions.push("id = ?");
     params.push(demandId.trim());
+  }
+
+  const searchCondition = buildTextSearchCondition(search, [
+    { expression: "demands.name" },
+  ]);
+
+  if (searchCondition) {
+    conditions.push(searchCondition.condition);
+    params.push(...searchCondition.params);
   }
 
   const whereClause =
@@ -74,7 +84,11 @@ async function _listDemandsUncached(filters = {}) {
 }
 
 export const listDemands = withCache(
-  (filters = {}) => `listDemands:${filters?.demandId ?? ""}`,
+  // A chave PRECISA cobrir todo filtro que muda o resultado. Com só o
+  // `demandId`, buscas de texto diferentes colidiriam na mesma entrada e
+  // devolveriam a lista de outra busca.
+  (filters = {}) =>
+    `listDemands:${filters?.demandId ?? ""}:${filters?.search ?? ""}`,
   _listDemandsUncached,
   LIST_DEMANDS_TTL_MS,
 );

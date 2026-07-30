@@ -124,7 +124,7 @@ export default function Monthly() {
     filters,
     errorMessage: "Não foi possível carregar o resumo mensal.",
     scope: "MonthlyPage",
-    neutralizedKeys: ["donorId", "cpf", "demand"],
+    neutralizedKeys: ["search", "donorId", "cpf", "demand"],
     optionLoader: loadMonthlySummariesForOptions,
   });
 
@@ -531,20 +531,24 @@ export default function Monthly() {
           exportAbatementSheetCsv({ referenceMonth: filters.referenceMonth }),
         { loadingMessage: "Gerando planilha de abatimento..." },
       );
+      const exportSummary =
+        result.rowCount === 0
+          ? "Nenhuma doação neste mês — nenhuma planilha foi gerada."
+          : `${result.rowCount} CPF(s) em ${result.demandCount} planilha(s), uma por demanda.`;
       await createActionHistoryEntry({
         actionType: "export",
         entityType: "export",
         entityId: "abatement-sheet-csv",
         label: "Planilha de abatimento",
-        description: `${result.rowCount} CPF(s) exportado(s) na planilha de abatimento.`,
+        description: exportSummary,
         payload: {
           referenceMonth: filters.referenceMonth,
           rowCount: result.rowCount,
+          demandCount: result.demandCount,
+          fileNames: result.fileNames,
         },
       });
-      setSuccessMessage(
-        `${result.rowCount} CPF(s) exportado(s) na planilha de abatimento.`,
-      );
+      setSuccessMessage(exportSummary);
     } catch (err) {
       logError("MonthlyPage.exportAbatementSheet", err);
       setError("Não foi possível exportar a planilha de abatimento.");

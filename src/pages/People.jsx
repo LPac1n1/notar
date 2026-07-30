@@ -57,6 +57,7 @@ const EMPTY_CONVERT_FORM = {
 };
 
 const INITIAL_FILTERS = {
+  search: "",
   personId: "",
   cpf: "",
 };
@@ -108,7 +109,7 @@ export default function People() {
     initialPageSize: 25,
     errorMessage: "Não foi possível carregar as pessoas.",
     scope: "PeoplePage",
-    neutralizedKeys: ["personId", "cpf"],
+    neutralizedKeys: ["search", "personId", "cpf"],
   });
   const { dataSyncFeedback, showDataRefreshLoading } =
     useDataRefreshIndicator(isRefreshing);
@@ -461,6 +462,16 @@ export default function People() {
       </div>
 
       <SectionCard title="Buscar pessoas" className="mb-4">
+        <TextInput
+          label="Busca"
+          name="search"
+          type="search"
+          placeholder="Digite nome ou CPF..."
+          value={filters.search}
+          onChange={handleFilterChange}
+          description="Busca por parte do texto. Os campos abaixo filtram por seleção exata."
+          wrapperClassName="mb-3"
+        />
         <div className="grid gap-3 md:grid-cols-2">
           <SelectInput
             label="Pessoa"

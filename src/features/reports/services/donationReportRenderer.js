@@ -3,6 +3,7 @@ import { listMonthlySummaries } from "../../../services/monthlyService";
 import { formatMonthYear, hasDonationStartConflict } from "../../../utils/date";
 import { getContrastTextColor } from "../../../utils/demandColor";
 import { formatInteger } from "../../../utils/format";
+import { buildSlug } from "../../../utils/slug";
 import { estimateTextWidth, wrapText } from "../pdf/simplePdf";
 import { mapDemandGroups } from "../utils/donationReportGroups";
 
@@ -15,15 +16,6 @@ const SOFT_LINE = "#E8ECF2";
 const SURFACE = "#F7F8FA";
 const FOOTER_Y = 820;
 
-function buildSlug(value) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replaceAll(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-|-$/g, "")
-    .slice(0, 80);
-}
 
 function formatGeneratedAt(date = new Date()) {
   return new Intl.DateTimeFormat("pt-BR", {

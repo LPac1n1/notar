@@ -1,4 +1,9 @@
-import { normalizeCpf, queryPrepared, startOfMonth } from "../db";
+import {
+  buildTextSearchCondition,
+  normalizeCpf,
+  queryPrepared,
+  startOfMonth,
+} from "../db";
 import {
   listAdjustmentsForMonth,
   listAllAdjustments,
@@ -7,6 +12,7 @@ import {
   MONTHLY_AUXILIARY_SUBSELECT,
   MONTHLY_DONOR_PROJECTION,
   MONTHLY_HOLDER_JOINS,
+  MONTHLY_SEARCH_COLUMNS,
   MONTHLY_SOURCE_SUBSELECTS,
   applySummaryFilters,
   buildDonorConditions,
@@ -45,6 +51,7 @@ export async function listMonthlySummariesByMonth({
   abatementSort = "",
   donationStartDate = "all",
   donorActiveStatus = "active",
+  search = "",
 } = {}) {
   const normalizedReferenceMonth = startOfMonth(referenceMonth);
   const { conditions: activeDonorConditions, params: activeDonorParams } =
@@ -55,6 +62,7 @@ export async function listMonthlySummariesByMonth({
       demand,
       donationStartDate,
       donorActiveStatus: "active",
+      search,
     });
   const activeDonorWhereClause =
     activeDonorConditions.length > 0
@@ -96,6 +104,18 @@ export async function listMonthlySummariesByMonth({
   if (demand.trim()) {
     monthlyRowsConditions.push("lower(coalesce(donors.demand, '')) = lower(?)");
     monthlyRowsParams.push(demand.trim());
+  }
+
+  // Mesma cobertura de busca da query de doadores acima — as duas precisam
+  // concordar, senão um doador apareceria numa e sumiria na outra.
+  const monthlySearchCondition = buildTextSearchCondition(
+    search,
+    MONTHLY_SEARCH_COLUMNS,
+  );
+
+  if (monthlySearchCondition) {
+    monthlyRowsConditions.push(monthlySearchCondition.condition);
+    monthlyRowsParams.push(...monthlySearchCondition.params);
   }
 
   const [donorRows, monthlyRows, importContextRows] = await Promise.all([

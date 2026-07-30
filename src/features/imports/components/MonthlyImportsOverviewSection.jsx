@@ -12,13 +12,14 @@ import { getMonthlyImportsOverview } from "../../../services/monthlyOverviewServ
 import { formatMonthYear, startOfMonth } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
-// Filtros visuais para o operador isolar rapidamente "onde está o
-// problema". `pending` = há linha não conciliada ou exceeded; `clean` =
-// nada pendente E tudo conciliado.
+// O filtro é sobre o TRABALHO DO USUÁRIO (abatimentos ainda por marcar),
+// não sobre a conciliação. Notas que não fecharam par vêm das planilhas da
+// própria NFP e não são corrigíveis aqui — filtrar por elas sugeriria uma
+// tarefa que não existe.
 const FILTER_OPTIONS = [
   { value: "all", label: "Todos" },
-  { value: "pending", label: "Com pendências" },
-  { value: "clean", label: "Tudo conciliado" },
+  { value: "pending", label: "Com abatimento pendente" },
+  { value: "clean", label: "Tudo abatido" },
 ];
 
 /**
@@ -110,10 +111,7 @@ function ReconciliationCell({ reconciliation, abatement }) {
 
   const totalAbated = abatement?.totalApplied ?? 0;
   const totalCredit = reconciliation.matchedCreditValue ?? 0;
-  // diff > 0 → abatido > crédito real (exceeded — único caso de aviso)
-  const diff = totalAbated - totalCredit;
   const showAbatementComparison = totalAbated > 0 || totalCredit > 0;
-  const diffIsExceeded = diff > 0.005;
 
   if (total === 0 && !showAbatementComparison) {
     return (
@@ -123,16 +121,17 @@ function ReconciliationCell({ reconciliation, abatement }) {
     );
   }
 
-  const issues =
+  // Notas que não fecharam par entre as duas planilhas da NFP. NÃO é uma
+  // lista de correções: as planilhas vêm prontas da NFP e o usuário não tem
+  // como editá-las. O número é informativo — mostra o quanto de cada mês
+  // conseguimos cruzar — então o rótulo e o tom são descritivos, sem
+  // vermelho/laranja sugerindo que há algo a consertar.
+  const unmatched =
     (reconciliation.divergent ?? 0) +
     (reconciliation.creditOnly ?? 0) +
     (reconciliation.donationOnly ?? 0) +
     (reconciliation.duplicates ?? 0);
-  const tone = issues === 0
-    ? "success"
-    : reconciliation.divergent + reconciliation.duplicates > 0
-      ? "danger"
-      : "warning";
+  const tone = unmatched === 0 ? "success" : "info";
 
   return (
     <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-3 py-2">
@@ -140,10 +139,12 @@ function ReconciliationCell({ reconciliation, abatement }) {
         <StatusBadge
           tone={tone}
           label={
-            issues === 0
+            unmatched === 0
               ? "Tudo conciliado"
-              : `${formatInteger(issues)} pendência(s)`
+              : `${formatInteger(unmatched)} não conciliada(s)`
           }
+          className="cursor-help"
+          title="Notas que não fecharam par entre a planilha de doações e a de créditos da NFP. As duas planilhas vêm da própria NFP — não é algo a corrigir aqui."
         />
       </div>
 
@@ -164,11 +165,6 @@ function ReconciliationCell({ reconciliation, abatement }) {
               {formatCurrency(totalCredit)}
             </span>
           </div>
-          {diffIsExceeded ? (
-            <p className="mt-1 text-[10px] font-medium text-[var(--danger)]">
-              ↳ {formatCurrency(diff)} a mais que o crédito gerado
-            </p>
-          ) : null}
         </div>
       ) : null}
 
@@ -179,25 +175,25 @@ function ReconciliationCell({ reconciliation, abatement }) {
         </li>
         {reconciliation.divergent > 0 ? (
           <li className="flex items-center justify-between">
-            <span className="text-[var(--warning)]">Divergentes</span>
+            <span className="text-[var(--text-soft)]">Valor diferente</span>
             <span className="font-mono">{formatInteger(reconciliation.divergent)}</span>
           </li>
         ) : null}
         {reconciliation.creditOnly > 0 ? (
           <li className="flex items-center justify-between">
-            <span className="text-[var(--warning)]">Sem doação</span>
+            <span className="text-[var(--text-soft)]">Só no crédito</span>
             <span className="font-mono">{formatInteger(reconciliation.creditOnly)}</span>
           </li>
         ) : null}
         {reconciliation.donationOnly > 0 ? (
           <li className="flex items-center justify-between">
-            <span className="text-[var(--warning)]">Sem crédito</span>
+            <span className="text-[var(--text-soft)]">Só na doação</span>
             <span className="font-mono">{formatInteger(reconciliation.donationOnly)}</span>
           </li>
         ) : null}
         {reconciliation.duplicates > 0 ? (
           <li className="flex items-center justify-between">
-            <span className="text-[var(--danger)]">Duplicadas</span>
+            <span className="text-[var(--text-soft)]">Repetidas</span>
             <span className="font-mono">{formatInteger(reconciliation.duplicates)}</span>
           </li>
         ) : null}
@@ -232,19 +228,11 @@ function ReconciliationCell({ reconciliation, abatement }) {
 const INITIAL_VISIBLE_MONTHS = 24;
 const VISIBLE_INCREMENT = 24;
 
-function rowHasPendencies(row) {
-  const r = row.reconciliation;
-  if ((r?.divergent ?? 0) > 0) return true;
-  if ((r?.creditOnly ?? 0) > 0) return true;
-  if ((r?.donationOnly ?? 0) > 0) return true;
-  if ((r?.duplicates ?? 0) > 0) return true;
-  // Abated > credit gerado = excedido = pendência real.
-  const diff =
-    (row.abatement?.totalApplied ?? 0) - (r?.matchedCreditValue ?? 0);
-  if (diff > 0.005) return true;
-  // Linhas pendentes pra marcar como abatido também contam.
-  if ((row.abatement?.pendingCount ?? 0) > 0) return true;
-  return false;
+// Só conta o que o usuário efetivamente faz: marcar abatimento. Divergências
+// de conciliação foram tiradas daqui de propósito — são das planilhas da NFP
+// e permanecem visíveis na célula de conciliação como informação.
+function rowHasPendingAbatement(row) {
+  return (row.abatement?.pendingCount ?? 0) > 0;
 }
 
 export default function MonthlyImportsOverviewSection({
@@ -290,9 +278,9 @@ export default function MonthlyImportsOverviewSection({
 
   const filteredRows = useMemo(() => {
     if (statusFilter === "all") return allRows;
-    if (statusFilter === "pending") return allRows.filter(rowHasPendencies);
+    if (statusFilter === "pending") return allRows.filter(rowHasPendingAbatement);
     if (statusFilter === "clean") {
-      return allRows.filter((row) => !rowHasPendencies(row));
+      return allRows.filter((row) => !rowHasPendingAbatement(row));
     }
     return allRows;
   }, [allRows, statusFilter]);
@@ -301,7 +289,7 @@ export default function MonthlyImportsOverviewSection({
   const hasMore = filteredRows.length > visibleRows.length;
 
   const counts = useMemo(() => {
-    const pending = allRows.filter(rowHasPendencies).length;
+    const pending = allRows.filter(rowHasPendingAbatement).length;
     return {
       all: allRows.length,
       pending,

@@ -1,8 +1,14 @@
-import { normalizeCpf, queryPrepared, startOfMonth } from "../db";
+import {
+  buildTextSearchCondition,
+  normalizeCpf,
+  queryPrepared,
+  startOfMonth,
+} from "../db";
 import { listAllAdjustments } from "../abatementAdjustmentService";
 import {
   MONTHLY_DONOR_PROJECTION,
   MONTHLY_HOLDER_JOINS,
+  MONTHLY_SEARCH_COLUMNS,
   MONTHLY_SOURCE_SUBSELECTS,
   applySummaryFilters,
   findOrphanAdjustments,
@@ -75,9 +81,20 @@ export async function listHistoricalMonthlySummaries({
   abatementSort = "",
   donationStartDate = "all",
   donorActiveStatus = "active",
+  search = "",
 } = {}) {
   const conditions = [];
   const params = [];
+
+  const searchCondition = buildTextSearchCondition(
+    search,
+    MONTHLY_SEARCH_COLUMNS,
+  );
+
+  if (searchCondition) {
+    conditions.push(searchCondition.condition);
+    params.push(...searchCondition.params);
+  }
 
   if (donorActiveStatus === "active") {
     // Use coalesce so legacy rows where `donors` was deleted (and the join

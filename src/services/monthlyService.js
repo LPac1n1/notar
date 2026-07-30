@@ -43,9 +43,13 @@ export async function listMonthlySummaries({
   abatementSort = "",
   donationStartDate = "all",
   donorActiveStatus = "active",
+  search = "",
   limit,
   offset = 0,
 } = {}) {
+  // Este dispatcher repassa uma lista EXPLÍCITA de filtros — o que não estiver
+  // aqui é descartado em silêncio antes de chegar na query. Ao adicionar um
+  // filtro novo, inclua-o nos dois ramos.
   const rows = referenceMonth
     ? await listMonthlySummariesByMonth({
         referenceMonth,
@@ -58,6 +62,7 @@ export async function listMonthlySummaries({
         abatementSort,
         donationStartDate,
         donorActiveStatus,
+        search,
       })
     : await listHistoricalMonthlySummaries({
         referenceMonth,
@@ -70,6 +75,7 @@ export async function listMonthlySummaries({
         abatementSort,
         donationStartDate,
         donorActiveStatus,
+        search,
       });
 
   if (typeof limit !== "number" || !Number.isFinite(limit) || limit < 0) {

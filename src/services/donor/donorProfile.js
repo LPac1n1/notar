@@ -1,4 +1,5 @@
 import {
+  buildTextSearchCondition,
   escapeSqlString,
   normalizeCpf,
   query,
@@ -39,9 +40,30 @@ function buildDonorListConditions({
   donorType = "",
   donationStartDate = "all",
   activeStatus = "active",
+  search = "",
 } = {}) {
   const conditions = [];
   const params = [];
+
+  // Busca livre: nome do doador, qualquer CPF vinculado a ele, ou a demanda.
+  const searchCondition = buildTextSearchCondition(search, [
+    { expression: "donors.name" },
+    { expression: "donors.demand" },
+    {
+      expression: `(
+        SELECT string_agg(donor_cpf_links.cpf, ' ')
+        FROM donor_cpf_links
+        WHERE donor_cpf_links.donor_id = donors.id
+          AND donor_cpf_links.is_active = TRUE
+      )`,
+      type: "cpf",
+    },
+  ]);
+
+  if (searchCondition) {
+    conditions.push(searchCondition.condition);
+    params.push(...searchCondition.params);
+  }
 
   if (activeStatus === "active") {
     conditions.push("donors.is_active = TRUE");
@@ -95,6 +117,7 @@ export async function listDonors(filters = {}) {
     donorType = "",
     donationStartDate = "all",
     activeStatus = "active",
+    search = "",
     // Server-side pagination is opt-in. When `limit` is omitted (the default)
     // the function returns every matching row, preserving the historical
     // contract that pages relying on `usePagination` expect.
@@ -109,6 +132,7 @@ export async function listDonors(filters = {}) {
       donorType,
       donationStartDate,
       activeStatus,
+      search,
     });
   const conditions = [...baseConditions];
   const params = [...baseParams];

@@ -1,4 +1,4 @@
-import { normalizeCpf } from "../db";
+import { buildTextSearchCondition, normalizeCpf } from "../db";
 
 /**
  * Source-aggregation subselects shared between the by-month and historical
@@ -416,6 +416,25 @@ export function sortSummariesByAbatement(rows, sortDirection = "") {
  * into their query — keeps prepared statements honest about parameter
  * positions.
  */
+/**
+ * Colunas cobertas pela busca livre da Gestão Mensal. Extraído porque as duas
+ * queries do `listByMonth` (donors e monthly_donor_summary) precisam da mesma
+ * cobertura — se divergirem, um doador some da lista ao paginar.
+ */
+export const MONTHLY_SEARCH_COLUMNS = [
+  { expression: "donors.name" },
+  { expression: "donors.demand" },
+  {
+    expression: `(
+      SELECT string_agg(donor_cpf_links.cpf, ' ')
+      FROM donor_cpf_links
+      WHERE donor_cpf_links.donor_id = donors.id
+        AND donor_cpf_links.is_active = TRUE
+    )`,
+    type: "cpf",
+  },
+];
+
 export function buildDonorConditions({
   donorId = "",
   donorType = "all",
@@ -423,9 +442,17 @@ export function buildDonorConditions({
   demand = "",
   donationStartDate = "all",
   donorActiveStatus = "active",
+  search = "",
 } = {}) {
   const conditions = [];
   const params = [];
+
+  const searchCondition = buildTextSearchCondition(search, MONTHLY_SEARCH_COLUMNS);
+
+  if (searchCondition) {
+    conditions.push(searchCondition.condition);
+    params.push(...searchCondition.params);
+  }
 
   if (donorActiveStatus === "active") {
     conditions.push("donors.is_active = TRUE");

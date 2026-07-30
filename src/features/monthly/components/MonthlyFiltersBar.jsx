@@ -1,5 +1,6 @@
 import MonthInput from "../../../components/ui/MonthInput";
 import SelectInput from "../../../components/ui/SelectInput";
+import TextInput from "../../../components/ui/TextInput";
 import {
   ABATEMENT_SORT_OPTIONS,
   ABATEMENT_STATUS_OPTIONS,
@@ -20,6 +21,16 @@ export default function MonthlyFiltersBar({
 }) {
   return (
     <>
+      <TextInput
+        label="Busca"
+        name="search"
+        type="search"
+        placeholder="Digite nome, CPF ou demanda..."
+        value={filters.search ?? ""}
+        onChange={onChange}
+        description="Busca por parte do texto. Os campos abaixo filtram por seleção exata."
+        wrapperClassName="mb-3"
+      />
       <div
         className={`mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3 ${
           hasSelectedReferenceMonth ? "xl:grid-cols-5" : "xl:grid-cols-4"

@@ -39,6 +39,7 @@ import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useMutationAction } from "../hooks/useMutationAction";
 
 const INITIAL_DEMAND_FILTERS = {
+  search: "",
   demandId: "",
 };
 
@@ -77,7 +78,7 @@ export default function Demands() {
     filters,
     errorMessage: "Não foi possível carregar as demandas.",
     scope: "DemandsPage",
-    neutralizedKeys: ["demandId"],
+    neutralizedKeys: ["search", "demandId"],
   });
 
   const demandsPagination = usePagination(demands, {
@@ -281,6 +282,16 @@ export default function Demands() {
       </div>
 
       <SectionCard title="Buscar demandas" className="mb-4">
+        <TextInput
+          label="Busca"
+          name="search"
+          type="search"
+          placeholder="Digite o nome da demanda..."
+          value={filters.search}
+          onChange={handleFilterChange}
+          description="Busca por parte do texto. O campo abaixo filtra por seleção exata."
+          wrapperClassName="mb-3"
+        />
         <div className="grid gap-3">
           <SelectInput
             label="Demanda"

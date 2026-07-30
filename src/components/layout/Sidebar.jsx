@@ -6,20 +6,18 @@ import {
   REGISTRY_NAV_ITEMS,
   WORKSPACE_NAV_ITEMS,
 } from "./navigation";
-import { countDonorReconciliationIssues } from "../../services/reconciliation/creditReconciliationService";
 import { countTrashItems } from "../../services/trashService";
 import { useDatabaseChangeEffect } from "../../hooks/useDatabaseChangeEffect";
 import { logError } from "../../services/logger";
 import { formatInteger } from "../../utils/format";
 
-// Debounce window for the reconciliation badge recount. The badge listens
-// to four domains (credits, monthly, donors, imports) so flows that emit
-// several events back-to-back (reimport runs end-to-end, bulk abatement)
-// would otherwise re-query every time. 400ms is long enough to coalesce
-// those bursts without making the badge feel stale on single edits.
-const RECONCILIATION_RECOUNT_DEBOUNCE_MS = 400;
+// Debounce window for the badge recount. Flows that emit several events
+// back-to-back (a reimport running end-to-end, bulk abatement) would
+// otherwise re-query every time. 400ms is long enough to coalesce those
+// bursts without making the badge feel stale on single edits.
+const BADGE_RECOUNT_DEBOUNCE_MS = 400;
 
-function NavItem({ item, compact = false, badgeCount = 0 }) {
+function NavItem({ item, compact = false, badgeCount = 0, badgeTitle = "" }) {
   const Icon = item.icon;
   const hasBadge = badgeCount > 0;
 
@@ -83,8 +81,8 @@ function NavItem({ item, compact = false, badgeCount = 0 }) {
             <p className="font-semibold">{item.label}</p>
             {hasBadge ? (
               <span
-                className="rounded-full border border-[var(--warning-line)] bg-[var(--warning-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]"
-                title={`${badgeCount} doador(es) com conciliação fora do limite`}
+                className="rounded-full border border-[var(--line-strong)] bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--text-soft)]"
+                title={badgeTitle}
               >
                 {formatInteger(badgeCount)}
               </span>
@@ -96,7 +94,7 @@ function NavItem({ item, compact = false, badgeCount = 0 }) {
           {hasBadge ? (
             <span
               aria-hidden="true"
-              className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[var(--surface)] bg-[var(--warning)] lg:hidden"
+              className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[var(--surface)] bg-[var(--muted)] lg:hidden"
             />
           ) : null}
         </div>
@@ -140,17 +138,11 @@ function FooterNavItem({ item }) {
 }
 
 export default function Sidebar() {
-  const [reconciliationIssueCount, setReconciliationIssueCount] = useState(0);
   const [trashItemCount, setTrashItemCount] = useState(0);
   const recountTimerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
-    countDonorReconciliationIssues()
-      .then((count) => {
-        if (!cancelled) setReconciliationIssueCount(count);
-      })
-      .catch((err) => logError("Sidebar.reconciliationIssues", err));
     countTrashItems()
       .then((count) => {
         if (!cancelled) setTrashItemCount(count);
@@ -165,12 +157,8 @@ export default function Sidebar() {
     };
   }, []);
 
-  // Refresh the badge whenever the reconciliation table moves. Listening
-  // to `monthly` too because flipping abatement_status can move a donor
-  // into the `exceeded` bucket even without a fresh reconcile.
-  //
-  // Debounced so bursts of events (e.g. reimport, which fires 4 domains in
-  // quick succession) collapse into one recount instead of four.
+  // Debounced so bursts of events (e.g. a reimport, which fires several
+  // domains in quick succession) collapse into one recount.
   useDatabaseChangeEffect(
     () => {
       if (recountTimerRef.current) {
@@ -179,25 +167,18 @@ export default function Sidebar() {
       recountTimerRef.current = setTimeout(async () => {
         recountTimerRef.current = null;
         try {
-          const [reconciliationCount, trashCount] = await Promise.all([
-            countDonorReconciliationIssues().catch(() => 0),
-            countTrashItems().catch(() => 0),
-          ]);
-          setReconciliationIssueCount(reconciliationCount);
-          setTrashItemCount(trashCount);
+          setTrashItemCount(await countTrashItems());
         } catch (err) {
-          logError("Sidebar.reconciliationIssues", err);
+          logError("Sidebar.trashCount", err);
         }
-      }, RECONCILIATION_RECOUNT_DEBOUNCE_MS);
+      }, BADGE_RECOUNT_DEBOUNCE_MS);
     },
     { domains: ["credits", "monthly", "donors", "imports", "demands", "people", "notes"] },
   );
 
-  const badgeFor = (item) => {
-    if (item.to === "/doadores") return reconciliationIssueCount;
-    if (item.to === "/lixeira") return trashItemCount;
-    return 0;
-  };
+  const badgeFor = (item) => (item.to === "/lixeira" ? trashItemCount : 0);
+  const badgeTitleFor = (item) =>
+    item.to === "/lixeira" ? `${trashItemCount} item(ns) na lixeira` : "";
 
   return (
     <>
@@ -234,7 +215,12 @@ export default function Sidebar() {
               Workspace
             </p>
             {WORKSPACE_NAV_ITEMS.map((item) => (
-              <NavItem key={item.to} item={item} badgeCount={badgeFor(item)} />
+              <NavItem
+                key={item.to}
+                item={item}
+                badgeCount={badgeFor(item)}
+                badgeTitle={badgeTitleFor(item)}
+              />
             ))}
 
             <p className="mt-3 hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
@@ -247,7 +233,12 @@ export default function Sidebar() {
               className="my-1 border-t border-[var(--line)] lg:hidden"
             />
             {REGISTRY_NAV_ITEMS.map((item) => (
-              <NavItem key={item.to} item={item} badgeCount={badgeFor(item)} />
+              <NavItem
+                key={item.to}
+                item={item}
+                badgeCount={badgeFor(item)}
+                badgeTitle={badgeTitleFor(item)}
+              />
             ))}
           </nav>
 

@@ -12,6 +12,7 @@ export default function StatusBadge({
   className = "",
   label,
   status,
+  title = "",
   tone,
 }) {
   const config = getStatusConfig(status, label);
@@ -19,6 +20,7 @@ export default function StatusBadge({
 
   return (
     <span
+      title={title || undefined}
       className={`inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${TONE_CLASS_NAMES[activeTone] ?? TONE_CLASS_NAMES.neutral} ${className}`.trim()}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />

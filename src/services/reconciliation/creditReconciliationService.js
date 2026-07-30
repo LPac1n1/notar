@@ -895,26 +895,6 @@ export async function listOrphanedCredits({ limit = 100 } = {}) {
   }));
 }
 
-/**
- * Cheap counter for the navigation badge — how many active donors are
- * currently in a state that demands the user's attention. The only
- * remaining failure mode is `exceeded` (NGO abated more than the donor
- * actually generated in NFP credit). Surplus credit (credit > abated)
- * is normal NFP behaviour and is intentionally not flagged.
- *
- * `no-credit` donors are also excluded because they typically just need
- * an import, not action on the donor themselves.
- */
-export async function countDonorReconciliationIssues() {
-  const statuses = await listDonorReconciliationStatuses();
-  let count = 0;
-  for (const entry of statuses.values()) {
-    if (entry.status === "exceeded") {
-      count += 1;
-    }
-  }
-  return count;
-}
 
 /**
  * Per-donor reconciliation rollup for the Fase 5 CSV export. One row per

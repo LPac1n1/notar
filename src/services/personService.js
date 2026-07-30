@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import {
+  buildTextSearchCondition,
   escapeSqlString,
   executePrepared,
   normalizeCpf,
@@ -154,9 +155,20 @@ function buildPeopleListConditions({
   personId = "",
   cpf = "",
   role = "",
+  search = "",
 } = {}) {
   const conditions = ["people.is_active = TRUE"];
   const params = [];
+
+  const searchCondition = buildTextSearchCondition(search, [
+    { expression: "people.name" },
+    { expression: "people.cpf", type: "cpf" },
+  ]);
+
+  if (searchCondition) {
+    conditions.push(searchCondition.condition);
+    params.push(...searchCondition.params);
+  }
 
   if (personId.trim()) {
     conditions.push("people.id = ?");

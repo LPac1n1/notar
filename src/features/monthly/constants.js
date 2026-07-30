@@ -5,6 +5,7 @@ export {
 
 export const INITIAL_MONTHLY_FILTERS = {
   referenceMonth: "",
+  search: "",
   donorId: "",
   donorType: "all",
   cpf: "",
