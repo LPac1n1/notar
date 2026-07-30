@@ -339,9 +339,20 @@ Quatro pedidos diretos: auxiliares visíveis no titular, rastreio de quem parou 
 - **Overflow no Dashboard/toolbar**: `OverviewMetric` dividia largura com o ícone, deixando ~110px pro número — "R$ 1.938.259,20" vazava do card. Ícone movido pra linha do rótulo, valor usa a largura inteira. `MetricValue` ganhou tamanho responsivo (`text-[2rem] lg:text-[2.5rem]`) + `break-words` + `max-w-full`; `MetricField` idem. `MonthlySummaryToolbar` ganhou o `lg:grid-cols-3` que faltava.
 - 123/123 testes, 15/15 e2e, lint 0 erros, build OK. Verificação visual antes/depois por screenshot com dataset semeado (nomes longos, R$ 1,9M, titular com 2 auxiliares, 4 meses com lacunas).
 
+## Planilha de abatimento + contagem de registros (commit 212)
+
+- **Planilha de abatimento** (`services/monthly/abatementSheet.js` + `abatementSheetSql.js` + `abatementSheetDescription.js`): CSV por mês para importar no sistema externo que dá baixa nas doações. Colunas: CPF, Nome completo, Demanda, Descrição, Quantidade de doações. Botão "Planilha de abatimento" no toolbar da Gestão Mensal; exige mês selecionado (a descrição carrega o mês, então "todos os meses" geraria descrição ambígua no destino).
+  - **Uma linha por CPF de doador**, agrupando por `donor_cpf_links` e NÃO por `monthly_donor_summary` — as linhas de summary são por titular (nota de auxiliar sobe pro titular), mas o sistema de destino abate por CPF, então o auxiliar precisa da linha e da contagem dele. No teste: titular 12 + auxiliar 5 saem separados, não 17 somados.
+  - **Descrição**: `Doações NFP - Abr/2026` para titular sem auxiliar; `Doações NFP - [Nome] - Abr/2026` para auxiliar e para titular QUE TEM auxiliar. O nome entra exatamente quando o grupo tem mais de uma pessoa doando pro mesmo titular — lá o titular recebe vários lançamentos no mês e sem o nome não se sabe de qual CPF é cada um. `group_has_auxiliaries` na query resolve os dois lados (TRUE para todo auxiliar; para titular, `EXISTS` de auxiliar ativo).
+  - `formatMonthAbbrev` em `utils/date.js` com abreviações fixas (Jan..Dez) em vez de `Intl` com `month: "short"` — o pt-BR devolveria "abr." (minúsculo, com ponto) e a forma varia entre runtimes; o valor vai pra outro sistema, precisa ser estável.
+  - Descrição isolada em `abatementSheetDescription.js` (sem import de banco) para o teste exercitar a função de produção em vez de reimplementar o formato. Idem `abatementSheetSql.js` pro SQL. Esses módulos usam import COM extensão `.js` — Node ESM não resolve sem, ao contrário do Vite.
+- **Bug real: contagem de registros em Pessoas** (`People.jsx`): o `loader` era `listPeople({...filters, role: "reference"})` mas o `countLoader` era `countPeople` puro, SEM o `role`. A página lista só pessoas sem papel de doador, mas o contador tallyava toda pessoa ativa (doadores incluídos) — total inflado e últimas páginas vazias. Isso violava o invariante que o próprio `personService.js` documenta ("count and slice running against the exact same predicate"). Corrigido com `countReferencePeople`.
+- **Bug de exibição em Pessoas e Doadores**: subtitle do `PageHeader` e "N resultado(s) na lista" usavam `people.length`/`donors.length` — o tamanho da PÁGINA (25), não o total. Trocado por `pagination.totalItems` nos 4 pontos. Verificado ao vivo: com 4 pessoas de referência + 3 doadores, Pessoas mostra "4" (antes contaria 7) e Doadores "3".
+- 125/125 testes (2 novos de integração), 15/15 e2e, lint 0 erros, build OK. CSV conferido ao vivo por download real no Playwright.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 210**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 212**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
