@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { FOCUS_RING } from "./focusRing";
 
 function formatDisplayValue(value) {
   const text = String(value ?? "");
@@ -117,7 +118,7 @@ export default function MonthInput({
         className={`w-full rounded-md border bg-[var(--surface-elevated)] px-4 py-3 text-[var(--text-main)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)] focus:bg-[var(--surface-muted)] ${
           hasError
             ? "border-[color:var(--danger)] focus:border-[color:var(--danger)]"
-            : "border-[var(--line)] focus:border-[var(--accent)]"
+            : `border-[var(--line)] ${FOCUS_RING}`
         }`}
       />
 

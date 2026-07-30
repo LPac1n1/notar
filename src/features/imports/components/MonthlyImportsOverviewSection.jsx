@@ -256,15 +256,14 @@ export default function MonthlyImportsOverviewSection({
     scope: "MonthlyImportsOverviewSection",
   });
 
+  // Filtra por DOMÍNIO, não por source. Marcar abatimento na Gestão Mensal
+  // roda dentro de `runInTransaction`, que emite o source genérico
+  // "transaction" — fora da allowlist antiga, então esta seção continuava
+  // mostrando "abatimento pendente" num mês já fechado até a página ser
+  // recarregada na mão. Os domínios cobrem os dois lados (importação e
+  // abatimento) sem depender de cada emissor lembrar de se etiquetar.
   useDatabaseChangeEffect(reload, {
-    sources: [
-      "import",
-      "reimport",
-      "credit-import",
-      "credit-reimport",
-      "reconciliation",
-      "monthly-action-history",
-    ],
+    domains: ["imports", "monthly"],
   });
 
   // Memoize the data fallback so dependent useMemo hooks below don't

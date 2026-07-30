@@ -2230,3 +2230,110 @@ test("abatement sheet emits one row per donor CPF with the auxiliary-aware descr
     conn.close();
   }
 });
+
+test("imports overview counts only abatements the user can actually act on", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, is_active)
+      VALUES ('d1', 'p1', 'ALICE', '111', 'D', 'holder', TRUE)
+    `);
+    // Jan + Fev are covered by a catch-up launched in Março; Março itself is
+    // applied; Abril has no notes at all.
+    await conn.query(`
+      INSERT INTO monthly_donor_summary
+        (id, import_id, donor_id, reference_month, cpf, donor_name, demand,
+         notes_count, value_per_note, abatement_amount, abatement_status)
+      VALUES
+        ('s-jan', 'i', 'd1', DATE '2026-01-01', '111', 'ALICE', 'D', 10, 10, 100, 'pending'),
+        ('s-fev', 'i', 'd1', DATE '2026-02-01', '111', 'ALICE', 'D', 10, 10, 100, 'pending'),
+        ('s-mar', 'i', 'd1', DATE '2026-03-01', '111', 'ALICE', 'D', 10, 10, 100, 'applied'),
+        ('s-abr', 'i', 'd1', DATE '2026-04-01', '111', 'ALICE', 'D',  0, 10,   0, 'pending')
+    `);
+    await conn.query(`
+      INSERT INTO abatement_adjustments
+        (id, donor_id, reference_month, range_start_month, range_end_month,
+         notes_count, abatement_amount, abatement_status)
+      VALUES ('adj', 'd1', DATE '2026-03-01', DATE '2026-01-01', DATE '2026-03-01', 20, 200, 'applied')
+    `);
+
+    // Mirrors the `abatementByMonth` query in monthlyOverviewService.js.
+    const rows = (
+      await conn.query(`
+        SELECT
+          strftime(mds.reference_month, '%Y-%m-01') AS reference_month,
+          coalesce(sum(
+            CASE WHEN mds.abatement_status = 'applied'
+              THEN mds.abatement_amount ELSE 0 END
+          ), 0) AS total_applied,
+          count(*) FILTER (
+            WHERE mds.abatement_status = 'pending' AND mds.is_actionable
+          ) AS pending_count
+        FROM (
+          SELECT
+            monthly_donor_summary.reference_month,
+            monthly_donor_summary.abatement_status,
+            monthly_donor_summary.abatement_amount,
+            (
+              coalesce(monthly_donor_summary.notes_count, 0) > 0
+              AND NOT EXISTS (
+                SELECT 1
+                FROM abatement_adjustments
+                WHERE abatement_adjustments.donor_id = monthly_donor_summary.donor_id
+                  AND abatement_adjustments.reference_month <> monthly_donor_summary.reference_month
+                  AND abatement_adjustments.range_start_month <= monthly_donor_summary.reference_month
+                  AND abatement_adjustments.range_end_month >= monthly_donor_summary.reference_month
+              )
+            ) AS is_actionable
+          FROM monthly_donor_summary
+        ) AS mds
+        GROUP BY mds.reference_month
+        ORDER BY 1
+      `)
+    ).toArray();
+
+    const byMonth = new Map(
+      rows.map((row) => [String(row.reference_month), row]),
+    );
+
+    // Subsumed by the catch-up -> shows "Via acumulado" in Gestão Mensal with
+    // the toggle disabled, so it must not read as pending work here. This was
+    // the reported bug: a month impossible to close kept showing as pending.
+    assert.equal(Number(byMonth.get("2026-01-01").pending_count), 0);
+    assert.equal(Number(byMonth.get("2026-02-01").pending_count), 0);
+
+    // No notes in the month -> nothing to abate.
+    assert.equal(Number(byMonth.get("2026-04-01").pending_count), 0);
+
+    // The applied month stays applied.
+    assert.equal(Number(byMonth.get("2026-03-01").pending_count), 0);
+
+    // "Abatido" now only sums applied rows; before it summed every row, so
+    // Jan/Fev reported 100 each while still being pending.
+    assert.equal(Number(byMonth.get("2026-01-01").total_applied), 0);
+    assert.equal(Number(byMonth.get("2026-02-01").total_applied), 0);
+    assert.equal(Number(byMonth.get("2026-03-01").total_applied), 100);
+
+    // Sanity: a plain pending row with notes and no catch-up still counts.
+    await conn.query(`
+      INSERT INTO monthly_donor_summary
+        (id, import_id, donor_id, reference_month, cpf, donor_name, demand,
+         notes_count, value_per_note, abatement_amount, abatement_status)
+      VALUES ('s-mai', 'i', 'd1', DATE '2026-05-01', '111', 'ALICE', 'D', 5, 10, 50, 'pending')
+    `);
+    const mai = (
+      await conn.query(`
+        SELECT count(*) AS pending_count
+        FROM monthly_donor_summary
+        WHERE reference_month = DATE '2026-05-01'
+          AND abatement_status = 'pending'
+          AND coalesce(notes_count, 0) > 0
+      `)
+    ).toArray();
+    assert.equal(Number(mai[0].pending_count), 1);
+  } finally {
+    conn.close();
+  }
+});

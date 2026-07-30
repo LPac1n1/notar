@@ -77,22 +77,57 @@ export async function getMonthlyImportsOverview() {
       ) IS NOT NULL
       GROUP BY 1
     `),
-    // Total abatement per month — applied OR pending — so the sub-row
-    // can compare "valor abatido (sistema)" × "crédito real (NFP)" on
-    // the same line. Only counts rows the operator has actually marked
-    // (status='applied') because pending rows aren't yet "abatement".
+    // Abatimento por mês, com a MESMA definição de "pendente" que a Gestão
+    // Mensal usa na tela. Duas exclusões são obrigatórias, senão a visão de
+    // Importações acusa pendência em mês que o usuário já fechou e não tem
+    // como fechar de novo:
+    //
+    //   • linhas sem nota no mês (`notes_count = 0`) — a Gestão Mensal mostra
+    //     "Sem doações no mês" e nem oferece o botão; não é trabalho pendente.
+    //
+    //   • linhas cobertas por um acumulado lançado em OUTRO mês — na tela elas
+    //     aparecem como "Via acumulado" com o toggle desabilitado (ver
+    //     `markSubsumedRows`), porque o valor já foi abatido junto do mês do
+    //     acumulado. O `abatement_status` cru delas continua 'pending' para
+    //     sempre, então contá-lo aqui gerava pendência impossível de resolver.
+    //
+    // `total_applied` também passou a filtrar por status: antes somava
+    // `abatement_amount` de todas as linhas (contrariando o próprio
+    // comentário), inflando o "Abatido" comparado ao crédito real.
     query(`
       SELECT
-        strftime(reference_month, '%Y-%m-01') AS reference_month,
-        coalesce(sum(abatement_amount), 0) AS total_applied,
+        strftime(mds.reference_month, '%Y-%m-01') AS reference_month,
         coalesce(sum(
-          CASE WHEN abatement_status = 'pending'
-            THEN abatement_amount ELSE 0 END
+          CASE WHEN mds.abatement_status = 'applied'
+            THEN mds.abatement_amount ELSE 0 END
+        ), 0) AS total_applied,
+        coalesce(sum(
+          CASE WHEN mds.abatement_status = 'pending' AND mds.is_actionable
+            THEN mds.abatement_amount ELSE 0 END
         ), 0) AS total_pending,
-        count(*) FILTER (WHERE abatement_status = 'pending') AS pending_count,
-        count(*) FILTER (WHERE abatement_status = 'applied') AS applied_count
-      FROM monthly_donor_summary
-      GROUP BY reference_month
+        count(*) FILTER (
+          WHERE mds.abatement_status = 'pending' AND mds.is_actionable
+        ) AS pending_count,
+        count(*) FILTER (WHERE mds.abatement_status = 'applied') AS applied_count
+      FROM (
+        SELECT
+          monthly_donor_summary.reference_month,
+          monthly_donor_summary.abatement_status,
+          monthly_donor_summary.abatement_amount,
+          (
+            coalesce(monthly_donor_summary.notes_count, 0) > 0
+            AND NOT EXISTS (
+              SELECT 1
+              FROM abatement_adjustments
+              WHERE abatement_adjustments.donor_id = monthly_donor_summary.donor_id
+                AND abatement_adjustments.reference_month <> monthly_donor_summary.reference_month
+                AND abatement_adjustments.range_start_month <= monthly_donor_summary.reference_month
+                AND abatement_adjustments.range_end_month >= monthly_donor_summary.reference_month
+            )
+          ) AS is_actionable
+        FROM monthly_donor_summary
+      ) AS mds
+      GROUP BY mds.reference_month
     `),
   ]);
 
