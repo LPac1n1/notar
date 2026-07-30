@@ -61,8 +61,15 @@ const INITIAL_FILTERS = {
   cpf: "",
 };
 
+// The list and the count MUST apply the same predicate. `role: "reference"`
+// narrows to people with no donor role — without it the counter tallied every
+// active person (donors included), so the total shown was larger than the
+// list could ever produce and the last pages came up empty.
 const loadReferencePeople = (currentFilters) =>
   listPeople({ ...currentFilters, role: "reference" });
+
+const countReferencePeople = (currentFilters) =>
+  countPeople({ ...currentFilters, role: "reference" });
 
 export default function People() {
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
@@ -96,7 +103,7 @@ export default function People() {
     pagination: peoplePagination,
   } = usePaginatedResource({
     loader: loadReferencePeople,
-    countLoader: countPeople,
+    countLoader: countReferencePeople,
     filters,
     initialPageSize: 25,
     errorMessage: "Não foi possível carregar as pessoas.",
@@ -432,7 +439,7 @@ export default function People() {
     <div>
       <PageHeader
         title="Pessoas"
-        subtitle={`${formatInteger(people.length)} pessoa(s) sem papel de doador.`}
+        subtitle={`${formatInteger(peoplePagination.totalItems)} pessoa(s) sem papel de doador.`}
         className="mb-6"
       />
 
@@ -486,7 +493,7 @@ export default function People() {
               ? dataSyncFeedback.label
               : isRefreshing
                 ? "Atualizando resultados..."
-                : `${formatInteger(people.length)} resultado(s) na lista.`}
+                : `${formatInteger(peoplePagination.totalItems)} resultado(s) na lista.`}
           </p>
         </div>
       </SectionCard>

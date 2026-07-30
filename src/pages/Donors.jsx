@@ -534,7 +534,7 @@ export default function Donors() {
     <div>
       <PageHeader
         title="Doadores"
-        subtitle={`${formatInteger(donors.length)} doador(es) cadastrado(s).`}
+        subtitle={`${formatInteger(donorsPagination.totalItems)} doador(es) cadastrado(s).`}
         className="mb-6"
       />
 
@@ -622,7 +622,7 @@ export default function Donors() {
               ? dataSyncFeedback.label
               : isRefreshing
                 ? "Atualizando resultados..."
-                : `${formatInteger(donors.length)} resultado(s) na lista.`}
+                : `${formatInteger(donorsPagination.totalItems)} resultado(s) na lista.`}
           </p>
         </div>
       </SectionCard>

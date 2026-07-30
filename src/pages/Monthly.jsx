@@ -25,6 +25,7 @@ import { useMonthlyStatusHandlers } from "../features/monthly/hooks/useMonthlySt
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   exportMonthlySummariesCsv,
+  exportAbatementSheetCsv,
   exportReconciliationByDonorCsv,
 } from "../services/exportService";
 // PDF + JPEG report modules pull a large dependency chain (custom PDF
@@ -100,6 +101,8 @@ export default function Monthly() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingJpeg, setIsExportingJpeg] = useState(false);
   const [isExportingReconciliation, setIsExportingReconciliation] =
+    useState(false);
+  const [isExportingAbatementSheet, setIsExportingAbatementSheet] =
     useState(false);
   const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
   const [catchUpDonor, setCatchUpDonor] = useState(null);
@@ -505,6 +508,51 @@ export default function Monthly() {
     }
   };
 
+  // Planilha para o sistema externo dar baixa nas doações. Exige um mês
+  // selecionado: a descrição de cada linha carrega o mês, então uma exportação
+  // "todos os meses" produziria descrições ambíguas no destino.
+  const handleExportAbatementSheet = async () => {
+    if (isExportingAbatementSheet) return;
+    setError("");
+    setSuccessMessage("");
+    setSuccessAction(null);
+
+    if (!filters.referenceMonth) {
+      setError(
+        "Selecione um mês antes de exportar a planilha de abatimento — a descrição de cada linha depende do mês.",
+      );
+      return;
+    }
+
+    setIsExportingAbatementSheet(true);
+    try {
+      const result = await monthlyOperation.run(
+        () =>
+          exportAbatementSheetCsv({ referenceMonth: filters.referenceMonth }),
+        { loadingMessage: "Gerando planilha de abatimento..." },
+      );
+      await createActionHistoryEntry({
+        actionType: "export",
+        entityType: "export",
+        entityId: "abatement-sheet-csv",
+        label: "Planilha de abatimento",
+        description: `${result.rowCount} CPF(s) exportado(s) na planilha de abatimento.`,
+        payload: {
+          referenceMonth: filters.referenceMonth,
+          rowCount: result.rowCount,
+        },
+      });
+      setSuccessMessage(
+        `${result.rowCount} CPF(s) exportado(s) na planilha de abatimento.`,
+      );
+    } catch (err) {
+      logError("MonthlyPage.exportAbatementSheet", err);
+      setError("Não foi possível exportar a planilha de abatimento.");
+    } finally {
+      setIsExportingAbatementSheet(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     try {
       setError("");
@@ -781,11 +829,13 @@ export default function Monthly() {
           onExportPdf={handleExportPdf}
           onExportJpeg={handleExportJpeg}
           onExportReconciliationCsv={handleExportReconciliationCsv}
+          onExportAbatementSheet={handleExportAbatementSheet}
           isBulkAbateDisabled={summaries.length === 0}
           isExportingCsv={isExporting}
           isExportingPdf={isExportingPdf}
           isExportingJpeg={isExportingJpeg}
           isExportingReconciliation={isExportingReconciliation}
+          isExportingAbatementSheet={isExportingAbatementSheet}
           isPdfDisabled={summaries.length === 0}
         />
 

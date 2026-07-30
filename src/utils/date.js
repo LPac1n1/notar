@@ -65,6 +65,42 @@ export function formatMonthYear(value) {
   return formattedValue.charAt(0).toUpperCase() + formattedValue.slice(1);
 }
 
+// Abreviações fixas em vez de Intl: `month: "short"` no pt-BR devolve "abr."
+// (com ponto, minúsculo) e a forma varia entre runtimes. A descrição do
+// abatimento vai para outro sistema, então precisa ser estável e previsível.
+const MONTH_ABBREVIATIONS = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
+/**
+ * "2026-04-01" → "Abr/2026". Usado na descrição da planilha de abatimento.
+ */
+export function formatMonthAbbrev(value) {
+  if (!value) {
+    return "";
+  }
+
+  const [year, month] = String(value).split("-");
+  const monthIndex = Number(month) - 1;
+
+  if (!year || !MONTH_ABBREVIATIONS[monthIndex]) {
+    return String(value);
+  }
+
+  return `${MONTH_ABBREVIATIONS[monthIndex]}/${year}`;
+}
+
 export function formatDatePtBR(value) {
   if (!value) {
     return "";

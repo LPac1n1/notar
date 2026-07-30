@@ -1,5 +1,6 @@
 import { listDonors } from "./donorService.js";
 import { listImportCpfSummary, listImports } from "./importService.js";
+import { listAbatementSheetRows } from "./monthly/abatementSheet.js";
 import { listMonthlySummaries } from "./monthlyService.js";
 import {
   listReconciliationByDonor,
@@ -245,6 +246,34 @@ export async function exportReconciliationPairsCsv(filters = {}) {
     `notar-conciliacao-pareamentos${pairsMonthSuffix}${pairsStatusSuffix}.csv`,
     csvContent,
   );
+
+  return { rowCount: rows.length };
+}
+
+/**
+ * Planilha de abatimento para importar no sistema externo que dá baixa nas
+ * doações. Uma linha por CPF de doador com notas no mês — inclusive auxiliares,
+ * que no resumo mensal aparecem somados ao titular mas aqui precisam de linha
+ * própria porque o abatimento lá é por CPF.
+ *
+ * A coluna "Descrição" já vem pronta no formato que o outro sistema espera
+ * (ver `buildAbatementDescription`), então o operador só sobe o arquivo.
+ */
+export async function exportAbatementSheetCsv({ referenceMonth } = {}) {
+  const rows = await listAbatementSheetRows({ referenceMonth });
+  const csvContent = buildCsvContent(
+    [
+      { key: "cpf", label: "CPF" },
+      { key: "donorName", label: "Nome completo" },
+      { key: "demand", label: "Demanda" },
+      { key: "description", label: "Descrição" },
+      { key: "notesCount", label: "Quantidade de doações" },
+    ],
+    rows,
+  );
+
+  const monthSuffix = referenceMonth ? `-${String(referenceMonth).slice(0, 7)}` : "";
+  downloadCsv(`notar-abatimento${monthSuffix}.csv`, csvContent);
 
   return { rowCount: rows.length };
 }

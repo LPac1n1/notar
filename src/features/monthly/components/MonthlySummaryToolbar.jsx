@@ -14,11 +14,13 @@ export default function MonthlySummaryToolbar({
   onExportPdf,
   onExportJpeg,
   onExportReconciliationCsv,
+  onExportAbatementSheet,
   isBulkAbateDisabled,
   isExportingCsv,
   isExportingPdf,
   isExportingJpeg,
   isExportingReconciliation,
+  isExportingAbatementSheet,
   isPdfDisabled,
 }) {
   return (
@@ -51,6 +53,19 @@ export default function MonthlySummaryToolbar({
         >
           Limpar refinamentos
         </Button>
+        {onExportAbatementSheet ? (
+          <Button
+            variant="subtle"
+            onClick={onExportAbatementSheet}
+            disabled={isExportingAbatementSheet}
+            isLoading={isExportingAbatementSheet}
+            loadingLabel="Gerando planilha..."
+            leftIcon={<DownloadIcon className="h-4 w-4" />}
+            title="Planilha por CPF (nome, demanda, descrição e quantidade de doações) para importar no sistema que faz o abatimento. Exige um mês selecionado."
+          >
+            Planilha de abatimento
+          </Button>
+        ) : null}
         <Button
           variant="subtle"
           onClick={onExportCsv}

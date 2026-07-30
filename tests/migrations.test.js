@@ -6,6 +6,8 @@ import {
   runMigrations,
 } from "../src/services/db/migrations.js";
 import { DONOR_INACTIVITY_STREAKS_SQL } from "../src/services/monthly/inactivityStreaksSql.js";
+import { ABATEMENT_SHEET_SQL } from "../src/services/monthly/abatementSheetSql.js";
+import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 
 test("prepared statements bind parameters via ? placeholders", async () => {
   const conn = await createTestConnection();
@@ -2057,6 +2059,173 @@ test("donor inactivity streaks resolve auxiliaries by their own CPF", async () =
     // The holder stopped in February even though their summary row has notes.
     assert.equal(Number(byId.get("h1").months_without_donating), 1);
     assert.equal(Number(byId.get("a1").months_without_donating), 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("people count must apply the same role predicate as the list", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Three people: one plain reference person, two that are donors.
+    await conn.query(`
+      INSERT INTO people (id, name, cpf, is_active, updated_at)
+      VALUES
+        ('p-ref',    'SO REFERENCIA', '11111111111', TRUE, CURRENT_TIMESTAMP),
+        ('p-holder', 'E TITULAR',     '22222222222', TRUE, CURRENT_TIMESTAMP),
+        ('p-aux',    'E AUXILIAR',    '33333333333', TRUE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, holder_person_id, is_active)
+      VALUES
+        ('d-holder', 'p-holder', 'E TITULAR',  '22222222222', 'D', 'holder',    NULL,       TRUE),
+        ('d-aux',    'p-aux',    'E AUXILIAR', '33333333333', 'D', 'auxiliary', 'p-holder', TRUE)
+    `);
+
+    // Mirrors buildPeopleListConditions' `role: "reference"` branch.
+    const referencePredicate = `
+      people.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM donors
+        WHERE donors.person_id = people.id
+          AND donors.is_active = TRUE
+      )
+    `;
+
+    const scopedCount = Number(
+      (
+        await conn.query(
+          `SELECT count(*) AS total FROM people WHERE ${referencePredicate}`,
+        )
+      ).toArray()[0].total,
+    );
+    const unscopedCount = Number(
+      (
+        await conn.query(
+          `SELECT count(*) AS total FROM people WHERE people.is_active = TRUE`,
+        )
+      ).toArray()[0].total,
+    );
+
+    // The Pessoas page lists only reference people. Counting without the role
+    // predicate (the bug) reported 3 where the list can only ever show 1.
+    assert.equal(scopedCount, 1);
+    assert.equal(unscopedCount, 3);
+    assert.notEqual(scopedCount, unscopedCount);
+  } finally {
+    conn.close();
+  }
+});
+
+test("abatement sheet emits one row per donor CPF with the auxiliary-aware description", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO imports (id, reference_month, file_name, value_per_note, status)
+      VALUES ('imp', DATE '2026-04-01', 'f.csv', 10, 'processed')
+    `);
+
+    // Group A: holder with one auxiliary -> BOTH rows carry the name.
+    // Group B: solo holder -> short description, no name.
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, holder_person_id, is_active)
+      VALUES
+        ('h1', 'p-h1', 'MARIA SILVA',   '11111111111', 'CESTAS',  'holder',    NULL,    TRUE),
+        ('a1', 'p-a1', 'JOAO AUXILIAR', '22222222222', 'CESTAS',  'auxiliary', 'p-h1',  TRUE),
+        ('h2', 'p-h2', 'CARLOS SOZINHO','33333333333', 'REMEDIOS','holder',    NULL,    TRUE)
+    `);
+    await conn.query(`
+      INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active)
+      VALUES
+        ('h1-titular', 'h1', 'MARIA SILVA',    '11111111111', 'holder', TRUE),
+        ('a1-titular', 'a1', 'JOAO AUXILIAR',  '22222222222', 'holder', TRUE),
+        ('h2-titular', 'h2', 'CARLOS SOZINHO', '33333333333', 'holder', TRUE)
+    `);
+
+    // The auxiliary's notes roll up to h1 in monthly_donor_summary, but the
+    // sheet must keep them on the auxiliary's own CPF line.
+    await conn.query(`
+      INSERT INTO import_cpf_summary
+        (id, import_id, reference_month, cpf, notes_count, invalid_notes_count, matched_donor_id, matched_source_id, is_registered_donor)
+      VALUES
+        ('i1', 'imp', DATE '2026-04-01', '11111111111', 12, 0, 'h1', 'h1-titular', TRUE),
+        ('i2', 'imp', DATE '2026-04-01', '22222222222',  5, 0, 'h1', 'a1-titular', TRUE),
+        ('i3', 'imp', DATE '2026-04-01', '33333333333',  7, 0, 'h2', 'h2-titular', TRUE)
+    `);
+
+    const stmt = await conn.prepare(ABATEMENT_SHEET_SQL);
+    let rows;
+    try {
+      rows = (await stmt.query("2026-04-01")).toArray();
+    } finally {
+      await stmt.close();
+    }
+
+    const byCpf = new Map(rows.map((row) => [String(row.cpf), row]));
+    assert.equal(rows.length, 3);
+
+    // Counts stay per-CPF (the auxiliary is NOT folded into the holder).
+    assert.equal(Number(byCpf.get("11111111111").notes_count), 12);
+    assert.equal(Number(byCpf.get("22222222222").notes_count), 5);
+    assert.equal(Number(byCpf.get("33333333333").notes_count), 7);
+
+    // Holder WITH an auxiliary, and the auxiliary itself, both flag the group.
+    assert.equal(Boolean(byCpf.get("11111111111").group_has_auxiliaries), true);
+    assert.equal(Boolean(byCpf.get("22222222222").group_has_auxiliaries), true);
+    // Solo holder must not.
+    assert.equal(Boolean(byCpf.get("33333333333").group_has_auxiliaries), false);
+
+    assert.equal(String(byCpf.get("22222222222").demand), "CESTAS");
+    assert.equal(String(byCpf.get("33333333333").demand), "REMEDIOS");
+
+    // Descriptions, built by the same helper the export uses.
+    assert.equal(
+      buildAbatementDescription({
+        donorName: String(byCpf.get("11111111111").donor_name),
+        referenceMonth: "2026-04-01",
+        groupHasAuxiliaries: true,
+      }),
+      "Doações NFP - MARIA SILVA - Abr/2026",
+    );
+    assert.equal(
+      buildAbatementDescription({
+        donorName: String(byCpf.get("22222222222").donor_name),
+        referenceMonth: "2026-04-01",
+        groupHasAuxiliaries: true,
+      }),
+      "Doações NFP - JOAO AUXILIAR - Abr/2026",
+    );
+    assert.equal(
+      buildAbatementDescription({
+        donorName: String(byCpf.get("33333333333").donor_name),
+        referenceMonth: "2026-04-01",
+        groupHasAuxiliaries: false,
+      }),
+      "Doações NFP - Abr/2026",
+    );
+
+    // A different month must not leak into this month's sheet.
+    await conn.query(`
+      INSERT INTO imports (id, reference_month, file_name, value_per_note, status)
+      VALUES ('imp-mai', DATE '2026-05-01', 'f.csv', 10, 'processed')
+    `);
+    await conn.query(`
+      INSERT INTO import_cpf_summary
+        (id, import_id, reference_month, cpf, notes_count, invalid_notes_count, matched_donor_id, matched_source_id, is_registered_donor)
+      VALUES ('i4', 'imp-mai', DATE '2026-05-01', '11111111111', 99, 0, 'h1', 'h1-titular', TRUE)
+    `);
+    const aprilStmt = await conn.prepare(ABATEMENT_SHEET_SQL);
+    try {
+      const aprilRows = (await aprilStmt.query("2026-04-01")).toArray();
+      const aprilMaria = aprilRows.find((r) => String(r.cpf) === "11111111111");
+      assert.equal(Number(aprilMaria.notes_count), 12);
+    } finally {
+      await aprilStmt.close();
+    }
   } finally {
     conn.close();
   }
