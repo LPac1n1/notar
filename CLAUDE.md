@@ -360,9 +360,21 @@ Quatro pedidos diretos: auxiliares visíveis no titular, rastreio de quem parou 
 - **"Pendências" da conciliação reenquadradas**: as planilhas vêm prontas da NFP e o usuário não pode corrigi-las, então a linguagem não pode sugerir tarefa. `N pendência(s)` → `N não conciliada(s)`, tom `danger`/`warning` → `info`, tooltip explicando a origem. Rótulos do detalhamento viraram descritivos e neutros (`Divergentes`→`Valor diferente`, `Sem doação`→`Só no crédito`, `Sem crédito`→`Só na doação`, `Duplicadas`→`Repetidas`), sem vermelho/laranja. O filtro de meses passou a ser sobre o trabalho do usuário — `Com pendências`→`Com abatimento pendente`, `Tudo conciliado`→`Tudo abatido` — e `rowHasPendingAbatement` só olha `abatement.pendingCount`, sem misturar divergência de conciliação. `StatusBadge` ganhou prop `title`.
 - 132/132 testes (7 novos unitários de busca), 15/15 e2e, lint 0 erros, build OK.
 
+## Borda dupla no foco + abatimento pendente fantasma (commit 216)
+
+- **Borda dupla ao focar input**: `TextInput`, `Textarea` e o gatilho do `SelectInput` combinavam `focus:border-[var(--accent)]` COM `focus-visible:ring-2 ... ring-offset-2`. O anel deslocado desenha uma segunda linha azul separada da borda — daí as "duas bordas azuis". Extraído `components/ui/focusRing.js` com `FOCUS_RING` (borda accent + `ring-1` SEM offset, então os dois viram uma borda única de ~2px) e aplicado nos 4 controles (incluindo `MonthInput`, que já era só borda, pra ficarem iguais). O anel solto do campo de busca interno do `SelectInput` também saiu. Foco continua visível pra teclado — verificado por `getComputedStyle`: 1 camada de box-shadow, contra 2 antes.
+- **Bug real: "abatimento pendente" em mês já fechado** (`monthlyOverviewService.js`). A visão por mês contava `abatement_status = 'pending'` cru, sem nenhuma das regras que a Gestão Mensal aplica na tela. Duas classes de linha ficavam pendentes pra sempre, sem o usuário ter como resolver:
+  - **Linhas cobertas por um acumulado lançado em outro mês**. Na Gestão Mensal elas aparecem como "Via acumulado" com o toggle desabilitado (`markSubsumedRows`) — o valor já foi abatido junto do mês do acumulado, mas o `abatement_status` cru delas continua `'pending'` no banco. Era exatamente o caso relatado: mês impossível de fechar acusando pendência.
+  - **Linhas sem nota no mês** (`notes_count = 0`), que a tela mostra como "Sem doações no mês" e nem oferece botão.
+  - Corrigido com uma subquery `is_actionable` (`notes_count > 0 AND NOT EXISTS` acumulado cobrindo o mês) usada tanto no `pending_count` quanto no `total_pending`.
+  - **Terceiro bug no mesmo trecho**: `total_applied` somava `abatement_amount` de TODAS as linhas, contrariando o próprio comentário ("Only counts rows the operator has actually marked") — inflava o "Abatido" na comparação com o crédito real. Agora filtra por `abatement_status = 'applied'`.
+  - Reproduzido contra DuckDB real antes de corrigir (3 meses acusando pendência → 0) e verificado no navegador com o mesmo cenário; teste de regressão em `tests/migrations.test.js`.
+- **`MonthlyImportsOverviewSection` passou a filtrar por domínio** (`["imports", "monthly"]`) em vez de allowlist de `sources`. Marcar abatimento roda dentro de `runInTransaction`, que emite o source genérico `"transaction"` quando o chamador não etiqueta — fora da allowlist antiga. O caminho principal da UI etiqueta `monthly-action-history` e funcionava, mas qualquer chamada não etiquetada deixava a seção desatualizada. Domínio cobre os dois casos (evento sem domínio passa por back-compat) e ainda filtra ruído de `notes`.
+- 133/133 testes (1 novo), 15/15 e2e, lint 0 erros, build OK.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 214**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 216**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
