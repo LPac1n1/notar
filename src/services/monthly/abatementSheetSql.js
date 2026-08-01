@@ -5,10 +5,9 @@
  *
  * Pontos que a query resolve e que não são óbvios:
  *
- *  • Agrupa por `donor_cpf_links` (CPF), não por `monthly_donor_summary`. As
- *    linhas de summary são por titular — a nota do auxiliar sobe pro titular —
- *    e o sistema de destino abate por CPF, então o auxiliar precisa de linha
- *    própria com a contagem dele.
+ *  • Agrupa por `donor_cpf_links` (CPF), a mesma chave que o sistema de destino
+ *    usa para abater. Auxiliares têm cadastro de doador próprio, então cada um
+ *    sai numa linha com a contagem dele — nunca somado ao titular.
  *
  *  • `group_has_auxiliaries` decide se o nome entra na descrição. É TRUE para
  *    todo auxiliar (por definição o grupo dele tem um) e para o titular que

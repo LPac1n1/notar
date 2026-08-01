@@ -59,10 +59,10 @@ export function mapInactivityRow(row) {
  *    stopped donating, so it must not inflate a streak.
  *
  *  • Activity is resolved per DONOR CPF via `import_cpf_summary` →
- *    `donor_cpf_links`, not via `monthly_donor_summary`. Summary rows are
- *    written per holder (an auxiliary's notes roll up into their holder), so
- *    keying on them would report every auxiliary as "never donated" and hide
- *    a holder who personally stopped while an auxiliary kept going.
+ *    `donor_cpf_links`, not via `monthly_donor_summary`. Summary rows only
+ *    exist for donors that matched an import, so a donor who never sent a
+ *    single note has no row at all — keying on them would silently drop
+ *    exactly the people this report is meant to surface.
  *
  * Months before a donor's `donation_start_date` are excluded — they were
  * never expected to donate then.

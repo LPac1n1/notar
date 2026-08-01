@@ -1,12 +1,13 @@
 # Notar
 
-Sistema web para gestão de doadores da Nota Fiscal Paulista — cadastro, importação de CPFs, cálculo de abatimentos e exportação de relatórios para ONGs.
+Sistema web para gestão de doadores da Nota Fiscal Paulista — cadastro, importação de CPFs, cálculo de abatimentos, conciliação de créditos e exportação de relatórios para ONGs.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![React](https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=white)
 
 ## Sumário
 
+- [Preview](#preview)
 - [Sobre o Projeto](#sobre-o-projeto)
 - [Tecnologias](#tecnologias)
 - [Funcionalidades](#funcionalidades)
@@ -37,9 +38,9 @@ Sistema web para gestão de doadores da Nota Fiscal Paulista — cadastro, impor
 
 ## Sobre o Projeto
 
-O **Notar** é uma aplicação web local-first voltada para ONGs ligadas a demandas de moradia. Centraliza o cadastro de doadores, cruza CPFs importados da Nota Fiscal Paulista, calcula abatimentos mensais e gera relatórios em PDF e CSV.
+O **Notar** é uma aplicação web local-first voltada para ONGs ligadas a demandas de moradia. Centraliza o cadastro de doadores, cruza CPFs importados da Nota Fiscal Paulista, calcula abatimentos mensais, concilia o crédito real liberado pela NFP e gera relatórios em PDF, JPEG e CSV.
 
-Toda a lógica de dados roda no navegador via **DuckDB-WASM** — sem servidor próprio, sem banco remoto. Os dados são sincronizados entre dispositivos via **Supabase Storage**, com autenticação por magic link.
+Toda a lógica de dados roda no navegador via **DuckDB-WASM**, em um banco em memória — sem servidor próprio, sem banco remoto, sem queries pela rede. A persistência acontece por snapshot: o banco é hidratado a partir de um JSON no **Supabase Storage** ao entrar e re-enviado (com debounce) após cada transação, o que também sincroniza os dados entre dispositivos. A autenticação é por magic link.
 
 ---
 
@@ -53,7 +54,7 @@ Toda a lógica de dados roda no navegador via **DuckDB-WASM** — sem servidor p
 - [Lucide React](https://lucide.dev) — ícones
 
 **Banco de dados / Processamento**
-- [DuckDB-WASM](https://duckdb.org/docs/api/wasm/overview.html) — SQL no navegador via OPFS / File System Access API
+- [DuckDB-WASM](https://duckdb.org/docs/api/wasm/overview.html) — SQL no navegador, banco em memória (bundle EH)
 - [ExcelJS](https://github.com/exceljs/exceljs) — leitura de arquivos `.xlsx`
 
 **Autenticação / Sincronização**
@@ -68,14 +69,35 @@ Toda a lógica de dados roda no navegador via **DuckDB-WASM** — sem servidor p
 
 ## Funcionalidades
 
-- Cadastro de pessoas, doadores titulares, doadores auxiliares e demandas
-- Importação de planilhas da Nota Fiscal Paulista (CSV, TXT, XLSX) com pré-visualização e seleção de coluna
-- Conciliação automática de CPFs importados com doadores cadastrados
-- Gestão mensal com filtros, cálculo de abatimentos e status de realização
-- Dashboard com indicadores e alertas operacionais
-- Exportação de CSVs e relatórios PDF por demanda (ZIP automático para múltiplas demandas)
-- Backup e restauração local de dados em JSON
-- Sincronização entre dispositivos via Supabase
+**Cadastros**
+- Pessoas, doadores titulares, doadores auxiliares e demandas
+- Busca por texto livre (nome, CPF ou demanda) em todas as listas, além dos filtros por seleção exata
+- Lixeira com restauração e histórico de ações do sistema
+
+**Importação e conciliação**
+- Importação da planilha de **doações** da NFP (CSV, TXT, XLSX) com pré-visualização e seleção de coluna
+- Importação da planilha de **créditos** da NFP e conciliação nota a nota entre as duas, por `(CNPJ, número da nota, valor)`
+- Vínculo automático dos CPFs importados com os doadores cadastrados
+- Visão por mês mostrando as duas planilhas e o estado da conciliação lado a lado
+
+**Gestão mensal**
+- Cálculo de abatimentos, status de realização e ações em massa
+- Crédito real e saldo por doador **no mês** de referência
+- Lançamento de abatimento acumulado cobrindo um intervalo de meses
+- Auxiliares vinculados visíveis no card do titular
+
+**Acompanhamento**
+- Dashboard com indicadores e pontos de revisão
+- Rastreio de doadores que pararam de enviar notas, com quantos meses seguidos e lista de contato
+
+**Exportação**
+- Planilha de abatimento por demanda, pronta para importar em outro sistema (ZIP quando há mais de uma demanda)
+- CSVs de doadores, resumo mensal e conciliação
+- Relatórios PDF e JPEG por demanda (ZIP automático para múltiplas demandas)
+
+**Dados**
+- Backup e restauração em JSON
+- Sincronização entre dispositivos via Supabase, com detecção de alteração remota
 - Autenticação por magic link (sem senha)
 
 ---
@@ -135,13 +157,16 @@ VITE_SUPABASE_ANON_KEY=your-publishable-anon-key
 VITE_SUPABASE_STORAGE_BUCKET=notar
 VITE_SUPABASE_STORAGE_OBJECT=dados.json
 
-# Opcional: defina como "local" para pular a autenticação em desenvolvimento
+# Opcional: "local" abre o app sem autenticação. Use apenas em
+# desenvolvimento/testes — ver aviso abaixo.
 VITE_NOTAR_AUTH_MODE=
 ```
 
 As chaves `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estão em **Supabase → Project Settings → API**.
 
 > O `.env` já está no `.gitignore`. Nunca versione credenciais reais.
+
+> **`VITE_NOTAR_AUTH_MODE=local` desliga a persistência.** Nesse modo o Supabase não é inicializado, então não há login **nem sincronização** — o banco fica só em memória e **todos os dados somem ao recarregar a página**. É o modo usado pela suíte e2e. Se o app "esquece" tudo a cada refresh, verifique se essa variável ficou marcada como `local` em algum `.env` ou `.env.local`.
 
 ---
 
@@ -151,26 +176,30 @@ As chaves `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estão em **Supabase �
 
 O Notar usa **magic link** — sem senha. Informe seu e-mail na tela de login e acesse o link enviado para entrar.
 
-> Em desenvolvimento, defina `VITE_NOTAR_AUTH_MODE=local` no `.env` para abrir o app sem autenticação.
+> Em desenvolvimento, `VITE_NOTAR_AUTH_MODE=local` abre o app sem autenticação — mas sem persistência (ver [Configuração de Ambiente](#configuração-de-ambiente)).
 
 ### Fluxo de trabalho recomendado
 
 1. Cadastre as **demandas** (com cores de identificação).
 2. Cadastre **pessoas** de referência, se necessário.
 3. Cadastre **doadores titulares** e **auxiliares** com seus CPFs.
-4. Importe a **planilha mensal** da Nota Fiscal Paulista (CSV, TXT ou XLSX).
-5. Informe o mês de referência, o valor por nota e a coluna de CPF.
-6. Confira os CPFs encontrados e os vínculos com doadores na tela de importação.
-7. Acompanhe os abatimentos em **Gestão Mensal**.
-8. Marque abatimentos como pendentes ou realizados.
-9. Exporte **CSVs** ou **relatórios PDF** por demanda quando necessário.
-10. Use **Configurações** para exportar backup, restaurar dados ou sincronizar manualmente.
+4. Importe a **planilha de doações** da NFP (CSV, TXT ou XLSX), informando mês de referência, valor por nota e coluna de CPF.
+5. Importe a **planilha de créditos** do mesmo mês para habilitar a conciliação.
+6. Use a busca de CPFs em **Importações** para conferir quais foram vinculados a um doador e quais ficaram sem cadastro.
+7. Acompanhe os abatimentos em **Gestão Mensal** e marque-os como pendentes ou realizados.
+8. Para doadores com vários meses pendentes, use **Lançar acumulado** para consolidar em um único abatimento.
+9. Exporte a **planilha de abatimento** (uma por demanda) para dar baixa no sistema externo.
+10. Exporte **CSVs** ou **relatórios PDF/JPEG** por demanda quando necessário.
+11. Use **Configurações** para exportar backup, restaurar dados ou sincronizar manualmente.
 
 ### Observações
 
-- Titulares e auxiliares têm abatimentos independentes.
-- O vínculo de um auxiliar é informativo e não transfere abatimento ao titular.
-- O valor por nota fica salvo por importação. Para corrigir, exclua a importação e reimporte.
+- Titulares e auxiliares têm abatimentos independentes: cada CPF cadastrado gera sua própria linha no resumo mensal e na planilha de abatimento.
+- O vínculo de um auxiliar é informativo — não transfere abatimento ao titular. Ele aparece no card do titular apenas para dar contexto.
+- Quando um titular tem auxiliares, a descrição na planilha de abatimento inclui o nome de cada pessoa, para distinguir os lançamentos no sistema de destino.
+- O valor por nota fica salvo por importação. Para corrigir, use **Reimportar** na própria linha do mês.
+- Meses cobertos por um abatimento acumulado aparecem como "Via acumulado" e não podem ser marcados individualmente — o valor já foi contabilizado no mês do acumulado.
+- As divergências de conciliação vêm das planilhas da própria NFP e não são corrigíveis pelo app; o número é informativo.
 - Os dados são sincronizados automaticamente com debounce de 2s após cada transação.
 
 ---
@@ -186,6 +215,7 @@ src/
 ├── constants/        # Constantes e opções de filtro compartilhadas
 ├── contexts/         # Context providers (auth)
 ├── features/         # Componentes e serviços agrupados por domínio
+│   ├── credits/      # Importação da planilha de créditos da NFP
 │   ├── dashboard/
 │   ├── demands/
 │   ├── donors/
@@ -193,7 +223,8 @@ src/
 │   ├── imports/
 │   ├── monthly/
 │   ├── notes/
-│   └── people/
+│   ├── people/
+│   └── reports/      # Geração de PDF/JPEG e empacotamento em ZIP
 ├── hooks/            # Hooks reutilizáveis desacoplados de domínio
 ├── pages/            # Páginas e orquestração de fluxos
 ├── routes/           # Configuração de rotas
@@ -217,7 +248,7 @@ public/   # Arquivos públicos servidos pelo Vite
 
 ## Padrões e Arquitetura
 
-**Local-first:** toda a lógica de dados roda no browser via DuckDB-WASM. O Supabase é usado exclusivamente para autenticação e armazenamento do snapshot JSON — não há queries remotas.
+**Local-first:** toda a lógica de dados roda no browser via DuckDB-WASM, em um banco **em memória**. O Supabase é usado exclusivamente para autenticação e para guardar o snapshot JSON — não há queries remotas. O ciclo é: hidratar o banco a partir do snapshot ao entrar → operar localmente → re-enviar o snapshot após cada transação (com debounce). Nenhuma página monta antes da hidratação terminar.
 
 **Separação de responsabilidades:**
 
@@ -266,13 +297,25 @@ Para alterações que envolvam navegação, importação ou persistência:
 npm run test:e2e
 ```
 
+### Testes
+
+| Suíte | O que cobre |
+|---|---|
+| `tests/*.test.js` | Funções puras (formatação, validação, chaves de conciliação) e integração real contra **DuckDB-Node**: migrations, prepared statements e as queries de negócio mais delicadas. |
+| `e2e/*.spec.js` | Fluxos ponta a ponta no navegador com Playwright (importação, gestão mensal, cópia de CPF, backup/restauração). |
+
+O CI (`.github/workflows/ci.yml`) roda em push para `main` e em pull requests, com dois jobs paralelos: `checks` (lint + testes + build) e `e2e` (Playwright em Chromium, com relatório publicado como artefato em caso de falha).
+
+> A suíte de testes usa o bundle **node-blocking (MVP)** do DuckDB-WASM, que quebra com `_setThrew is not defined` em alguns construtos — notadamente `LIKE '%' || ? || '%'` dentro de prepared statement. Quando esbarrar nisso, cubra a lógica com teste unitário do SQL gerado e valide o comportamento pelo e2e, que roda o bundle EH de produção.
+
 ---
 
 ## Limitações Conhecidas
 
-- **Compatibilidade de navegador:** o app depende de OPFS (Origin Private File System) e da File System Access API. Requer Chrome 86+, Edge 86+ ou Firefox 111+. **Não funciona no Safari.**
-- **Ambiente local:** o app é projetado para uso em rede local ou por um único usuário por vez. Edições simultâneas por múltiplos dispositivos resultam na estratégia de "último a sincronizar vence".
-- **Volumes grandes:** a paginação server-side está disponível na infraestrutura mas ainda não ativada nas páginas. Para bases acima de ~5 mil linhas, listas podem ficar lentas.
+- **Compatibilidade de navegador:** o app usa o bundle EH do DuckDB-WASM, que depende de WebAssembly com exception handling — Chrome/Edge 95+, Firefox 100+, Safari 15.2+.
+- **Edição simultânea:** o modelo de sincronização é por snapshot, então dois dispositivos editando ao mesmo tempo caem em "último a sincronizar vence". O app detecta alteração remota ao voltar para a aba e oferece recarregar antes de sobrescrever, mas não faz merge.
+- **Volumes grandes:** Doadores, Pessoas, Lixeira e Histórico usam paginação server-side. **Gestão Mensal ainda pagina no cliente** — carrega o mês inteiro antes de fatiar. Para meses acima de ~5 mil linhas a página pode ficar lenta; a infraestrutura de paginação server-side já existe e a migração foi adiada por ser a página de maior risco.
+- **Sem servidor:** não há API própria nem controle de acesso por perfil. Quem entra na conta enxerga e edita tudo.
 
 ---
 
@@ -286,18 +329,13 @@ npm run test:e2e
 
 **Padrão de commits:**
 
+O histórico deste repositório usa mensagens curtas e numeradas sequencialmente — o conteúdo da mudança fica no diff, não na mensagem:
+
 ```
-tipo: descrição curta
+commit 219
 ```
 
-| Tipo | Uso |
-|---|---|
-| `feat` | Nova funcionalidade |
-| `fix` | Correção de bug |
-| `refactor` | Refatoração sem mudança de comportamento |
-| `docs` | Documentação |
-| `test` | Testes |
-| `chore` | Tarefas de manutenção |
+Cada commit deve ser uma unidade lógica fechada (que passe em lint, testes e build por si só). Mudanças de escopos diferentes vão em commits separados.
 
 ---
 
