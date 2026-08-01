@@ -19,6 +19,18 @@ import {
 } from "./connection.js";
 import { updateStorageInfo } from "./events.js";
 import { localizeHydrationError } from "./cloudSyncUtils.js";
+import {
+  fitsKeepaliveBudget,
+  hasRemoteVersionChanged,
+  isObjectNotFoundError,
+  pickSnapshotVersion,
+  shouldFlushOnHide,
+} from "./cloudSyncDecisions.js";
+import {
+  compressSnapshot,
+  readSnapshotBlob,
+  serializeSnapshot,
+} from "./snapshotCodec.js";
 import { logError } from "../logger.js";
 
 /**
@@ -38,21 +50,6 @@ import { logError } from "../logger.js";
  */
 
 const FLUSH_DEBOUNCE_MS = 2000;
-
-// Browsers cap `fetch(..., { keepalive: true })` request bodies around 64KB
-// — there is no way to reliably deliver a larger payload after the tab has
-// actually closed. Stay comfortably under that so the request isn't silently
-// dropped by the browser instead of by our own code.
-const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
-
-// `JSON.stringify` replacer that downgrades JS BigInt to Number. DuckDB-WASM
-// returns BIGINT columns (e.g. `donation_notes.valor_cents`) as BigInt,
-// which the default JSON serializer can't handle. Cents always fit under
-// `Number.MAX_SAFE_INTEGER` (R$ 90+ trillion in cents), so coercion is loss-
-// free for this domain.
-function bigintToNumberReplacer(_key, value) {
-  return typeof value === "bigint" ? Number(value) : value;
-}
 
 let activeUserId = null;
 let pendingTimer = null;
@@ -157,8 +154,7 @@ async function fetchServerVersion(userId) {
     throw error;
   }
 
-  const entry = (data ?? []).find((item) => item.name === STORAGE_OBJECT_NAME);
-  return entry?.updated_at ?? entry?.created_at ?? null;
+  return pickSnapshotVersion(data, STORAGE_OBJECT_NAME);
 }
 
 /**
@@ -175,10 +171,7 @@ export async function checkForRemoteChanges() {
 
   try {
     const version = await fetchServerVersion(activeUserId);
-    if (!version || !lastKnownServerVersion) {
-      return false;
-    }
-    const isConflict = version !== lastKnownServerVersion;
+    const isConflict = hasRemoteVersionChanged(lastKnownServerVersion, version);
     if (isConflict && !remoteConflict) {
       remoteConflict = true;
       notifyConflictListeners();
@@ -226,54 +219,6 @@ function cancelPendingTimer() {
   }
 }
 
-// Compress a JSON string with gzip. Falls back to uncompressed if
-// CompressionStream is not available (older Safari / non-standard envs).
-async function compressPayload(jsonString) {
-  if (typeof CompressionStream === "undefined") {
-    return {
-      blob: new Blob([jsonString], { type: "application/json" }),
-      contentType: "application/json",
-    };
-  }
-  try {
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(jsonString));
-        controller.close();
-      },
-    });
-    const compressed = stream.pipeThrough(new CompressionStream("gzip"));
-    const blob = await new Response(compressed).blob();
-    return { blob, contentType: "application/gzip" };
-  } catch {
-    return {
-      blob: new Blob([jsonString], { type: "application/json" }),
-      contentType: "application/json",
-    };
-  }
-}
-
-// Read a Blob that may be gzip-compressed (detected by magic bytes 1f 8b).
-// Backward-compatible: uncompressed JSON blobs are returned as-is.
-async function readSnapshotBlob(blob) {
-  try {
-    const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
-    if (
-      header[0] === 0x1f &&
-      header[1] === 0x8b &&
-      typeof DecompressionStream !== "undefined"
-    ) {
-      const decompressed = blob
-        .stream()
-        .pipeThrough(new DecompressionStream("gzip"));
-      return new Response(decompressed).text();
-    }
-  } catch {
-    // Fall through to plain text if decompression fails unexpectedly.
-  }
-  return blob.text();
-}
-
 export async function downloadSnapshotFromCloud(userId) {
   if (!isSupabaseConfigured) return null;
   if (!userId) return null;
@@ -284,15 +229,11 @@ export async function downloadSnapshotFromCloud(userId) {
     .download(path);
 
   if (error) {
-    // Supabase Storage returns 400/404 when the object is missing. The
-    // first-time user is the canonical case — return null and let the
-    // caller decide whether to seed an empty workspace.
-    const message = error.message || "";
-    const notFound =
-      message.toLowerCase().includes("not found") ||
-      message.toLowerCase().includes("object not found") ||
-      message.toLowerCase().includes("404");
-    if (notFound) {
+    // Object missing = first-time user; anything else must propagate. See
+    // `isObjectNotFoundError` for why this distinction is load-bearing:
+    // swallowing a real failure here would hydrate an empty database and the
+    // next flush would upload that emptiness over the user's real data.
+    if (isObjectNotFoundError(error)) {
       return null;
     }
     throw error;
@@ -363,9 +304,7 @@ async function performUpload(userId) {
       // DuckDB-WASM, which `JSON.stringify` refuses to serialize. Convert
       // them to Number here — cents always fit comfortably under
       // Number.MAX_SAFE_INTEGER, so the precision loss is non-existent.
-      const { blob: body, contentType } = await compressPayload(
-        JSON.stringify(payload, bigintToNumberReplacer),
-      );
+      const { blob: body, contentType } = await compressSnapshot(serializeSnapshot(payload));
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(path, body, {
@@ -415,7 +354,7 @@ async function performUpload(userId) {
 // an identical request.
 async function tryKeepaliveUpload(userId, blob) {
   if (!supabaseUrl || !supabaseAnonKey) return false;
-  if (blob.size > KEEPALIVE_BODY_LIMIT_BYTES) return false;
+  if (!fitsKeepaliveBudget(blob.size)) return false;
 
   try {
     const { data } = await supabase.auth.getSession();
@@ -458,9 +397,7 @@ async function flushBeforeUnload(userId) {
   try {
     const snapshot = await exportDatabaseSnapshot();
     const payload = createSnapshotPayload(snapshot);
-    const { blob } = await compressPayload(
-      JSON.stringify(payload, bigintToNumberReplacer),
-    );
+    const { blob } = await compressSnapshot(serializeSnapshot(payload));
     const delivered = await tryKeepaliveUpload(userId, blob);
     if (delivered) return;
   } catch (error) {
@@ -591,17 +528,49 @@ function createEmptySnapshot() {
 // each `execute`/`executePrepared`/`runInTransaction` once the depth is 0.
 setOnAfterTransaction(scheduleCloudFlush);
 
+export function hasPendingCloudWork() {
+  return Boolean(pendingTimer) || isUploading;
+}
+
+// Flush while the page is still alive. `visibilitychange → hidden` and
+// `pagehide` both fire BEFORE the browser starts tearing the page down, so a
+// normal (unrestricted) upload works here — unlike `beforeunload`, whose
+// keepalive path caps the body at ~60KB, a threshold the compressed snapshot
+// crosses after roughly two months of real use. Covers the cases that
+// actually dominate in practice: switching tabs, switching apps, and mobile
+// backgrounding (where `beforeunload` often never fires at all).
+function flushIfPending(scope) {
+  const shouldFlush = shouldFlushOnHide({
+    isConfigured: isSupabaseConfigured,
+    activeUserId,
+    hasPendingWork: hasPendingCloudWork(),
+  });
+  if (!shouldFlush) return;
+  flushPendingCloudSync().catch((error) => logError(scope, error));
+}
+
 // Flush on tab close so the user doesn't lose changes that were sitting in
-// the debounce window. Two layers, because neither one alone is reliable:
-//   1. `flushBeforeUnload` tries a keepalive-backed request that can survive
+// the debounce window. Layered, because no single hook is reliable:
+//   1. `visibilitychange`/`pagehide` above — the page is still alive, so the
+//      upload has no size limit. This is the one that does the real work.
+//   2. `flushBeforeUnload` tries a keepalive-backed request that can survive
 //      the page actually closing (see its comment for the size caveat).
-//   2. The native "leave site?" prompt below gives the user an actual
-//      choice to stay and let the sync finish, instead of silently losing
-//      work if step 1 can't complete in time.
+//   3. The native "leave site?" prompt gives the user an actual choice to
+//      stay and let the sync finish, instead of silently losing work when
+//      neither of the above completes in time.
 if (typeof window !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushIfPending("cloudStorage.flushOnHide");
+    }
+  });
+
+  window.addEventListener("pagehide", () => {
+    flushIfPending("cloudStorage.flushOnPageHide");
+  });
+
   window.addEventListener("beforeunload", (event) => {
-    const hasPendingWork = Boolean(pendingTimer) || isUploading;
-    if (!hasPendingWork) return;
+    if (!hasPendingCloudWork()) return;
 
     event.preventDefault();
     event.returnValue = "";

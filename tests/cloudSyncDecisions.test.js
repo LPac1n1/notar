@@ -1,0 +1,121 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  KEEPALIVE_BODY_LIMIT_BYTES,
+  fitsKeepaliveBudget,
+  hasRemoteVersionChanged,
+  isObjectNotFoundError,
+  pickSnapshotVersion,
+  shouldFlushOnHide,
+} from "../src/services/db/cloudSyncDecisions.js";
+
+// Estas decisões governam a sincronização. Errar qualquer uma delas custa
+// DADO do usuário, não só uma tela errada — por isso os casos abaixo focam
+// nos modos de falha, não no caminho feliz.
+
+test("only a genuine not-found is treated as first use", () => {
+  // Caminho canônico do primeiro acesso: o objeto ainda não existe.
+  assert.equal(isObjectNotFoundError({ status: 404 }), true);
+  assert.equal(isObjectNotFoundError({ statusCode: "404" }), true);
+  assert.equal(isObjectNotFoundError({ message: "Object not found" }), true);
+  assert.equal(isObjectNotFoundError({ message: "The resource was not found" }), true);
+  assert.equal(isObjectNotFoundError({ message: "Request failed with 404" }), true);
+});
+
+test("real failures must NOT be mistaken for an empty bucket", () => {
+  // Este é o cenário de perda de dado: se um destes fosse classificado como
+  // "não encontrado", o app hidrataria vazio e o próximo flush subiria esse
+  // vazio por cima do snapshot bom que está no servidor.
+  const dangerous = [
+    { status: 401, message: "Unauthorized" },
+    { status: 403, message: "new row violates row-level security policy" },
+    { status: 500, message: "Internal Server Error" },
+    { message: "Failed to fetch" },
+    { message: "NetworkError when attempting to fetch resource" },
+    { message: "JWT expired" },
+    { message: "signature verification failed" },
+  ];
+
+  for (const error of dangerous) {
+    assert.equal(
+      isObjectNotFoundError(error),
+      false,
+      `não deveria tratar como primeiro uso: ${JSON.stringify(error)}`,
+    );
+  }
+});
+
+test("missing or malformed errors never silently pass as not-found", () => {
+  assert.equal(isObjectNotFoundError(null), false);
+  assert.equal(isObjectNotFoundError(undefined), false);
+  assert.equal(isObjectNotFoundError({}), false);
+  assert.equal(isObjectNotFoundError({ message: "" }), false);
+});
+
+test("conflict needs both sides known", () => {
+  // Sem âncora local (primeira sessão) ou sem versão remota (objeto ainda não
+  // existe) não há comparação possível. Chamar isso de conflito travaria a
+  // sincronização de um usuário novo — que nunca conseguiria o primeiro
+  // upload.
+  assert.equal(hasRemoteVersionChanged(null, "2026-08-01T10:00:00Z"), false);
+  assert.equal(hasRemoteVersionChanged("2026-08-01T10:00:00Z", null), false);
+  assert.equal(hasRemoteVersionChanged(null, null), false);
+  assert.equal(hasRemoteVersionChanged("", ""), false);
+});
+
+test("conflict is exactly a version mismatch", () => {
+  const known = "2026-08-01T10:00:00Z";
+  assert.equal(hasRemoteVersionChanged(known, known), false);
+  assert.equal(hasRemoteVersionChanged(known, "2026-08-01T10:05:00Z"), true);
+});
+
+test("keepalive budget rejects payloads the browser would drop", () => {
+  assert.equal(fitsKeepaliveBudget(0), true);
+  assert.equal(fitsKeepaliveBudget(KEEPALIVE_BODY_LIMIT_BYTES), true);
+  assert.equal(fitsKeepaliveBudget(KEEPALIVE_BODY_LIMIT_BYTES + 1), false);
+
+  // Um snapshot comprimido de alguns meses de uso já passa do limite; o
+  // caminho de keepalive precisa recusar em vez de emitir um pedido que o
+  // navegador descarta em silêncio.
+  assert.equal(fitsKeepaliveBudget(350_000), false);
+
+  // Entradas inválidas nunca podem "passar" por acidente.
+  assert.equal(fitsKeepaliveBudget(Number.NaN), false);
+  assert.equal(fitsKeepaliveBudget(-1), false);
+  assert.equal(fitsKeepaliveBudget(undefined), false);
+});
+
+test("hide-time flush requires configuration, a user and pending work", () => {
+  const base = { isConfigured: true, activeUserId: "u1", hasPendingWork: true };
+  assert.equal(shouldFlushOnHide(base), true);
+
+  assert.equal(shouldFlushOnHide({ ...base, isConfigured: false }), false);
+  assert.equal(shouldFlushOnHide({ ...base, activeUserId: null }), false);
+  assert.equal(shouldFlushOnHide({ ...base, hasPendingWork: false }), false);
+  assert.equal(shouldFlushOnHide(), false);
+});
+
+test("snapshot version prefers updated_at and tolerates a fresh object", () => {
+  const entries = [
+    { name: "outro.json", updated_at: "2026-01-01T00:00:00Z" },
+    { name: "dados.json", updated_at: "2026-08-01T10:00:00Z", created_at: "2026-07-01T10:00:00Z" },
+  ];
+  assert.equal(pickSnapshotVersion(entries, "dados.json"), "2026-08-01T10:00:00Z");
+
+  // Objeto recém-criado pode vir sem updated_at.
+  assert.equal(
+    pickSnapshotVersion(
+      [{ name: "dados.json", created_at: "2026-07-01T10:00:00Z" }],
+      "dados.json",
+    ),
+    "2026-07-01T10:00:00Z",
+  );
+
+  // Ausente / listagem vazia => sem versão (e, portanto, sem conflito).
+  assert.equal(pickSnapshotVersion([], "dados.json"), null);
+  assert.equal(pickSnapshotVersion(null, "dados.json"), null);
+  assert.equal(
+    pickSnapshotVersion([{ name: "outro.json" }], "dados.json"),
+    null,
+  );
+});
