@@ -390,7 +390,7 @@ export default function SelectInput({
           className={
             hideLabel
               ? "sr-only"
-              : "block text-sm font-medium text-[var(--muted)]"
+              : "block w-fit text-sm font-medium text-[var(--muted)]"
           }
         >
           {label}
