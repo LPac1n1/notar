@@ -372,9 +372,19 @@ Quatro pedidos diretos: auxiliares visíveis no titular, rastreio de quem parou 
 - **`MonthlyImportsOverviewSection` passou a filtrar por domínio** (`["imports", "monthly"]`) em vez de allowlist de `sources`. Marcar abatimento roda dentro de `runInTransaction`, que emite o source genérico `"transaction"` quando o chamador não etiqueta — fora da allowlist antiga. O caminho principal da UI etiqueta `monthly-action-history` e funcionava, mas qualquer chamada não etiquetada deixava a seção desatualizada. Domínio cobre os dois casos (evento sem domínio passa por back-compat) e ainda filtra ruído de `notes`.
 - 133/133 testes (1 novo), 15/15 e2e, lint 0 erros, build OK.
 
+## Rótulo de campo capturando clique fora do input (commit 218)
+
+Usuário relatou que "mesmo clicando fora do input de busca, ele é selecionado". O `<label>` dos controles de formulário era `block` — ou seja, ocupava a LARGURA INTEIRA da linha (960px no filtro de Doadores), não só a largura da palavra. Como `<label for=...>` foca o controle associado, clicar em qualquer ponto daquela faixa aparentemente vazia à direita do texto "Busca" focava o input.
+
+Mapeado empiricamente antes de corrigir: uma varredura de cliques por coordenada na página inteira mostrou exatamente 2 pontos que focavam a busca, ambos resolvendo para `LABEL ... texto="Busca"` a centenas de pixels do texto visível. Depois do fix: nenhum.
+
+Corrigido com `w-fit` no rótulo dos 4 controles (`TextInput`, `Textarea`, `SelectInput`, `MonthInput`) — a área clicável passa a coincidir com o texto visível (960px → 41px). O contrato de acessibilidade continua: clicar NO texto do rótulo ainda foca o campo (verificado nos dois sentidos no navegador).
+
+Vale como regra pro projeto: rótulo de formulário nunca deve ser `block` puro, senão vira um alvo de clique invisível do tamanho da linha.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 216**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 218**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
