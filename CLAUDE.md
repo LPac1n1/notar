@@ -400,9 +400,21 @@ Partiu de uma auditoria pedida pelo usuário ("sugestões de melhoria"). **Corre
 - **Continua sem cobertura** (precisa de projeto Supabase de teste ou fake do cliente): a orquestração em si — debounce, coalescing e o upload de verdade. O e2e roda com `VITE_NOTAR_AUTH_MODE=local`, que desliga o Supabase inteiro, então não alcança essa camada.
 - 149/149 testes, 15/15 e2e, lint 0 erros, build OK.
 
+## Conceito de "abatimento excedido" removido por completo (commit 224)
+
+Fechamento do resíduo apontado na auditoria: o commit 214 tinha removido o contador (badge do Sidebar, card e modal do Dashboard), mas o alerta continuava aparecendo em 4 lugares — badge vermelho "Crédito excedido" no card da Gestão Mensal, saldo em vermelho, opção "Abatimento excedido" no filtro de conciliação, status no perfil do doador e rótulo no CSV.
+
+**Por que sai por inteiro, e não só o card:** `computeReconciliationStatus` marcava `exceeded` quando abatido > crédito casado. Sem a planilha de créditos do mês importada, o crédito casado é zero por definição — então qualquer abatimento já marcado acendia o alerta. Ou seja, o alarme disparava com mais força justamente no caso mais comum e menos problemático, apontando erro onde não havia nenhum.
+
+- `computeReconciliationStatus` colapsou para `no-credit` | `ok` (tem ou não crédito casado). Sem `RECONCILIATION_EPSILON`, que só existia para a comparação removida.
+- Rótulos passaram a ser descritivos: `Dentro do limite` → `Com crédito conciliado` (Gestão Mensal, perfil do doador e CSV).
+- **Os números continuam à vista**: a coluna "Saldo" segue mostrando a diferença, agora em cor neutra, com a legenda descritiva "Abatido acima do crédito casado" quando negativa. O que saiu foi o julgamento automático, não o dado.
+- Verificado no navegador com o cenário que antes disparava o alerta (abatido R$ 540 × crédito casado R$ 20): nenhum badge, saldo em `rgb(28,28,31)` (cor padrão, não vermelho), filtro só com "Com crédito conciliado"/"Sem crédito conciliado", perfil idem.
+- 147/147 testes, 15/15 e2e, lint 0 erros, build OK.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 222**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 224**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
