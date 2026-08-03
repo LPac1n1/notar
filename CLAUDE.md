@@ -382,9 +382,27 @@ Corrigido com `w-fit` no rótulo dos 4 controles (`TextInput`, `Textarea`, `Sele
 
 Vale como regra pro projeto: rótulo de formulário nunca deve ser `block` puro, senão vira um alvo de clique invisível do tamanho da linha.
 
+## Robustez do cloud sync: flush ao sair + testes (commit 222)
+
+Partiu de uma auditoria pedida pelo usuário ("sugestões de melhoria"). **Correção de rumo importante:** minha primeira sugestão foi "comprimir o snapshot antes de subir" — a compressão gzip JÁ existia (`compressPayload`/`readSnapshotBlob`). O número que eu tinha apresentado (12 MB/upload em 1 ano) era do JSON cru; com gzip o upload real fica em ~340 KB. Medido depois com `gzipSync` sobre linhas no formato real de exportação:
+
+| Volume | JSON | gzip | cabe no keepalive (60 KB)? |
+|---|---|---|---|
+| 1 mês (1,2k notas) | 0,99 MB | 0,03 MB | sim |
+| 6 meses | 5,94 MB | 0,17 MB | não |
+| 1 ano | 11,90 MB | 0,34 MB | não |
+| 3 anos | 35,80 MB | 1,02 MB | não |
+
+- **O risco real (esse sim confirmado)**: o único caminho que sobrevive ao fechamento da aba é `fetch(keepalive)`, limitado pelo navegador a ~64 KB. O snapshot comprimido passa disso em ~2 meses de uso, então o `beforeunload` caía sempre no fallback que o navegador costuma matar — a proteção contra perder trabalho parava de valer cedo e em silêncio.
+- **Corrigido** adicionando flush em `visibilitychange → hidden` e `pagehide`: nesses eventos a página ainda está viva, então o upload normal roda **sem limite de tamanho**. Cobre os casos que dominam na prática (trocar de aba, trocar de app, background no mobile — onde `beforeunload` muitas vezes nem dispara). O `beforeunload` continua como última linha, com o prompt nativo.
+- **Extração para testabilidade**: `db/cloudSyncDecisions.js` (decisões puras) e `db/snapshotCodec.js` (serialização/compressão) — nenhum dos dois importa Supabase ou DuckDB, então rodam em Node. `cloudStorage.js` passou a consumi-los, eliminando as duplicatas locais.
+- **16 testes novos** onde antes havia só helpers de caminho/tradução de erro. O de maior valor: `isObjectNotFoundError` — classificar 401/403/500/"Failed to fetch"/JWT expirado como "não encontrado" faria o app hidratar vazio e, no flush seguinte, **subir o vazio por cima dos dados bons**. O teste trava os 7 casos perigosos. Também cobertos: gate de conflito exigir os dois lados conhecidos (senão usuário novo nunca sincroniza), limite do keepalive, round-trip de gzip incluindo compatibilidade com snapshots antigos em JSON puro, BigInt de `valor_cents` e acentuação.
+- **Continua sem cobertura** (precisa de projeto Supabase de teste ou fake do cliente): a orquestração em si — debounce, coalescing e o upload de verdade. O e2e roda com `VITE_NOTAR_AUTH_MODE=local`, que desliga o Supabase inteiro, então não alcança essa camada.
+- 149/149 testes, 15/15 e2e, lint 0 erros, build OK.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 218**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 222**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
