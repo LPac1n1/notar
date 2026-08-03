@@ -5,22 +5,17 @@ import { getDonorReconciliationSummary } from "../../../services/reconciliation/
 import { logError } from "../../../services/logger";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
-// "incomplete" used to surface as a warning ("Crédito disponível"). The
-// user established that surplus credit on the NFP side is normal — there
-// is no expectation that every cent of credit be abated — so it now
-// rolls into "ok". Only "exceeded" remains as an actionable warning.
+// Descritivo, sem julgamento. Havia um estado `exceeded` ("Abatimento
+// excedido", em vermelho) que foi removido: sem a planilha de créditos do mês
+// importada o crédito casado é zero por definição, então qualquer abatimento
+// já marcado acendia o alerta — apontando erro no caso mais comum e menos
+// problemático. Os números continuam à vista logo abaixo.
 const STATUS_META = {
   ok: {
-    label: "Dentro do limite",
+    label: "Com crédito conciliado",
     tone: "success",
     description:
-      "O abatimento marcado no sistema está dentro do crédito real gerado na NFP.",
-  },
-  exceeded: {
-    label: "Abatimento excedido",
-    tone: "danger",
-    description:
-      "O valor abatido no sistema é maior que o crédito real disponível na NFP.",
+      "As notas deste doador casaram com a planilha de créditos da NFP.",
   },
   "no-credit": {
     label: "Sem crédito conciliado",

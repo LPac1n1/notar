@@ -50,7 +50,6 @@ export const ABATEMENT_SORT_OPTIONS = [
 // landing the user on an always-empty result page.
 export const RECONCILIATION_STATUS_OPTIONS = [
   { value: "all", label: "Toda a conciliação" },
-  { value: "ok", label: "Dentro do limite", tone: "success" },
-  { value: "exceeded", label: "Abatimento excedido", tone: "danger" },
+  { value: "ok", label: "Com crédito conciliado", tone: "success" },
   { value: "no-credit", label: "Sem crédito conciliado", tone: "default" },
 ];

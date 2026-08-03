@@ -14,33 +14,25 @@ test("status is 'no-credit' when both totals are zero", () => {
 
 test("status is 'no-credit' when both totals are slightly negative (junk data)", () => {
   // Defensive: float math on a sum of empty rows can yield -0 or tiny
-  // negatives. Treat as no-credit so the UI doesn't flash a warning.
+  // negatives. Treat as no-credit so the UI doesn't flash a state change.
   assert.equal(computeReconciliationStatus(-0.001, 0), "no-credit");
   assert.equal(computeReconciliationStatus(0, -0.001), "no-credit");
 });
 
-test("status is 'ok' when abated matches credit within the cent epsilon", () => {
+test("any real credit or abatement counts as reconciled", () => {
   assert.equal(computeReconciliationStatus(100, 100), "ok");
-  // Sub-cent drift from BRL math should not trigger a flag.
-  assert.equal(computeReconciliationStatus(100, 100.003), "ok");
-  assert.equal(computeReconciliationStatus(100.003, 100), "ok");
-});
-
-test("status is 'exceeded' when abated is meaningfully above credit", () => {
-  assert.equal(computeReconciliationStatus(50, 100), "exceeded");
-  assert.equal(computeReconciliationStatus(99.99, 100.01), "exceeded");
-});
-
-test("status is 'ok' when credit is above abated — surplus credit is normal", () => {
-  // The NGO doesn't need to abate every cent of credit the donor generated.
-  // Surplus credit on the NFP side is expected behaviour, so it should not
-  // surface as a warning anywhere in the UI.
   assert.equal(computeReconciliationStatus(100, 50), "ok");
-  assert.equal(computeReconciliationStatus(100.01, 99.99), "ok");
   assert.equal(computeReconciliationStatus(30, 0), "ok");
+  assert.equal(computeReconciliationStatus(0.01, 0), "ok");
 });
 
-test("status is 'exceeded' even when no credit was generated but money was abated", () => {
-  // NGO paid out without an underlying credit at all — most extreme case.
-  assert.equal(computeReconciliationStatus(0, 50), "exceeded");
+test("abating above the matched credit is NOT flagged as a problem", () => {
+  // O estado `exceeded` foi removido: ele acendia sozinho no caso mais comum
+  // e menos problemático — o mês cuja planilha de créditos ainda não foi
+  // importada, onde o crédito casado é zero por definição. A diferença
+  // continua visível como número na coluna "Saldo"; o que saiu foi o
+  // julgamento automático em cima dela.
+  assert.equal(computeReconciliationStatus(50, 100), "ok");
+  assert.equal(computeReconciliationStatus(99.99, 100.01), "ok");
+  assert.equal(computeReconciliationStatus(0, 50), "ok");
 });

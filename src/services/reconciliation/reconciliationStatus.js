@@ -1,34 +1,25 @@
 /**
- * Pure-function status classifier for the credit reconciliation panel.
- * Kept in its own module so it can be unit-tested in Node without pulling in
- * the DuckDB-WASM stack via the rest of the reconciliation service.
- */
-
-// Currency tolerance for the "abated vs credit" comparison. Tighter than a
-// cent because BRL is always to two decimals — any sub-cent drift comes from
-// float accumulation, not real data.
-export const RECONCILIATION_EPSILON = 0.005;
-
-/**
- * Maps a per-donor (totalCredit, totalAbated) pair to a single status used
- * across the UI (donor profile badge, monthly row icon, dashboard counters).
+ * Classificador puro do estado de conciliação de um doador. Fica em módulo
+ * próprio para ser testado em Node sem arrastar a stack do DuckDB-WASM junto.
  *
- *   no-credit  — donor never generated any credit (nothing to reconcile).
- *   ok         — abated value is within (or under) the credit generated.
- *                The NGO doesn't have to abate every cent of credit the
- *                donor produced; surplus credit is normal NFP behaviour
- *                and never deserves a warning.
- *   exceeded   — NGO abated more than the donor actually generated. The
- *                only failure mode worth surfacing: it means the system
- *                marked off abatements the credit can't cover.
+ *   no-credit  — nenhuma nota do doador casou com a planilha de créditos,
+ *                então não há o que comparar.
+ *   ok         — o doador tem crédito real conciliado.
+ *
+ * Não existe mais um estado de alerta aqui. Havia um `exceeded` (abatido
+ * acima do crédito casado), removido porque acendia sozinho no caso mais
+ * comum e menos problemático: o mês cuja planilha de créditos ainda não foi
+ * importada. Sem crédito casado o crédito conta como zero, então qualquer
+ * abatimento já marcado disparava o alerta — sinalizando erro onde não havia
+ * nenhum. O usuário confirmou que a métrica não era útil.
+ *
+ * A comparação entre abatido e crédito continua visível como número (coluna
+ * "Saldo" na Gestão Mensal, tiles no perfil do doador); o que saiu foi o
+ * julgamento automático em cima dela.
  */
 export function computeReconciliationStatus(totalCredit, totalAbated) {
   if (totalCredit <= 0 && totalAbated <= 0) {
     return "no-credit";
-  }
-  const diff = totalAbated - totalCredit;
-  if (diff > RECONCILIATION_EPSILON) {
-    return "exceeded";
   }
   return "ok";
 }

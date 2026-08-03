@@ -16,8 +16,7 @@ import { buildSlug } from "../utils/slug.js";
 // the key here for back-compat with any persisted CSV export referencing
 // the old wording, but it should never come back from the service.
 const RECONCILIATION_STATUS_LABEL = {
-  ok: "Dentro do limite",
-  exceeded: "Abatimento excedido",
+  ok: "Com crédito conciliado",
   "no-credit": "Sem crédito conciliado",
 };
 

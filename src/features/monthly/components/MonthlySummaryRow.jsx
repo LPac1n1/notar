@@ -10,19 +10,6 @@ import MetricField from "./MetricField";
 import MonthlyRowHistoryPanel from "./MonthlyRowHistoryPanel";
 import StatusToggle from "./StatusToggle";
 
-// Only "exceeded" surfaces as a badge — surplus NFP credit over the
-// abatement value is normal and intentionally silent. See
-// `computeReconciliationStatus` for the rationale.
-const RECONCILIATION_BADGE = {
-  exceeded: {
-    label: "Crédito excedido",
-    title:
-      "Abatimento marcado como realizado é maior que o crédito real gerado na NFP.",
-    className:
-      "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]",
-  },
-};
-
 function MonthlySummaryRowBase({
   summary,
   isUpdating = false,
@@ -45,10 +32,6 @@ function MonthlySummaryRowBase({
     !summary.hasDonationsInMonth &&
     inactivityMonths >= 1;
   const inactivityDescription = describeInactivity(inactivity ?? {});
-  const reconciliationBadge =
-    reconciliation && RECONCILIATION_BADGE[reconciliation.status]
-      ? RECONCILIATION_BADGE[reconciliation.status]
-      : null;
   const [expanded, setExpanded] = useState(false);
   // History panel — separate from mobile `expanded` because it loads
   // remote data (last 6 months) and we don't want it firing on every
@@ -217,14 +200,6 @@ function MonthlySummaryRowBase({
                   title={summary.adjustment.description || ""}
                 >
                   Acumulado
-                </span>
-              ) : null}
-              {reconciliationBadge ? (
-                <span
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${reconciliationBadge.className}`}
-                  title={reconciliationBadge.title}
-                >
-                  {reconciliationBadge.label}
                 </span>
               ) : null}
               {showInactivityBadge ? (
@@ -472,18 +447,13 @@ function MonthlySummaryRowBase({
             value={
               reconciliation ? formatCurrency(-reconciliation.difference) : "—"
             }
-            valueClassName={
-              // Only red on exceeded — credit ≥ abated (the "ok" bucket
-              // now covers both exact and surplus) keeps the default
-              // text colour because the user told us surplus credit is
-              // not actionable.
-              reconciliation && reconciliation.status === "exceeded"
-                ? "text-[var(--danger)]"
-                : ""
-            }
             helper={
-              reconciliation && reconciliation.status === "exceeded"
-                ? "Abatido > crédito real"
+              // Só descreve o sinal do número. Antes havia um alerta vermelho
+              // quando o abatido passava do crédito casado, mas ele acendia
+              // sozinho no mês cuja planilha de créditos ainda não foi
+              // importada — sinalizando erro onde não havia nenhum.
+              reconciliation && reconciliation.difference > 0
+                ? "Abatido acima do crédito casado"
                 : undefined
             }
           />

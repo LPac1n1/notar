@@ -548,8 +548,8 @@ export async function listDonorReconciliationStatuses() {
  * `donation_notes.reference_month` (the month a donation was imported
  * under) and abatements through `monthly_donor_summary.reference_month`.
  * They must move together — scoping one and not the other would compare a
- * single month's credit against an all-time abatement and report bogus
- * "exceeded" statuses.
+ * single month's credit against an all-time abatement, making the "Saldo"
+ * column report a difference that never existed.
  *
  * Returns a Map keyed `${donorId}|${referenceMonth}` (month as 'YYYY-MM-DD').
  * A pair with neither credit nor applied abatement is simply absent, which
@@ -909,9 +909,9 @@ export async function listOrphanedCredits({ limit = 100 } = {}) {
  *   aggregates to a single donation month. Both the credit-paired buckets
  *   and the abated total honour the filter so the row stays internally
  *   consistent.
- * @param {string} [options.statusFilter] - One of "ok" | "exceeded" |
- *   "no-credit". Filtered in JS after aggregation since the status
- *   depends on the comparison of two summed columns.
+ * @param {string} [options.statusFilter] - One of "ok" | "no-credit".
+ *   Filtered in JS after aggregation since the status depends on the
+ *   comparison of two summed columns.
  */
 export async function listReconciliationByDonor({
   referenceMonth = "",
