@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 
 async function selectOption(page, container, name, label) {
@@ -162,4 +163,64 @@ test("dashboard vincula demanda de doador sem demanda pelo próprio modal", asyn
   await dialog.getByRole("button", { name: "Fechar modal" }).click();
   await page.getByRole("link", { name: "Doadores", exact: true }).click();
   await expect(page.getByText("REMEDIOS").first()).toBeVisible();
+});
+
+test("sem início distingue quem já doou e pré-preenche o mês da primeira nota", async ({ page }) => {
+  // Fixture: Ana tem 20 notas (jan e mar/2026) e nenhum início; Bruno não
+  // tem nota nenhuma e também nenhum início.
+  const backupPath = fileURLToPath(
+    new URL("./fixtures/donors-without-start-backup.json", import.meta.url),
+  );
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Configurações" }).click();
+  await page.getByRole("heading", { name: "Cópia de segurança" }).click();
+  await page.locator('input[type="file"]').setInputFiles(backupPath);
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
+  const restoreDialog = page.getByRole("dialog", { name: "Restaurar backup" });
+  await expect(restoreDialog).toBeVisible();
+  await restoreDialog
+    .getByRole("button", { name: "Restaurar backup" })
+    .click({ force: true });
+  await expect(page.getByText("Backup importado:")).toBeVisible();
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.locator("button").filter({ hasText: "Sem início" }).first().click();
+
+  const dialog = page.getByRole("dialog", {
+    name: "Doadores sem início das doações",
+  });
+  await expect(dialog).toBeVisible();
+
+  await expect(dialog.getByText("Já doou", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Nunca doou", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText(
+      "20 nota(s) em 2 mês(es) — da primeira em Janeiro de 2026 até Março de 2026.",
+    ),
+  ).toBeVisible();
+
+  // Quem já doou vem primeiro: é quem está gerando nota sem início declarado.
+  const names = await dialog.locator("p.font-medium").allInnerTexts();
+  expect(names[0]).toContain("ANA QUE DOOU");
+
+  // Só a linha de quem já doou vem preenchida — e com o mês da PRIMEIRA nota,
+  // senão salvar fecharia esta pendência e abriria uma "antes do início".
+  await expect
+    .poll(() =>
+      dialog
+        .locator('input[name="donationStartDate"]')
+        .evaluateAll((nodes) => nodes.map((node) => node.value)),
+    )
+    .toEqual(["01/2026", ""]);
+
+  // Salvar o valor sugerido não pode criar a inconsistência vizinha.
+  await dialog.getByRole("button", { name: "Definir início" }).first().click();
+  await expect(
+    dialog.getByText("Início das doações definido para Janeiro de 2026"),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Fechar modal" }).click();
+  await expect(
+    page.locator("button").filter({ hasText: "Antes do início" }),
+  ).toHaveCount(0);
 });

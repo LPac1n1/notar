@@ -422,14 +422,17 @@ export default function DashboardModals({
     return (
       <Modal
         title="Doadores sem início das doações"
-        description="CPFs vinculados que ainda não têm mês de início informado. Informe o mês abaixo para resolver, ou exclua o cadastro."
+        description="CPFs vinculados que ainda não têm mês de início informado. Quem já doou aparece primeiro e vem com o campo preenchido com o mês da primeira nota — informar um mês posterior abriria uma inconsistência de 'Doações antes do início'."
         icon={<MonthlyIcon className="h-5 w-5" />}
         onClose={onClose}
         size="lg"
       >
         {feedback}
         <DetailList emptyMessage="Nenhum doador sem início encontrado.">
-          {inconsistencies.donorWithoutStartDateRows.map((item) => (
+          {inconsistencies.donorWithoutStartDateRows.map((item) => {
+            const hasDonated = Boolean(item.firstDonationMonth);
+
+            return (
             <InconsistencyRow
               key={item.sourceId}
               title={
@@ -439,6 +442,17 @@ export default function DashboardModals({
                   </CopyableValue>
                 </p>
               }
+              badge={
+                <span
+                  className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${
+                    hasDonated
+                      ? "border-[var(--success-line)] bg-[color:var(--success-soft)] text-[var(--success)]"
+                      : "border-[var(--line)] bg-[var(--surface-muted)] text-[var(--muted-strong)]"
+                  }`}
+                >
+                  {hasDonated ? "Já doou" : "Nunca doou"}
+                </span>
+              }
               meta={
                 <>
                   <span className="flex flex-wrap items-center gap-1.5">
@@ -446,11 +460,20 @@ export default function DashboardModals({
                     <span>• {item.sourceType === "holder" ? "Titular" : "Auxiliar"}</span>
                     <span>• Demanda: {item.demand || "Não informada"}</span>
                   </span>
+                  <span className="mt-1.5 block">
+                    {hasDonated
+                      ? `${formatInteger(item.totalNotes)} nota(s) em ${formatInteger(item.donatedMonthCount)} mês(es) — da primeira em ${formatMonthYear(item.firstDonationMonth)} até ${formatMonthYear(item.lastDonationMonth)}.`
+                      : "Nenhuma nota registrada até agora — o início é só um dado de cadastro."}
+                  </span>
                 </>
               }
               fix={
                 actions ? (
                   <StartDateFix
+                    // Pré-preenchido com o mês da PRIMEIRA nota: informar um
+                    // mês posterior fecharia esta pendência e abriria uma
+                    // "Doações antes do início" no mesmo doador.
+                    initialValue={item.firstDonationMonth.slice(0, 7)}
                     isBusy={actions.busyRowId === item.sourceId}
                     onSubmit={(month) =>
                       actions.setDonationStartDate(item.sourceId, item.donorId, month)
@@ -469,7 +492,8 @@ export default function DashboardModals({
               deleteHint={`Excluir ${item.donorName}?`}
               isBusy={actions?.busyRowId === item.sourceId}
             />
-          ))}
+            );
+          })}
         </DetailList>
       </Modal>
     );

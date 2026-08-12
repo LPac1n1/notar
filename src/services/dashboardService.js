@@ -224,6 +224,10 @@ async function _fetchDashboardOverview() {
       ORDER BY name ASC
       LIMIT 500
     `),
+    // Traz também o histórico de doações de cada CPF. Sem isso não dá para
+    // saber qual início informar: quem já doou precisa de um mês que COBRE a
+    // primeira nota — preencher com um mês posterior fecha esta pendência e
+    // abre uma "Doações antes do início" no lugar.
     query(`
       SELECT
         donor_cpf_links.id,
@@ -232,14 +236,32 @@ async function _fetchDashboardOverview() {
         donors.donor_type,
         donors.id AS donor_id,
         donors.name AS donor_name,
-        donors.demand
+        donors.demand,
+        donation_history.first_month,
+        donation_history.last_month,
+        donation_history.total_notes,
+        donation_history.month_count
       FROM donor_cpf_links
       INNER JOIN donors
         ON donors.id = donor_cpf_links.donor_id
+      LEFT JOIN (
+        SELECT
+          matched_source_id,
+          strftime(min(reference_month), '%Y-%m-01') AS first_month,
+          strftime(max(reference_month), '%Y-%m-01') AS last_month,
+          sum(notes_count) AS total_notes,
+          count(DISTINCT reference_month) AS month_count
+        FROM import_cpf_summary
+        WHERE matched_source_id IS NOT NULL
+        GROUP BY matched_source_id
+      ) AS donation_history
+        ON donation_history.matched_source_id = donor_cpf_links.id
       WHERE donor_cpf_links.is_active = TRUE
         AND donors.is_active = TRUE
         AND donor_cpf_links.donation_start_date IS NULL
-      ORDER BY donor_cpf_links.name ASC
+      -- Quem já doou vem primeiro: são os casos que estão gerando nota sem
+      -- início declarado, e portanto os mais urgentes.
+      ORDER BY (donation_history.first_month IS NULL) ASC, donor_cpf_links.name ASC
       LIMIT 500
     `),
     query(`
@@ -521,6 +543,10 @@ async function _fetchDashboardOverview() {
         donorName: row.donor_name,
         cpf: row.cpf,
         demand: row.demand ?? "",
+        firstDonationMonth: row.first_month ?? "",
+        lastDonationMonth: row.last_month ?? "",
+        totalNotes: toNumber(row.total_notes),
+        donatedMonthCount: toNumber(row.month_count),
       })),
       emptyImportRows: emptyImportRows.map((row) => ({
         importId: row.id,
