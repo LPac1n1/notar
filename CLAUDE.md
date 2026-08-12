@@ -412,9 +412,43 @@ Fechamento do resíduo apontado na auditoria: o commit 214 tinha removido o cont
 - Verificado no navegador com o cenário que antes disparava o alerta (abatido R$ 540 × crédito casado R$ 20): nenhum badge, saldo em `rgb(28,28,31)` (cor padrão, não vermelho), filtro só com "Com crédito conciliado"/"Sem crédito conciliado", perfil idem.
 - 147/147 testes, 15/15 e2e, lint 0 erros, build OK.
 
+## Dashboard: modais acionáveis, ranking filtrável e reorganização (commits 226-228)
+
+Usuário pediu quatro coisas: ver TODOS os doadores nos cards de "Pontos para revisar" (não só uma amostra) e poder resolver dali mesmo; o mesmo para "Pararam de doar" e os demais; gestão melhor em "Maiores doadores" (filtro por demanda, mês); e reorganizar a página inteira, "talvez até colocar gráficos". Executado em três etapas.
+
+**Commit 226 — modais que resolvem, não só listam**:
+- Os 5 detalhamentos de inconsistência tinham `LIMIT 5` enquanto o card mostrava o total real: abrir "12" mostrava 5 linhas. Subiu para 500 e as chaves `*Samples` viraram `*Rows` (`latestMonthUnregisteredCpfSamples` continua amostra de propósito, LIMIT 10).
+- `InconsistencyRow` + `InconsistencyFixes` + `useDashboardActions`. Correção inline por tipo: campo de mês em "Sem início", seletor de demandas em "Sem demanda", mês pré-preenchido em "Antes do início" (recua o início até cobrir a doação), mês de desativação em "Pararam de doar". Mais "Ver perfil", "Excluir" (com desfazer) e "Ir para Importações" nas linhas de importação.
+- As correções recarregam o doador inteiro e chamam `updateDonor` trocando um campo. É onde moram CPF único, "início não pode ser posterior ao histórico de atividade" e o espelhamento em `donor_cpf_links`; um UPDATE parcial apagaria os outros campos e furaria as validações.
+- Confirmação de exclusão é INLINE (botão vira "Confirmar/Cancelar"), não `ConfirmModal` sobre o modal — empilhar traria disputa de foco e de Esc.
+- **Bug real no componente compartilhado**: `FeedbackMessage` no modo `persistent` cai no ramo `AlertBox`, que **descartava `actionLabel`/`onAction`** — nenhum "Desfazer" apareceria numa faixa inline. Não dava para usar toast: o viewport de toast é `z-[100]` e o modal `z-[110]`, então renderizaria atrás do overlay. `AlertBox` passou a aceitar a ação.
+- `variant="secondary"` não existe no `Button` (só primary/danger/subtle/ghost) e cairia em primary pelo fallback; `min-h-9` conflitaria com o `min-h-10` base e furaria o alvo de toque de 40px da Fase 6.
+- `e2e/dashboard-actions.spec.js` (2 testes). "Sem demanda" só é alcançável via auxiliar ligado a pessoa de referência — que não tem demanda para herdar; demanda é obrigatória para titular e demanda vinculada não pode ser excluída.
+
+**Commit 227 — ranking com recorte próprio**:
+- `listTopDonors({referenceMonth, demand, sort, limit})` + `getTopDonorFilterOptions()`. SQL em `services/dashboard/topDonorsSql.js` (módulo puro, padrão de `inactivityStreaksSql.js`) para o teste rodar a query de produção.
+- **Recorte por mês corrige dado enganoso**: o ranking era sempre o total de vida do doador, inclusive na visão histórica.
+- Saiu do payload de `getDashboardOverview` — trocar filtro não reprocessa as ~13 agregações. Opções em recurso separado, senão cada troca de mês refaria os dois `DISTINCT` (mesma classe do bug da Fase 5).
+- "Mais meses doando" some com mês fixo, e o valor sai do filtro de verdade: escondê-lo mantendo `sort: "months"` deixaria a query ordenando por coluna constante.
+- `ORDER BY` por whitelist e `LIMIT` por `Math.floor(Number())` — DuckDB não aceita `?` em nenhuma das duas posições. Teste cobre que ordenação inválida cai no padrão.
+- 3 testes de integração + `e2e/dashboard-ranking.spec.js` com `fixtures/ranking-backup.json`, montada para as três ordenações darem resultados DIFERENTES (senão o teste passaria com o filtro inerte).
+- **`monthly_donor_summary` é recalculado a partir de `import_cpf_summary` no restore** — semear a tabela de resumos direto num backup não tem efeito. A fixture semeia a origem.
+
+**Commit 228 — reorganização + gráfico**:
+- Quatro zonas: mês corrente → o que precisa de atenção → como está indo → consulta. "Pontos para revisar" subiu de quarta para segunda seção.
+- **"Pontos para revisar" esconde os zeros.** O caso comum (um problema real) gastava uma tela inteira exibindo cinco zeros.
+- **Gráfico de evolução mensal** (`MonthlyTrendChart`): barras em HTML/CSS, sem dependência nova. **Série única com alternância de métrica** (abatimento/notas/doadores) — reais e contagem em escalas incompatíveis no mesmo eixo é a comparação mais enganosa possível; a regra é um eixo só. Cada coluna é um `<button>`: alvo de toque cobre a altura inteira e o teclado alcança os valores. Tabela `sr-only` como alternativa acessível.
+- **Tokens `--data-*` corrigidos por medição**: zero consumidores até aqui (criados na troca de identidade visual). O validador de paleta reprovou o dark — `#818cf8` (L 0.68) e `#34d399` (L 0.77) fora da faixa 0.48–0.67 exigida para marcas em fundo escuro. Trocados por `#6366f1` / `#059669`, que passam as seis checagens contra a superfície real do app nos dois temas.
+- **`MetricValue` não quebra mais número no meio.** `break-words` partia "R$ 1,00" em "R$ 1," + "00" — que se lê como outro valor. Virou escada de tamanhos com `whitespace-nowrap`. Limiares calibrados MEDINDO no navegador: card de 113px úteis precisava de 169px para "R$ 70,00" a 40px.
+- `DashboardLatestMonthSection` foi de `xl:grid-cols-5` para `lg:grid-cols-3` — cinco cards deixavam 113px por valor. Depois: 227px, todos os degraus cabem, zero estouros medidos.
+- Card "Último mês importado" removido dos totais: o mês já aparecia no banner, no resumo, no detalhamento por demanda e nas importações recentes.
+- `DashboardRankingsSection` dividido em `TopDonorsSection` + `DashboardDemandBreakdownSection` (deixaram de ser a mesma coisa). As duas seções do último mês ficaram adjacentes, mas **empilhadas** — lado a lado, o resumo de 5 métricas truncava rótulos e sobrepunha valores (confirmado por screenshot).
+
+**Estado:** 151/151 testes (4 novos de integração), 18/18 e2e (3 novos), lint 0 erros, build OK. Verificação visual por screenshot em ambos os temas.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 224**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 228**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
