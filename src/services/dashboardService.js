@@ -1,4 +1,9 @@
 import { query, queryPrepared } from "./db";
+import {
+  buildTopDonorsQuery,
+  TOP_DONOR_FILTER_OPTIONS_SQL,
+  TOP_DONOR_SORT_OPTIONS,
+} from "./dashboard/topDonorsSql.js";
 import { getReconciliationStats } from "./reconciliation/creditReconciliationService";
 import {
   INACTIVITY_ALERT_THRESHOLD,
@@ -14,14 +19,57 @@ function toNumber(value) {
   return Number(value ?? 0);
 }
 
+export { TOP_DONOR_SORT_OPTIONS };
+
+/**
+ * Ranking de doadores com recorte por mês e por demanda.
+ *
+ * Vive fora do payload de `getDashboardOverview` porque é o único bloco do
+ * dashboard que o usuário filtra: recarregá-lo não deve reprocessar as ~13
+ * agregações do panorama geral.
+ *
+ * Sem `referenceMonth` o ranking é histórico (soma de todos os meses); com
+ * mês, `imported_month_count` vale 1 por construção e a UI esconde a coluna.
+ */
+export async function listTopDonors(filters = {}) {
+  const { sql, params } = buildTopDonorsQuery(filters);
+  const rows = await queryPrepared(sql, params);
+
+  return rows.map((row) => ({
+    donorId: row.donor_id,
+    donorName: row.donor_name,
+    demand: row.demand,
+    totalNotes: toNumber(row.total_notes),
+    totalAbatement: toNumber(row.total_abatement),
+    importedMonthCount: toNumber(row.imported_month_count),
+  }));
+}
+
+/**
+ * Opções dos filtros do ranking. Derivadas do que existe em
+ * `monthly_donor_summary` — e não de `imports`/`demands` — para que nenhum
+ * filtro oferecido devolva lista vazia.
+ */
+export async function getTopDonorFilterOptions() {
+  const [monthRows, demandRows] = await Promise.all([
+    query(TOP_DONOR_FILTER_OPTIONS_SQL.months),
+    query(TOP_DONOR_FILTER_OPTIONS_SQL.demands),
+  ]);
+
+  return {
+    months: monthRows.map((row) => row.reference_month).filter(Boolean),
+    demands: demandRows.map((row) => row.demand).filter(Boolean),
+  };
+}
+
 /*
  * Dashboard overview is composed from many independent aggregation queries.
  * They are dispatched in two `Promise.all` phases so DuckDB-WASM (single
  * threaded) batches them efficiently:
  *
- *   Phase 1: 10 queries that depend only on the live tables — totals,
- *            recent imports, active donors/demands, top donors, and the
- *            four "inconsistency" probes plus their detail rows.
+ *   Phase 1: queries that depend only on the live tables — totals, recent
+ *            imports, active donors/demands, and the "inconsistency" probes
+ *            plus their detail rows.
  *   Phase 2: 4 queries that target the latest processed import (so they
  *            need its id from Phase 1 first).
  *
@@ -45,7 +93,6 @@ async function _fetchDashboardOverview() {
     recentImportsRows,
     activeDonorRows,
     activeDemandRows,
-    topDonorRows,
     inconsistencyCountRows,
     donationStartConflictRows,
     donorWithoutDemandRows,
@@ -101,19 +148,6 @@ async function _fetchDashboardOverview() {
       GROUP BY demands.id, demands.name
       ORDER BY demands.name ASC
       LIMIT 20
-    `),
-    query(`
-      SELECT
-        donor_id,
-        donor_name,
-        coalesce(nullif(trim(demand), ''), 'Sem demanda') AS demand,
-        sum(notes_count) AS total_notes,
-        sum(abatement_amount) AS total_abatement,
-        count(DISTINCT reference_month) AS imported_month_count
-      FROM monthly_donor_summary
-      GROUP BY donor_id, donor_name, coalesce(nullif(trim(demand), ''), 'Sem demanda')
-      ORDER BY total_abatement DESC, total_notes DESC, donor_name ASC
-      LIMIT 5
     `),
     query(`
       SELECT
@@ -424,14 +458,9 @@ async function _fetchDashboardOverview() {
       importedAt: row.imported_at,
     })),
     demandBreakdown,
-    topDonors: topDonorRows.map((row) => ({
-      donorId: row.donor_id,
-      donorName: row.donor_name,
-      demand: row.demand,
-      totalNotes: toNumber(row.total_notes),
-      totalAbatement: toNumber(row.total_abatement),
-      importedMonthCount: toNumber(row.imported_month_count),
-    })),
+    // O ranking de maiores doadores NÃO vem daqui: é filtrável por mês e
+    // demanda, então tem seu próprio recurso (`listTopDonors`) e recarrega
+    // sozinho, sem reprocessar as agregações do panorama.
     inconsistencies: {
       donationStartConflictCount: toNumber(
         inconsistencyCounts.donation_start_conflict_count,

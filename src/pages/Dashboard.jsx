@@ -206,7 +206,6 @@ export default function Dashboard() {
             demandBreakdown={dashboard?.demandBreakdown ?? []}
             latestMonth={latestMonth}
             onOpenDonor={openDonorProfile}
-            topDonors={dashboard?.topDonors ?? []}
           />
           <DashboardRecentImportsSection
             imports={dashboard?.recentImports ?? []}

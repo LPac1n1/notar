@@ -8,6 +8,7 @@ import {
 import { DONOR_INACTIVITY_STREAKS_SQL } from "../src/services/monthly/inactivityStreaksSql.js";
 import { ABATEMENT_SHEET_SQL } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
+import { buildTopDonorsQuery } from "../src/services/dashboard/topDonorsSql.js";
 
 test("prepared statements bind parameters via ? placeholders", async () => {
   const conn = await createTestConnection();
@@ -2333,6 +2334,122 @@ test("imports overview counts only abatements the user can actually act on", asy
       `)
     ).toArray();
     assert.equal(Number(mai[0].pending_count), 1);
+  } finally {
+    conn.close();
+  }
+});
+
+async function seedTopDonorFixtures(conn) {
+  await conn.query(`
+    INSERT INTO monthly_donor_summary (
+      id, import_id, donor_id, reference_month, cpf, donor_name, demand,
+      notes_count, value_per_note, abatement_amount, abatement_status,
+      created_at, updated_at
+    )
+    VALUES
+      -- Alice: valor alto concentrado num mês só.
+      ('t-alice-jan', 'imp-1', 'donor-a', DATE '2026-01-01', '11111111111', 'Alice', 'Cestas',
+       10, 1.00, 100.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      -- Bruno: valor menor, mas espalhado em 3 meses e com mais notas.
+      ('t-bruno-jan', 'imp-1', 'donor-b', DATE '2026-01-01', '22222222222', 'Bruno', 'Remedios',
+       20, 1.00, 20.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('t-bruno-fev', 'imp-2', 'donor-b', DATE '2026-02-01', '22222222222', 'Bruno', 'Remedios',
+       20, 1.00, 20.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('t-bruno-mar', 'imp-3', 'donor-b', DATE '2026-03-01', '22222222222', 'Bruno', 'Remedios',
+       20, 1.00, 20.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      -- Carla sem demanda: precisa cair no rótulo 'Sem demanda'.
+      ('t-carla-jan', 'imp-1', 'donor-c', DATE '2026-01-01', '33333333333', 'Carla', '',
+       5, 1.00, 5.00, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+}
+
+async function runTopDonors(conn, filters) {
+  const { sql, params } = buildTopDonorsQuery(filters);
+  const stmt = await conn.prepare(sql);
+  try {
+    return (await stmt.query(...params)).toArray().map((row) => row.toJSON());
+  } finally {
+    await stmt.close();
+  }
+}
+
+test("listTopDonors ranks by total abatement and honours the row limit", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedTopDonorFixtures(conn);
+
+    const all = await runTopDonors(conn, {});
+    assert.deepEqual(
+      all.map((row) => row.donor_name),
+      ["Alice", "Bruno", "Carla"],
+    );
+    assert.equal(Number(all[0].total_abatement), 100);
+    assert.equal(Number(all[1].imported_month_count), 3);
+    // Demanda vazia vira o rótulo, não string vazia.
+    assert.equal(all[2].demand, "Sem demanda");
+
+    const limited = await runTopDonors(conn, { limit: 2 });
+    assert.equal(limited.length, 2);
+  } finally {
+    conn.close();
+  }
+});
+
+test("listTopDonors reorders by notes and by months without changing the set", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedTopDonorFixtures(conn);
+
+    // Bruno tem 60 notas contra 10 de Alice: por notas ele passa à frente,
+    // mesmo somando menos abatimento.
+    const byNotes = await runTopDonors(conn, { sort: "notes" });
+    assert.equal(byNotes[0].donor_name, "Bruno");
+    assert.equal(Number(byNotes[0].total_notes), 60);
+
+    const byMonths = await runTopDonors(conn, { sort: "months" });
+    assert.equal(byMonths[0].donor_name, "Bruno");
+    assert.equal(Number(byMonths[0].imported_month_count), 3);
+
+    // Ordenação desconhecida cai no default em vez de quebrar o SQL.
+    const fallback = await runTopDonors(conn, { sort: "'; DROP TABLE donors; --" });
+    assert.equal(fallback[0].donor_name, "Alice");
+  } finally {
+    conn.close();
+  }
+});
+
+test("listTopDonors scopes totals to a single month and to a demand", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedTopDonorFixtures(conn);
+
+    // Fevereiro só tem Bruno, e com o valor DAQUELE mês (20), não o total
+    // de vida (60) — era exatamente o erro do ranking histórico sem recorte.
+    const fev = await runTopDonors(conn, { referenceMonth: "2026-02" });
+    assert.equal(fev.length, 1);
+    assert.equal(fev[0].donor_name, "Bruno");
+    assert.equal(Number(fev[0].total_abatement), 20);
+    assert.equal(Number(fev[0].imported_month_count), 1);
+
+    const cestas = await runTopDonors(conn, { demand: "Cestas" });
+    assert.deepEqual(
+      cestas.map((row) => row.donor_name),
+      ["Alice"],
+    );
+
+    // A comparação de demanda ignora caixa.
+    const lowercase = await runTopDonors(conn, { demand: "cestas" });
+    assert.equal(lowercase.length, 1);
+
+    // O rótulo sintético também precisa ser filtrável.
+    const semDemanda = await runTopDonors(conn, { demand: "Sem demanda" });
+    assert.deepEqual(
+      semDemanda.map((row) => row.donor_name),
+      ["Carla"],
+    );
   } finally {
     conn.close();
   }
