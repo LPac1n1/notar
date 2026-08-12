@@ -95,6 +95,32 @@ export default function DashboardModals({
     </Button>
   ) : null;
 
+  const deleteDonorAction = (rowId, donorId, donorName) =>
+    actions
+      ? {
+          key: "delete",
+          label: "Excluir doador",
+          hint: `Excluir ${donorName}?`,
+          icon: "trash",
+          tone: "danger",
+          loadingLabel: "Excluindo...",
+          onConfirm: () => actions.removeDonor(rowId, donorId, donorName),
+        }
+      : null;
+
+  const deleteImportAction = (importId, label) =>
+    actions
+      ? {
+          key: "delete",
+          label: "Excluir importação",
+          hint: "Excluir esta importação?",
+          icon: "trash",
+          tone: "danger",
+          loadingLabel: "Excluindo...",
+          onConfirm: () => actions.removeImport(importId, importId, label),
+        }
+      : null;
+
   if (activeModal === "active-donors") {
     return (
       <Modal
@@ -402,14 +428,7 @@ export default function DashboardModals({
                 ) : null
               }
               actions={profileAction(item.donorId)}
-              onDelete={
-                actions
-                  ? () =>
-                      actions.removeDonor(item.donorId, item.donorId, item.donorName)
-                  : undefined
-              }
-              deleteLabel="Excluir doador"
-              deleteHint={`Excluir ${item.donorName}?`}
+              confirmActions={[deleteDonorAction(item.donorId, item.donorId, item.donorName)]}
               isBusy={actions?.busyRowId === item.donorId}
             />
           ))}
@@ -431,6 +450,12 @@ export default function DashboardModals({
         <DetailList emptyMessage="Nenhum doador sem início encontrado.">
           {inconsistencies.donorWithoutStartDateRows.map((item) => {
             const hasDonated = Boolean(item.firstDonationMonth);
+            // A conversão só faz sentido — e só funciona — com auxiliar
+            // ATIVO: é ele que faz a linha em `people` sobreviver à remoção
+            // do cadastro de doador. Sem auxiliar, converter apagaria a
+            // pessoa junto, virando uma exclusão comum com nome errado.
+            const canBecomePerson =
+              item.sourceType === "holder" && item.auxiliaryCount > 0;
 
             return (
             <InconsistencyRow
@@ -465,6 +490,30 @@ export default function DashboardModals({
                       ? `${formatInteger(item.totalNotes)} nota(s) em ${formatInteger(item.donatedMonthCount)} mês(es) — da primeira em ${formatMonthYear(item.firstDonationMonth)} até ${formatMonthYear(item.lastDonationMonth)}.`
                       : "Nenhuma nota registrada até agora — o início é só um dado de cadastro."}
                   </span>
+
+                  {item.auxiliaryCount > 0 ? (
+                    <span className="mt-1.5 block">
+                      {formatInteger(item.auxiliaryCount)} auxiliar(es) vinculado(s):{" "}
+                      <span className="text-[var(--text-soft)]">
+                        {item.auxiliaryNames.join(", ")}
+                      </span>
+                    </span>
+                  ) : null}
+
+                  {item.holderName ? (
+                    <span className="mt-1.5 block">
+                      Vinculado ao titular{" "}
+                      <span className="text-[var(--text-soft)]">{item.holderName}</span>.
+                    </span>
+                  ) : null}
+
+                  {canBecomePerson && !hasDonated ? (
+                    <span className="mt-1.5 block text-[var(--text-soft)]">
+                      Nunca doou e serve de vínculo para {formatInteger(item.auxiliaryCount)}{" "}
+                      auxiliar(es) — pode ser apenas uma pessoa de referência, sem
+                      cadastro de doador.
+                    </span>
+                  ) : null}
                 </>
               }
               fix={
@@ -482,14 +531,23 @@ export default function DashboardModals({
                 ) : null
               }
               actions={profileAction(item.donorId)}
-              onDelete={
-                actions
-                  ? () =>
-                      actions.removeDonor(item.sourceId, item.donorId, item.donorName)
-                  : undefined
-              }
-              deleteLabel="Excluir doador"
-              deleteHint={`Excluir ${item.donorName}?`}
+              confirmActions={[
+                canBecomePerson && actions
+                  ? {
+                      key: "to-person",
+                      label: "Tornar pessoa de referência",
+                      hint: `Remover o cadastro de doador de ${item.donorName} e manter só a pessoa?`,
+                      loadingLabel: "Convertendo...",
+                      onConfirm: () =>
+                        actions.convertToReferencePerson(
+                          item.sourceId,
+                          item.donorId,
+                          item.donorName,
+                        ),
+                    }
+                  : null,
+                deleteDonorAction(item.sourceId, item.donorId, item.donorName),
+              ]}
               isBusy={actions?.busyRowId === item.sourceId}
             />
             );
@@ -527,18 +585,12 @@ export default function DashboardModals({
                 </>
               }
               actions={importsAction}
-              onDelete={
-                actions
-                  ? () =>
-                      actions.removeImport(
-                        item.importId,
-                        item.importId,
-                        formatMonthYear(item.referenceMonth),
-                      )
-                  : undefined
-              }
-              deleteLabel="Excluir importação"
-              deleteHint="Excluir esta importação?"
+              confirmActions={[
+                deleteImportAction(
+                  item.importId,
+                  formatMonthYear(item.referenceMonth),
+                ),
+              ]}
               isBusy={actions?.busyRowId === item.importId}
             />
           ))}
@@ -575,20 +627,14 @@ export default function DashboardModals({
                 </>
               }
               actions={importsAction}
-              onDelete={
-                actions
-                  ? () =>
-                      actions.removeImport(
-                        item.importId,
-                        item.importId,
-                        item.referenceMonth
-                          ? formatMonthYear(item.referenceMonth)
-                          : "mês não identificado",
-                      )
-                  : undefined
-              }
-              deleteLabel="Excluir importação"
-              deleteHint="Excluir esta importação?"
+              confirmActions={[
+                deleteImportAction(
+                  item.importId,
+                  item.referenceMonth
+                    ? formatMonthYear(item.referenceMonth)
+                    : "mês não identificado",
+                ),
+              ]}
               isBusy={actions?.busyRowId === item.importId}
             />
           ))}
@@ -655,14 +701,9 @@ export default function DashboardModals({
                 ) : null
               }
               actions={profileAction(item.donorId)}
-              onDelete={
-                actions
-                  ? () =>
-                      actions.removeDonor(item.donorId, item.donorId, item.donorName)
-                  : undefined
-              }
-              deleteLabel="Excluir doador"
-              deleteHint={`Excluir ${item.donorName}?`}
+              confirmActions={[
+                deleteDonorAction(item.donorId, item.donorId, item.donorName),
+              ]}
               isBusy={actions?.busyRowId === item.donorId}
             />
           ))}

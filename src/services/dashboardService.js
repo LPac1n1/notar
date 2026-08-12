@@ -240,7 +240,37 @@ async function _fetchDashboardOverview() {
         donation_history.first_month,
         donation_history.last_month,
         donation_history.total_notes,
-        donation_history.month_count
+        donation_history.month_count,
+        -- Auxiliares ATIVOS deste titular. O recorte por "ativo" não é
+        -- cosmético: é exatamente a condição que faz deleteDonor preservar
+        -- a linha em people em vez de removê-la junto, ou seja, o que decide
+        -- se dá para converter o titular em pessoa de referência.
+        coalesce((
+          SELECT string_agg(aux_rows.aux_name, ', ')
+          FROM (
+            SELECT auxiliary_donors.name AS aux_name
+            FROM donors AS auxiliary_donors
+            WHERE auxiliary_donors.holder_person_id = donors.person_id
+              AND auxiliary_donors.donor_type = 'auxiliary'
+              AND auxiliary_donors.is_active = TRUE
+            ORDER BY auxiliary_donors.name ASC
+          ) AS aux_rows
+        ), '') AS auxiliary_names,
+        (
+          SELECT count(*)
+          FROM donors AS auxiliary_donors
+          WHERE auxiliary_donors.holder_person_id = donors.person_id
+            AND auxiliary_donors.donor_type = 'auxiliary'
+            AND auxiliary_donors.is_active = TRUE
+        ) AS auxiliary_count,
+        -- Caminho inverso: o titular a que este auxiliar está vinculado.
+        coalesce((
+          SELECT holder_donors.name
+          FROM donors AS holder_donors
+          WHERE holder_donors.person_id = donors.holder_person_id
+            AND holder_donors.is_active = TRUE
+          LIMIT 1
+        ), '') AS holder_name
       FROM donor_cpf_links
       INNER JOIN donors
         ON donors.id = donor_cpf_links.donor_id
@@ -547,6 +577,11 @@ async function _fetchDashboardOverview() {
         lastDonationMonth: row.last_month ?? "",
         totalNotes: toNumber(row.total_notes),
         donatedMonthCount: toNumber(row.month_count),
+        auxiliaryNames: row.auxiliary_names
+          ? String(row.auxiliary_names).split(", ").filter(Boolean)
+          : [],
+        auxiliaryCount: toNumber(row.auxiliary_count),
+        holderName: row.holder_name ?? "",
       })),
       emptyImportRows: emptyImportRows.map((row) => ({
         importId: row.id,

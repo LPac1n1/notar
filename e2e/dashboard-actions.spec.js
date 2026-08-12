@@ -224,3 +224,67 @@ test("sem início distingue quem já doou e pré-preenche o mês da primeira not
     page.locator("button").filter({ hasText: "Antes do início" }),
   ).toHaveCount(0);
 });
+
+test("titular sem doação vira pessoa de referência mantendo o vínculo do auxiliar", async ({ page }) => {
+  // Fixture: Bruno é titular, nunca doou e não tem início; Carla é auxiliar
+  // ATIVA vinculada a ele. É essa condição que faz a linha em `people`
+  // sobreviver à remoção do cadastro de doador.
+  const backupPath = fileURLToPath(
+    new URL("./fixtures/donors-without-start-backup.json", import.meta.url),
+  );
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Configurações" }).click();
+  await page.getByRole("heading", { name: "Cópia de segurança" }).click();
+  await page.locator('input[type="file"]').setInputFiles(backupPath);
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
+  const restoreDialog = page.getByRole("dialog", { name: "Restaurar backup" });
+  await expect(restoreDialog).toBeVisible();
+  await restoreDialog
+    .getByRole("button", { name: "Restaurar backup" })
+    .click({ force: true });
+  await expect(page.getByText("Backup importado:")).toBeVisible();
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.locator("button").filter({ hasText: "Sem início" }).first().click();
+
+  const dialog = page.getByRole("dialog", {
+    name: "Doadores sem início das doações",
+  });
+  await expect(dialog).toBeVisible();
+
+  await expect(
+    dialog.getByText("1 auxiliar(es) vinculado(s):"),
+  ).toBeVisible();
+  await expect(dialog.getByText("CARLA AUXILIAR")).toBeVisible();
+
+  // Ana também está sem início, mas não tem auxiliar — converter apagaria a
+  // pessoa junto, então a ação não pode ser oferecida para ela.
+  await expect(
+    dialog.getByRole("button", { name: "Tornar pessoa de referência" }),
+  ).toHaveCount(1);
+
+  await dialog
+    .getByRole("button", { name: "Tornar pessoa de referência" })
+    .click();
+  await expect(
+    dialog.getByText(
+      "Remover o cadastro de doador de BRUNO QUE NAO DOOU e manter só a pessoa?",
+    ),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Confirmar" }).click();
+
+  await expect(
+    dialog.getByText("BRUNO QUE NAO DOOU agora é uma pessoa de referência"),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Fechar modal" }).click();
+
+  // O cadastro de doador some, a pessoa fica — e o auxiliar continua ligado.
+  await page.getByRole("link", { name: "Pessoas" }).click();
+  await expect(page.getByText("1 pessoa(s) sem papel de doador.")).toBeVisible();
+  await expect(page.getByText("BRUNO QUE NAO DOOU")).toBeVisible();
+  await expect(page.getByText("via auxiliar")).toBeVisible();
+
+  await page.getByRole("link", { name: "Doadores", exact: true }).click();
+  await expect(page.getByText("2 doador(es) cadastrado(s).")).toBeVisible();
+});

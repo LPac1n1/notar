@@ -119,6 +119,33 @@ export function useDashboardActions({ reload }) {
     [reload, runRowMutation],
   );
 
+  /**
+   * Converte um titular em pessoa de referência: remove o cadastro de DOADOR
+   * e mantém a pessoa, que continua servindo de vínculo para os auxiliares.
+   *
+   * Reusa `deleteDonor` de propósito, e não um caminho novo: ele já faz
+   * exatamente essa distinção — solta o `holder_donor_id` dos auxiliares e só
+   * apaga a linha em `people` quando NENHUM auxiliar ativo continua
+   * apontando para ela. Com auxiliar ativo, a pessoa sobrevive; é o mesmo
+   * estado que a tela de Doadores mostra como "Pessoa de referência".
+   *
+   * Por isso a ação só é oferecida quando existe auxiliar ativo — sem ele,
+   * a mesma chamada apagaria a pessoa junto, e o rótulo estaria mentindo.
+   */
+  const convertToReferencePerson = useCallback(
+    (rowId, donorId, donorName) =>
+      runRowMutation(rowId, {
+        scope: "Dashboard.convertToReferencePerson",
+        run: () => deleteDonor(donorId),
+        successMessage: `${donorName} agora é uma pessoa de referência — o vínculo dos auxiliares foi mantido.`,
+        errorMessage: "Não foi possível converter o doador em pessoa.",
+        buildUndo: (trashItemId) =>
+          trashItemId ? () => restoreTrashItem(trashItemId).then(reload) : null,
+        logContext: { donorId },
+      }),
+    [reload, runRowMutation],
+  );
+
   const deactivate = useCallback(
     (rowId, donorId, donorName, month) =>
       runRowMutation(rowId, {
@@ -157,6 +184,7 @@ export function useDashboardActions({ reload }) {
     actionSuccessAction: successAction,
     busyRowId,
     clearFeedback,
+    convertToReferencePerson,
     deactivate,
     removeDonor,
     removeImport,
