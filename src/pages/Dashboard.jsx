@@ -10,10 +10,12 @@ import DashboardCurrentMonthBanner from "../features/dashboard/components/Dashbo
 import DashboardLatestMonthSection from "../features/dashboard/components/DashboardLatestMonthSection";
 import DashboardModals from "../features/dashboard/components/DashboardModals";
 import DashboardOverviewCards from "../features/dashboard/components/DashboardOverviewCards";
-import DashboardRankingsSection from "../features/dashboard/components/DashboardRankingsSection";
+import DashboardDemandBreakdownSection from "../features/dashboard/components/DashboardDemandBreakdownSection";
 import DashboardReconciliationSection from "../features/dashboard/components/DashboardReconciliationSection";
 import DashboardRecentImportsSection from "../features/dashboard/components/DashboardRecentImportsSection";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
+import DashboardTrendSection from "../features/dashboard/components/DashboardTrendSection";
+import TopDonorsSection from "../features/dashboard/components/TopDonorsSection";
 import { useDashboardActions } from "../features/dashboard/hooks/useDashboardActions";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
@@ -22,20 +24,18 @@ import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 
 /**
- * Dashboard organizado em duas zonas verticais (do mais acionável pro
- * mais informativo):
+ * Dashboard em quatro zonas, do que exige ação para o que é só consulta:
  *
- *   ▤ Zona 1 — Mês corrente
- *      `DashboardCurrentMonthBanner` resume o último mês com dados em
- *      um banner inline.
+ *   1. Mês corrente — banner com o último mês e os dois CTAs de rotina.
+ *   2. O que precisa de atenção — "Pontos para revisar", agora resolvível
+ *      dentro dos próprios modais. Subiu de posição: era a quarta seção,
+ *      abaixo de três blocos de leitura passiva.
+ *   3. Como está indo — evolução mensal (gráfico) e o recorte do último
+ *      mês, com as duas seções que falam dele lado a lado.
+ *   4. Consulta — ranking filtrável, conciliação, importações recentes e
+ *      os totais globais como rodapé.
  *
- *   ▥ Zona 2 — Histórico
- *      Cards e seções já existentes (totais, ranking, importações
- *      recentes) rebaixados visualmente em modo `compact`. São consulta,
- *      não rotina.
- *
- * Toda zona é colapsável por padrão de estado — nenhum espaço é gasto
- * com seções vazias.
+ * Nenhuma zona gasta espaço quando está vazia.
  */
 export default function Dashboard() {
   const location = useLocation();
@@ -186,26 +186,38 @@ export default function Dashboard() {
 
       {showSectionsData ? (
         <div className="space-y-6">
-          {/* ─── Zona 2 — Detalhe & histórico (rebaixado) ───────────── */}
-          <Eyebrow as="rule">Histórico &amp; detalhe</Eyebrow>
+          {/* ─── Zona 2 — O que precisa da minha atenção ─────────────── */}
           <DashboardReviewSection
             inconsistencies={inconsistencies}
             onOpenModal={setActiveModal}
             totalInconsistencyCount={totalInconsistencyCount}
           />
-          <DashboardReconciliationSection
-            reconciliation={dashboard?.reconciliation}
-            reconciliationLatestMonth={dashboard?.reconciliationLatestMonth}
-            latestMonthLabel={latestMonth?.referenceMonth ?? ""}
-          />
+
+          {/* ─── Zona 3 — Como está indo ─────────────────────────────── */}
+          <Eyebrow as="rule">Evolução</Eyebrow>
+          <DashboardTrendSection />
+          {/* As duas seções do último mês ficam adjacentes: antes estavam
+              separadas por outras três, e o usuário lia "Março de 2026" em
+              quatro pontos distintos da página sem perceber que eram o
+              mesmo recorte. Empilhadas e não lado a lado — o resumo tem 5
+              métricas, e em meia largura os rótulos truncam e os valores se
+              sobrepõem. */}
           <DashboardLatestMonthSection
             latestMonth={latestMonth}
             onOpenModal={setActiveModal}
           />
-          <DashboardRankingsSection
+          <DashboardDemandBreakdownSection
             demandBreakdown={dashboard?.demandBreakdown ?? []}
             latestMonth={latestMonth}
-            onOpenDonor={openDonorProfile}
+          />
+
+          {/* ─── Zona 4 — Consulta ───────────────────────────────────── */}
+          <Eyebrow as="rule">Consulta</Eyebrow>
+          <TopDonorsSection onOpenDonor={openDonorProfile} />
+          <DashboardReconciliationSection
+            reconciliation={dashboard?.reconciliation}
+            reconciliationLatestMonth={dashboard?.reconciliationLatestMonth}
+            latestMonthLabel={latestMonth?.referenceMonth ?? ""}
           />
           <DashboardRecentImportsSection
             imports={dashboard?.recentImports ?? []}
@@ -218,7 +230,6 @@ export default function Dashboard() {
             <DashboardOverviewCards
               compact
               isRefreshing={showRefreshing}
-              latestMonth={latestMonth}
               onOpenModal={setActiveModal}
               showCards={showCards}
               totals={totals}

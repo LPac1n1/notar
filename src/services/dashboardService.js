@@ -1,4 +1,5 @@
 import { query, queryPrepared } from "./db";
+import { MONTHLY_TREND_SQL } from "./dashboard/monthlyTrendSql.js";
 import {
   buildTopDonorsQuery,
   TOP_DONOR_FILTER_OPTIONS_SQL,
@@ -50,6 +51,23 @@ export async function listTopDonors(filters = {}) {
  * `monthly_donor_summary` — e não de `imports`/`demands` — para que nenhum
  * filtro oferecido devolva lista vazia.
  */
+/**
+ * Série dos últimos meses para o gráfico de evolução. Devolvida em ordem
+ * cronológica (a query busca os mais recentes primeiro).
+ */
+export async function listMonthlyTrend() {
+  const rows = await query(MONTHLY_TREND_SQL);
+
+  return rows
+    .map((row) => ({
+      referenceMonth: row.reference_month,
+      totalNotes: toNumber(row.total_notes),
+      totalAbatement: toNumber(row.total_abatement),
+      donorCount: toNumber(row.donor_count),
+    }))
+    .reverse();
+}
+
 export async function getTopDonorFilterOptions() {
   const [monthRows, demandRows] = await Promise.all([
     query(TOP_DONOR_FILTER_OPTIONS_SQL.months),

@@ -64,9 +64,14 @@
   --warning-line: rgba(251, 191, 36, 0.4);
   --warning-soft: rgba(251, 191, 36, 0.12);
 
-  /* ── DADOS (séries de gráfico — paleta categórica estável) ───────────── */
-  --data-1: #818cf8; /* índigo — sempre "valor do sistema" */
-  --data-2: #34d399; /* esmeralda — sempre "valor NFP/crédito" */
+  /* ── DADOS (séries de gráfico — paleta categórica estável) ─────────────
+     Passos escolhidos por medição, não a olho: validados contra a superfície
+     real do tema (#16171a) na faixa OKLCH L 0.48–0.67 exigida para marcas em
+     fundo escuro, com piso de croma, separação sob daltonismo e contraste.
+     Os valores anteriores (#818cf8 / #34d399) eram claros demais — L 0.68 e
+     0.77 — e uma série clareava a outra na comparação. */
+  --data-1: #6366f1; /* índigo — sempre "valor do sistema" */
+  --data-2: #059669; /* esmeralda — sempre "valor NFP/crédito" */
   --data-3: #38bdf8; /* azul-céu */
   --data-4: #fb923c; /* laranja */
   --data-5: #a78bfa; /* violeta */

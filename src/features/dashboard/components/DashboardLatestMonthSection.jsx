@@ -21,7 +21,10 @@ export default function DashboardLatestMonthSection({ latestMonth, onOpenModal }
         />
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {/* Três colunas no máximo, não cinco: medido no navegador, cinco
+              cards deixavam 113px úteis por card e "R$ 70,00" a 40px precisa
+              de 169px — o valor era cortado na borda. */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <MetricCard
               label="Notas no mês"
               value={formatInteger(latestMonth.totalNotes)}

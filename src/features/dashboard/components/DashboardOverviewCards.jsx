@@ -1,19 +1,17 @@
 import { SkeletonCard } from "../../../components/ui/Skeleton";
-import { formatMonthYear } from "../../../utils/date";
 import { formatInteger } from "../../../utils/format";
 import MetricCard from "./MetricCard";
 
 /**
- * Top-of-Dashboard counters (totals + último mês). Renders in two modes:
+ * Contadores globais do sistema (doadores, demandas, importações). Renderiza
+ * em dois modos:
  *
- *   - default: bold metric tiles (current visual identity).
- *   - compact: smaller, muted variant for Zona 3 of the new Dashboard
- *     layout where these numbers play a supporting role beneath the
- *     attention zone, current-month banner and workflow checklist.
+ *   - default: métricas em destaque.
+ *   - compact: variante menor e discreta, usada no rodapé do Dashboard, onde
+ *     esses números são referência e não rotina.
  */
 export default function DashboardOverviewCards({
   isRefreshing = false,
-  latestMonth,
   onOpenModal,
   showCards = false,
   totals,
@@ -61,17 +59,10 @@ export default function DashboardOverviewCards({
         helper={`${formatInteger(totals.processedImportCount)} processada(s) com sucesso.`}
         onClick={() => onOpenModal("imports")}
       />
-      <MetricCard
-        compact={compact}
-        label="Último mês importado"
-        value={latestMonth ? formatMonthYear(latestMonth.referenceMonth) : "--"}
-        helper={
-          latestMonth
-            ? `${formatInteger(latestMonth.donorCount)} doador(es) conciliados.`
-            : "Aguardando primeira planilha."
-        }
-        onClick={latestMonth ? () => onOpenModal("latest-month") : undefined}
-      />
+      {/* Não há card "Último mês importado" aqui: o banner do topo da página
+          já abre com esse mês em destaque, e a seção "Resumo do último mês"
+          o detalha. Repetir num rodapé de totais fazia o mesmo mês aparecer
+          em quatro pontos diferentes da página. */}
     </div>
   );
 }

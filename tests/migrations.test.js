@@ -9,6 +9,10 @@ import { DONOR_INACTIVITY_STREAKS_SQL } from "../src/services/monthly/inactivity
 import { ABATEMENT_SHEET_SQL } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 import { buildTopDonorsQuery } from "../src/services/dashboard/topDonorsSql.js";
+import {
+  MONTHLY_TREND_LIMIT,
+  MONTHLY_TREND_SQL,
+} from "../src/services/dashboard/monthlyTrendSql.js";
 
 test("prepared statements bind parameters via ? placeholders", async () => {
   const conn = await createTestConnection();
@@ -2450,6 +2454,65 @@ test("listTopDonors scopes totals to a single month and to a demand", async () =
       semDemanda.map((row) => row.donor_name),
       ["Carla"],
     );
+  } finally {
+    conn.close();
+  }
+});
+
+test("listMonthlyTrend returns the most recent months, newest window first", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // 14 meses: mais que a janela de 12, para provar que o corte pega os
+    // recentes e não os antigos.
+    const values = [];
+    for (let index = 0; index < 14; index += 1) {
+      const month = String((index % 12) + 1).padStart(2, "0");
+      const year = 2025 + Math.floor(index / 12);
+      values.push(
+        `('t-${index}', 'imp-${index}', 'donor-${index % 2}', DATE '${year}-${month}-01',
+          '1111111111${index % 2}', 'Doador ${index % 2}', 'Cestas',
+          ${index + 1}, 1.00, ${index + 1}, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      );
+    }
+
+    await conn.query(`
+      INSERT INTO monthly_donor_summary (
+        id, import_id, donor_id, reference_month, cpf, donor_name, demand,
+        notes_count, value_per_note, abatement_amount, abatement_status,
+        created_at, updated_at
+      )
+      VALUES ${values.join(",")}
+    `);
+
+    const rows = (await conn.query(MONTHLY_TREND_SQL)).toArray().map((row) => row.toJSON());
+
+    assert.equal(rows.length, MONTHLY_TREND_LIMIT);
+
+    // A query devolve do mais novo pro mais antigo; o service inverte.
+    const months = rows.map((row) => row.reference_month);
+    assert.equal(months[0], "2026-02-01");
+    assert.deepEqual([...months].sort().reverse(), months);
+    // Os dois meses mais antigos (2025-01 e 2025-02) ficaram fora da janela.
+    assert.ok(!months.includes("2025-01-01"));
+
+    // Um mês com dois doadores agrega as duas linhas e conta 2 doadores.
+    await conn.query(`
+      INSERT INTO monthly_donor_summary (
+        id, import_id, donor_id, reference_month, cpf, donor_name, demand,
+        notes_count, value_per_note, abatement_amount, abatement_status,
+        created_at, updated_at
+      )
+      VALUES ('t-extra', 'imp-x', 'donor-9', DATE '2026-02-01', '99999999999',
+              'Outro', 'Remedios', 7, 1.00, 7.00, 'pending',
+              CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    const updated = (await conn.query(MONTHLY_TREND_SQL)).toArray().map((row) => row.toJSON());
+    const fev = updated.find((row) => row.reference_month === "2026-02-01");
+    assert.equal(Number(fev.donor_count), 2);
+    assert.equal(Number(fev.total_notes), 14 + 7);
   } finally {
     conn.close();
   }
