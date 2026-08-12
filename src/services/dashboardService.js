@@ -159,7 +159,7 @@ async function _fetchDashboardOverview() {
       WHERE donor_cpf_links.donation_start_date IS NOT NULL
         AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
       ORDER BY import_cpf_summary.reference_month DESC, donor_cpf_links.name ASC
-      LIMIT 5
+      LIMIT 500
     `),
     query(`
       SELECT
@@ -170,7 +170,7 @@ async function _fetchDashboardOverview() {
       WHERE is_active = TRUE
         AND coalesce(trim(demand), '') = ''
       ORDER BY name ASC
-      LIMIT 5
+      LIMIT 500
     `),
     query(`
       SELECT
@@ -188,7 +188,7 @@ async function _fetchDashboardOverview() {
         AND donors.is_active = TRUE
         AND donor_cpf_links.donation_start_date IS NULL
       ORDER BY donor_cpf_links.name ASC
-      LIMIT 5
+      LIMIT 500
     `),
     query(`
       SELECT
@@ -200,7 +200,7 @@ async function _fetchDashboardOverview() {
       WHERE status = 'processed'
         AND coalesce(total_rows, 0) = 0
       ORDER BY reference_month DESC, imported_at DESC
-      LIMIT 5
+      LIMIT 500
     `),
     query(`
       SELECT
@@ -211,7 +211,7 @@ async function _fetchDashboardOverview() {
       FROM imports
       WHERE status = 'error'
       ORDER BY updated_at DESC
-      LIMIT 5
+      LIMIT 500
     `),
     query(DONOR_INACTIVITY_STREAKS_SQL),
     getReconciliationStats(),
@@ -452,7 +452,7 @@ async function _fetchDashboardOverview() {
       // Full list, not a 5-row sample: this one is meant to be worked
       // through (call each donor and check if they're still registered).
       inactiveDonors,
-      donationStartConflictSamples: donationStartConflictRows.map((row) => ({
+      donationStartConflictRows: donationStartConflictRows.map((row) => ({
         sourceName: row.source_name,
         donorId: row.donor_id,
         donorName: row.donor_name,
@@ -461,12 +461,12 @@ async function _fetchDashboardOverview() {
         referenceMonth: row.reference_month,
         donationStartDate: row.donation_start_date,
       })),
-      donorWithoutDemandSamples: donorWithoutDemandRows.map((row) => ({
+      donorWithoutDemandRows: donorWithoutDemandRows.map((row) => ({
         donorId: row.id,
         donorName: row.name,
         cpf: row.cpf,
       })),
-      donorWithoutStartDateSamples: donorWithoutStartDateRows.map((row) => ({
+      donorWithoutStartDateRows: donorWithoutStartDateRows.map((row) => ({
         sourceId: row.id,
         sourceName: row.name,
         sourceType: row.donor_type,
@@ -475,13 +475,13 @@ async function _fetchDashboardOverview() {
         cpf: row.cpf,
         demand: row.demand ?? "",
       })),
-      emptyImportSamples: emptyImportRows.map((row) => ({
+      emptyImportRows: emptyImportRows.map((row) => ({
         importId: row.id,
         referenceMonth: row.reference_month,
         fileName: row.file_name,
         totalRows: toNumber(row.total_rows),
       })),
-      importErrorSamples: importErrorRows.map((row) => ({
+      importErrorRows: importErrorRows.map((row) => ({
         importId: row.id,
         referenceMonth: row.reference_month,
         fileName: row.file_name,

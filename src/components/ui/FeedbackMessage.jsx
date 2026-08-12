@@ -66,7 +66,11 @@ function getToastViewport() {
   return viewport;
 }
 
-function AlertBox({ message, tone, className }) {
+// A faixa inline aceita a mesma ação opcional do toast (tipicamente
+// "Desfazer"). É o único formato viável dentro de um modal: o viewport de
+// toast fica em z-100 e o modal em z-110, então um toast disparado de dentro
+// do modal renderizaria atrás do overlay.
+function AlertBox({ actionLabel = "", message, onAction, tone, className }) {
   const shouldReduceMotion = useReducedMotion();
   const toneStyles = TONE_STYLES[tone] || TONE_STYLES.info;
   const ToneIcon = toneStyles.icon;
@@ -88,6 +92,15 @@ function AlertBox({ message, tone, className }) {
           <ToneIcon className="h-4.5 w-4.5" />
         </div>
         <p className="min-w-0 flex-1 leading-6">{message}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="shrink-0 rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--line-strong)] hover:bg-black/10"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
       </div>
     </Motion.div>
   );
@@ -243,7 +256,15 @@ export default function FeedbackMessage({
   const shouldPersist = persistent ?? tone === "error";
 
   if (shouldPersist) {
-    return <AlertBox message={message} tone={tone} className={className} />;
+    return (
+      <AlertBox
+        actionLabel={actionLabel}
+        className={className}
+        message={message}
+        onAction={onAction}
+        tone={tone}
+      />
+    );
   }
 
   return (

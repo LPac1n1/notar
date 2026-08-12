@@ -14,6 +14,7 @@ import DashboardRankingsSection from "../features/dashboard/components/Dashboard
 import DashboardReconciliationSection from "../features/dashboard/components/DashboardReconciliationSection";
 import DashboardRecentImportsSection from "../features/dashboard/components/DashboardRecentImportsSection";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
+import { useDashboardActions } from "../features/dashboard/hooks/useDashboardActions";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
@@ -63,6 +64,16 @@ export default function Dashboard() {
     showDataRefreshLoading: hasDataRefreshLoading,
   } = useDataRefreshIndicator(isRefreshing);
 
+  const actions = useDashboardActions({ reload: reloadDashboard });
+  const { clearFeedback } = actions;
+
+  // O feedback pertence ao modal em que a ação foi disparada — deixá-lo vivo
+  // ao trocar de modal mostraria "X excluído" numa lista sem relação.
+  const closeModal = useCallback(() => {
+    setActiveModal("");
+    clearFeedback();
+  }, [clearFeedback]);
+
   const openDonorProfile = (donorId) => {
     if (donorId) {
       navigate(`/doadores/${encodeURIComponent(donorId)}`, {
@@ -110,11 +121,11 @@ export default function Dashboard() {
     emptyImportCount: 0,
     importErrorCount: 0,
     inactiveDonorCount: 0,
-    donationStartConflictSamples: [],
-    donorWithoutDemandSamples: [],
-    donorWithoutStartDateSamples: [],
-    emptyImportSamples: [],
-    importErrorSamples: [],
+    donationStartConflictRows: [],
+    donorWithoutDemandRows: [],
+    donorWithoutStartDateRows: [],
+    emptyImportRows: [],
+    importErrorRows: [],
     inactiveDonors: [],
   };
   const totalInconsistencyCount =
@@ -219,12 +230,14 @@ export default function Dashboard() {
 
       <AnimatePresence mode="wait">
         <DashboardModals
+          actions={actions}
           activeModal={activeModal}
           dashboard={dashboard}
           totals={totals}
           latestMonth={latestMonth}
           inconsistencies={inconsistencies}
-          onClose={() => setActiveModal("")}
+          onClose={closeModal}
+          onOpenImports={() => navigate("/importacoes")}
           openDonorProfile={openDonorProfile}
         />
       </AnimatePresence>
