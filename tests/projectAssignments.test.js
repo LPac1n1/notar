@@ -4,6 +4,7 @@ import { createTestConnection } from "./helpers/duckdbHelper.js";
 import { runMigrations } from "../src/services/db/migrations.js";
 import {
   BACKFILL_ASSIGNMENTS_SQL,
+  BACKFILL_DEMAND_PROJECT_SQL,
   CREDIT_ATTRIBUTION_IDENTITY_SQL,
   CREDIT_BY_PROJECT_SQL,
   DEFAULT_PROJECT_ID,
@@ -322,6 +323,65 @@ test("base sem sobreposição não acusa nada", async () => {
     `);
 
     assert.equal(rows(await conn.query(OVERLAPPING_ASSIGNMENTS_SQL)).length, 0);
+  } finally {
+    conn.close();
+  }
+});
+
+test("v13 põe as demandas existentes no projeto padrão e torna o nome único POR projeto", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    const demands = rows(
+      await conn.query(`SELECT id, project_id, name FROM demands`),
+    );
+    // Base nova não tem demanda; o que importa é a coluna existir e o
+    // backfill não deixar nenhuma órfã.
+    assert.ok(demands.every((row) => row.project_id === DEFAULT_PROJECT_ID));
+
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#222', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    // O MESMO nome em dois projetos precisa conviver — era exatamente o que
+    // o índice único global impedia antes da v13.
+    await conn.query(`
+      INSERT INTO demands (id, project_id, name, color, is_active, created_at, updated_at)
+      VALUES ('dm-1', '${DEFAULT_PROJECT_ID}', 'Cestas Basicas', '#111', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             ('dm-2', 'prj-capoeira', 'Cestas Basicas', '#222', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    const both = rows(
+      await conn.query(`SELECT project_id FROM demands WHERE name = 'Cestas Basicas' ORDER BY project_id`),
+    );
+    assert.deepEqual(both.map((row) => row.project_id), [
+      "prj-capoeira",
+      DEFAULT_PROJECT_ID,
+    ]);
+  } finally {
+    conn.close();
+  }
+});
+
+test("demanda restaurada de backup antigo (sem project_id) é adotada pelo projeto padrão", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    // Simula o restore de um arquivo anterior à v13: a coluna existe no
+    // schema, mas o backup não trazia valor para ela.
+    await conn.query(`
+      INSERT INTO demands (id, name, color, is_active, created_at, updated_at)
+      VALUES ('antiga', 'Remedios', '#111', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    await conn.query(BACKFILL_DEMAND_PROJECT_SQL);
+
+    const [row] = rows(
+      await conn.query(`SELECT project_id FROM demands WHERE id = 'antiga'`),
+    );
+    assert.equal(row.project_id, DEFAULT_PROJECT_ID);
   } finally {
     conn.close();
   }

@@ -6,6 +6,7 @@ import {
 } from "../../utils/backup.js";
 import {
   BACKFILL_ASSIGNMENTS_SQL,
+  BACKFILL_DEMAND_PROJECT_SQL,
   ENSURE_DEFAULT_PROJECT_SQL,
 } from "../project/projectAssignmentSql.js";
 import {
@@ -40,7 +41,15 @@ export const RESTORE_TABLE_COLUMNS = {
     "reason",
     "created_at",
   ],
-  demands: ["id", "name", "color", "is_active", "created_at", "updated_at"],
+  demands: [
+    "id",
+    "project_id",
+    "name",
+    "color",
+    "is_active",
+    "created_at",
+    "updated_at",
+  ],
   people: [
     "id",
     "name",
@@ -253,6 +262,7 @@ export async function exportDatabaseSnapshot() {
   const demands = await query(`
     SELECT
       id,
+      project_id,
       name,
       color,
       is_active,
@@ -652,17 +662,25 @@ export async function restoreDatabaseSnapshot(
           notifyProgress(tableName);
         }
       }
+
+      // Reposição do estado de projeto, DENTRO da mesma transaction.
+      //
+      // Um backup anterior à v12/v13 não traz `projects`,
+      // `donor_project_assignments` nem `demands.project_id` — e os DELETEs
+      // acima já apagaram os que existiam. Sem isto o sistema ficaria sem
+      // projeto nenhum, com todo o crédito como "não atribuído".
+      //
+      // Precisa ser atômico com o restore por dois motivos: um banco
+      // restaurado pela metade não pode ser commitado, e `execute` fora da
+      // transaction emite evento de mudança — o que faz as páginas montadas
+      // dispararem consultas no meio da restauração, contra um banco em
+      // estado intermediário. Idempotente: com backup novo, não insere nada.
+      await execute(ENSURE_DEFAULT_PROJECT_SQL);
+      await execute(BACKFILL_ASSIGNMENTS_SQL);
+      await execute(BACKFILL_DEMAND_PROJECT_SQL);
     },
     { emitChange: false },
   );
-
-  // Um backup anterior à v12 não traz `projects` nem
-  // `donor_project_assignments` — e o DELETE acima já apagou os que existiam.
-  // Sem esta reposição o sistema ficaria sem projeto nenhum e com todo o
-  // crédito classificado como "não atribuído". Idempotente: num backup que já
-  // traz as duas tabelas, nada é inserido.
-  await execute(ENSURE_DEFAULT_PROJECT_SQL);
-  await execute(BACKFILL_ASSIGNMENTS_SQL);
 
   await runStructuralReload();
   await flushAfterTransaction();

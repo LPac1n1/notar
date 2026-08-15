@@ -8,6 +8,7 @@
 import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
 import {
   BACKFILL_ASSIGNMENTS_SQL,
+  BACKFILL_DEMAND_PROJECT_SQL,
   ENSURE_DEFAULT_PROJECT_SQL,
 } from "../project/projectAssignmentSql.js";
 import { escapeSqlString } from "./sql.js";
@@ -1001,6 +1002,47 @@ export const MIGRATIONS = [
       // usada nos dois lugares.
       await conn.query(ENSURE_DEFAULT_PROJECT_SQL);
       await conn.query(BACKFILL_ASSIGNMENTS_SQL);
+    },
+  },
+  {
+    id: 13,
+    name: "demands-belong-to-a-project",
+    up: async (conn) => {
+      // Demanda subdivide Projeto: um projeto agrupa suas demandas, e um
+      // doador de Capoeira não pode receber uma demanda de Moradia.
+      //
+      // `demands` é a ÚNICA tabela do domínio antigo que recebe `project_id`.
+      // Importação, conciliação e doações continuam compartilhadas — o
+      // projeto delas vem do vínculo do doador, não de uma coluna.
+      await conn.query(`
+        ALTER TABLE demands
+        ADD COLUMN IF NOT EXISTS project_id TEXT
+      `);
+
+      await conn.query(ENSURE_DEFAULT_PROJECT_SQL);
+      await conn.query(BACKFILL_DEMAND_PROJECT_SQL);
+
+      // O nome da demanda era único GLOBALMENTE — o que impediria dois
+      // projetos de terem uma demanda com o mesmo nome ("Cestas Básicas" em
+      // Capoeira colidiria com a de Moradia). Passa a ser único por projeto.
+      await conn.query(`DROP INDEX IF EXISTS uq_demands_name`);
+
+      await conn
+        .query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS uq_demands_project_name ON demands(project_id, name)`,
+        )
+        .catch((error) => {
+          console.warn(
+            "Migration v13: skipping UNIQUE index uq_demands_project_name — duplicates detected.",
+            error,
+          );
+        });
+
+      await conn
+        .query(
+          `CREATE INDEX IF NOT EXISTS idx_demands_project ON demands(project_id)`,
+        )
+        .catch(() => {});
     },
   },
 ];

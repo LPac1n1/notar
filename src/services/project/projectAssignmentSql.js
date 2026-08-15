@@ -115,6 +115,18 @@ export const BACKFILL_ASSIGNMENTS_SQL = `
 `;
 
 /**
+ * Demanda sem projeto passa a pertencer ao projeto padrão.
+ *
+ * Também roda depois do restore: um backup anterior à v13 não traz a coluna,
+ * e demanda com `project_id` nulo não apareceria em projeto nenhum.
+ */
+export const BACKFILL_DEMAND_PROJECT_SQL = `
+  UPDATE demands
+  SET project_id = '${DEFAULT_PROJECT_ID}'
+  WHERE project_id IS NULL OR trim(project_id) = ''
+`;
+
+/**
  * Fragmento de junção: liga uma linha que tenha `donor_id` e um mês de
  * referência ao projeto vigente NAQUELE mês.
  *

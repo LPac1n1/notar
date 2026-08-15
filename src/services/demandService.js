@@ -7,6 +7,7 @@ import {
   query,
   queryPrepared,
 } from "./db";
+import { getActiveProjectId } from "./activeProject.js";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileAllImports } from "./importService";
 import { createTrashItem } from "./trashService";
@@ -27,8 +28,12 @@ const LIST_DEMANDS_TTL_MS = 30_000;
 
 async function _listDemandsUncached(filters = {}) {
   const { demandId = "", search = "" } = filters;
-  const conditions = [];
-  const params = [];
+  // Demanda subdivide projeto: a lista é sempre a do projeto ativo. Um
+  // doador de Capoeira não pode receber uma demanda de Moradia, e a forma
+  // mais simples de garantir isso é a demanda de outro projeto nunca ser
+  // oferecida.
+  const conditions = ["demands.project_id = ?"];
+  const params = [getActiveProjectId()];
 
   if (demandId.trim()) {
     conditions.push("id = ?");
@@ -44,8 +49,7 @@ async function _listDemandsUncached(filters = {}) {
     params.push(...searchCondition.params);
   }
 
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
   const rows = await queryPrepared(
     `
@@ -87,8 +91,12 @@ export const listDemands = withCache(
   // A chave PRECISA cobrir todo filtro que muda o resultado. Com só o
   // `demandId`, buscas de texto diferentes colidiriam na mesma entrada e
   // devolveriam a lista de outra busca.
+  //
+  // O projeto ativo entra na chave pelo mesmo motivo, com uma consequência
+  // pior: sem ele, trocar de projeto serviria a lista de demandas do projeto
+  // anterior a partir do cache — dado de um projeto aparecendo em outro.
   (filters = {}) =>
-    `listDemands:${filters?.demandId ?? ""}:${filters?.search ?? ""}`,
+    `listDemands:${getActiveProjectId()}:${filters?.demandId ?? ""}:${filters?.search ?? ""}`,
   _listDemandsUncached,
   LIST_DEMANDS_TTL_MS,
 );
@@ -105,14 +113,19 @@ export async function createDemand({
     throw new Error("O nome da demanda é obrigatório.");
   }
 
+  const projectId = getActiveProjectId();
+
+  // A unicidade do nome é POR PROJETO desde a v13: "Cestas Básicas" pode
+  // existir em Moradia e em Capoeira ao mesmo tempo sem colidir.
   const existingDemand = await queryPrepared(
     `
       SELECT id
       FROM demands
-      WHERE lower(trim(name)) = lower(trim(?))
+      WHERE project_id = ?
+        AND lower(trim(name)) = lower(trim(?))
       LIMIT 1
     `,
-    [trimmedName],
+    [projectId, trimmedName],
   );
 
   if (existingDemand.length > 0) {
@@ -124,10 +137,10 @@ export async function createDemand({
   // any future input — emojis, special chars, etc. — never touches SQL.
   await executePrepared(
     `
-      INSERT INTO demands (id, name, color, is_active, updated_at)
-      VALUES (?, ?, ?, TRUE, CURRENT_TIMESTAMP)
+      INSERT INTO demands (id, project_id, name, color, is_active, updated_at)
+      VALUES (?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP)
     `,
-    [id, trimmedName, normalizedColor],
+    [id, projectId, trimmedName, normalizedColor],
     { source: "demands", domains: ["demands"] },
   );
 
@@ -175,15 +188,17 @@ export async function updateDemand({
 
   const currentName = String(currentDemandRows[0].name ?? "").trim();
 
+  // Colisão só dentro do mesmo projeto — ver `createDemand`.
   const existingDemand = await queryPrepared(
     `
       SELECT id
       FROM demands
-      WHERE lower(trim(name)) = lower(trim(?))
+      WHERE project_id = ?
+        AND lower(trim(name)) = lower(trim(?))
         AND id <> ?
       LIMIT 1
     `,
-    [trimmedName, id],
+    [getActiveProjectId(), trimmedName, id],
   );
 
   if (existingDemand.length > 0) {

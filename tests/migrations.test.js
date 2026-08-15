@@ -188,9 +188,15 @@ test("migration v2 creates UNIQUE indexes on natural keys", async () => {
     await runMigrations(conn);
 
     const expectedNaturalKeyIndexes = [
+      // CPF continua único na PLATAFORMA inteira, e isso está correto: uma
+      // base de doadores só, um CPF por pessoa. O projeto vem do vínculo,
+      // não de uma coluna aqui.
       "uq_people_cpf",
       "uq_donors_cpf",
-      "uq_demands_name",
+      // O nome da demanda era único globalmente até a v13. Virou único POR
+      // PROJETO — sem isso, dois projetos não poderiam ter uma demanda com
+      // o mesmo nome.
+      "uq_demands_project_name",
     ];
 
     const rows = (
