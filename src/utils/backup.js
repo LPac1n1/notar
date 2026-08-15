@@ -1,4 +1,8 @@
 export const SNAPSHOT_TABLE_KEYS = [
+  // Plataforma multiprojeto: sem estas chaves, todo projeto e todo vínculo
+  // desapareceriam a cada hidratação da nuvem.
+  "projects",
+  "donorProjectAssignments",
   "demands",
   "people",
   "donors",
@@ -23,6 +27,8 @@ export const SNAPSHOT_TABLE_KEYS = [
 
 export function createEmptySnapshot() {
   return {
+    projects: [],
+    donorProjectAssignments: [],
     demands: [],
     people: [],
     donors: [],

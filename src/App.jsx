@@ -15,6 +15,8 @@ const HYDRATION_STEP_LABELS = {
 };
 
 const RESTORE_TABLE_LABELS = {
+  projects: "projetos",
+  donor_project_assignments: "vínculos de projeto",
   demands: "demandas",
   people: "pessoas",
   donors: "doadores",

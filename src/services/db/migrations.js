@@ -6,6 +6,10 @@
  * ========================================================================== */
 
 import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
+import {
+  BACKFILL_ASSIGNMENTS_SQL,
+  ENSURE_DEFAULT_PROJECT_SQL,
+} from "../project/projectAssignmentSql.js";
 import { escapeSqlString } from "./sql.js";
 
 export const MIGRATIONS = [
@@ -906,6 +910,97 @@ export const MIGRATIONS = [
             AND credit_notes.is_valid = TRUE
         ), 0)
       `);
+    },
+  },
+  {
+    id: 12,
+    name: "projects-and-donor-assignments",
+    up: async (conn) => {
+      // Plataforma multiprojeto — Fase 1: só as estruturas. Nenhuma tela
+      // muda; ao final desta migration o sistema se comporta exatamente
+      // como antes, com todo o histórico atribuído ao projeto padrão.
+      //
+      // Um CNPJ, uma planilha, uma base de doações: nenhuma tabela de
+      // importação, doação ou conciliação recebe `project_id`. O projeto é
+      // uma DIMENSÃO DE ATRIBUIÇÃO, decidida pelo vínculo doador → projeto.
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT,
+          name TEXT,
+          slug TEXT,
+          modules TEXT,
+          color TEXT,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Vigência em MÊS (primeiro dia), nunca em data: a planilha é mensal e
+      // uma vigência no meio do mês exigiria uma regra de rateio que o dado
+      // de origem não permite calcular.
+      //
+      // `valid_from`/`valid_to` usam datas-sentinela em vez de NULL — ver o
+      // comentário longo em `project/projectAssignmentSql.js`. Resumo: DuckDB
+      // não suporta índice único parcial, então "um vínculo aberto por
+      // doador" só é garantível pelo banco com um valor concreto no
+      // `valid_to`.
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS donor_project_assignments (
+          id TEXT,
+          donor_id TEXT,
+          project_id TEXT,
+          valid_from DATE,
+          valid_to DATE,
+          reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      const projectIndexes = [
+        ["uq_projects_id", "projects(id)", true],
+        ["uq_projects_slug", "projects(slug)", true],
+        ["uq_donor_project_assignments_id", "donor_project_assignments(id)", true],
+        // Este é o índice que carrega o invariante: a sentinela de "vigente"
+        // só pode existir uma vez por doador, logo nunca há dois vínculos
+        // abertos ao mesmo tempo.
+        [
+          "uq_donor_project_assignments_open",
+          "donor_project_assignments(donor_id, valid_to)",
+          true,
+        ],
+        [
+          "idx_donor_project_assignments_donor",
+          "donor_project_assignments(donor_id, valid_from)",
+          false,
+        ],
+        [
+          "idx_donor_project_assignments_project",
+          "donor_project_assignments(project_id)",
+          false,
+        ],
+      ];
+
+      for (const [indexName, columns, unique] of projectIndexes) {
+        await conn
+          .query(
+            `CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${indexName} ON ${columns}`,
+          )
+          .catch((error) => {
+            console.warn(
+              `Migration v12: skipping index ${indexName} on ${columns}.`,
+              error,
+            );
+          });
+      }
+
+      // Projeto padrão + vínculo de todo doador existente. As duas
+      // instruções vivem em `projectAssignmentSql.js` porque o restore de
+      // backup precisa executá-las de novo — restaurar um arquivo anterior à
+      // v12 apaga projetos e vínculos sem repor nenhum. Uma definição só,
+      // usada nos dois lugares.
+      await conn.query(ENSURE_DEFAULT_PROJECT_SQL);
+      await conn.query(BACKFILL_ASSIGNMENTS_SQL);
     },
   },
 ];

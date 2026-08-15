@@ -5,6 +5,10 @@ import {
   snapshotHasData,
 } from "../../utils/backup.js";
 import {
+  BACKFILL_ASSIGNMENTS_SQL,
+  ENSURE_DEFAULT_PROJECT_SQL,
+} from "../project/projectAssignmentSql.js";
+import {
   execute,
   flushAfterTransaction,
   getConnection,
@@ -17,6 +21,25 @@ import { query } from "./connection.js";
 import { serializeSqlValue } from "./sql.js";
 
 export const RESTORE_TABLE_COLUMNS = {
+  projects: [
+    "id",
+    "name",
+    "slug",
+    "modules",
+    "color",
+    "is_active",
+    "created_at",
+    "updated_at",
+  ],
+  donor_project_assignments: [
+    "id",
+    "donor_id",
+    "project_id",
+    "valid_from",
+    "valid_to",
+    "reason",
+    "created_at",
+  ],
   demands: ["id", "name", "color", "is_active", "created_at", "updated_at"],
   people: [
     "id",
@@ -199,6 +222,33 @@ export async function exportDatabaseSnapshot() {
   if (!getConnection()) {
     return null;
   }
+
+  const projects = await query(`
+    SELECT
+      id,
+      name,
+      slug,
+      modules,
+      color,
+      is_active,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
+    FROM projects
+    ORDER BY name ASC, id ASC
+  `);
+
+  const donorProjectAssignments = await query(`
+    SELECT
+      id,
+      donor_id,
+      project_id,
+      CAST(valid_from AS VARCHAR) AS valid_from,
+      CAST(valid_to AS VARCHAR) AS valid_to,
+      reason,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM donor_project_assignments
+    ORDER BY donor_id ASC, valid_from ASC
+  `);
 
   const demands = await query(`
     SELECT
@@ -446,6 +496,8 @@ export async function exportDatabaseSnapshot() {
   `);
 
   return {
+    projects,
+    donorProjectAssignments,
     demands,
     people,
     donors,
@@ -494,17 +546,22 @@ export async function restoreDatabaseSnapshot(
     "import_cpf_summary",
     "imports",
     "credit_imports",
+    // Vínculos antes de donors: eles referenciam o doador e o projeto.
+    "donor_project_assignments",
     "donor_cpf_links",
     "donors",
     "people",
     "demands",
+    "projects",
     "trash_items",
   ];
   const tableEntriesToInsert = [
+    ["projects", normalizedSnapshot.projects],
     ["demands", normalizedSnapshot.demands],
     ["people", normalizedSnapshot.people],
     ["donors", normalizedSnapshot.donors],
     ["donor_cpf_links", normalizedSnapshot.donorCpfLinks],
+    ["donor_project_assignments", normalizedSnapshot.donorProjectAssignments],
     ["imports", normalizedSnapshot.imports],
     ["donation_notes", normalizedSnapshot.donationNotes],
     ["import_cpf_summary", normalizedSnapshot.importCpfSummary],
@@ -598,6 +655,14 @@ export async function restoreDatabaseSnapshot(
     },
     { emitChange: false },
   );
+
+  // Um backup anterior à v12 não traz `projects` nem
+  // `donor_project_assignments` — e o DELETE acima já apagou os que existiam.
+  // Sem esta reposição o sistema ficaria sem projeto nenhum e com todo o
+  // crédito classificado como "não atribuído". Idempotente: num backup que já
+  // traz as duas tabelas, nada é inserido.
+  await execute(ENSURE_DEFAULT_PROJECT_SQL);
+  await execute(BACKFILL_ASSIGNMENTS_SQL);
 
   await runStructuralReload();
   await flushAfterTransaction();

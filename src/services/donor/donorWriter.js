@@ -23,6 +23,8 @@ import {
   findPersonByCpf,
   findPersonById,
 } from "../personService";
+import { assignDonorToProject } from "../projectService";
+import { DEFAULT_PROJECT_ID } from "../project/projectAssignmentSql.js";
 import { createTrashItem } from "../trashService";
 import { normalizePersonName } from "../../utils/normalize";
 
@@ -46,6 +48,7 @@ export async function createDonor({
   donorType = "holder",
   holderPersonId = "",
   holderDonorId = "",
+  projectId = "",
 }) {
   const normalizedDonorType = normalizeDonorType(donorType);
   const normalizedInputCpf = normalizeCpf(cpf);
@@ -156,6 +159,18 @@ export async function createDonor({
         normalizedStartDate || null,
       ],
     );
+  });
+
+  // Todo doador precisa de vínculo com um projeto — é ele que decide para
+  // onde vai o crédito das notas. Sem isso o doador nasceria com crédito "não
+  // atribuído", invisível na soma de qualquer projeto.
+  //
+  // Fica FORA da transaction de propósito: um doador sem vínculo é
+  // recuperável pela tela de "não atribuído", mas um vínculo órfão apontando
+  // para um doador que o rollback desfez não é.
+  await assignDonorToProject({
+    donorId: id,
+    projectId: projectId || DEFAULT_PROJECT_ID,
   });
 
   await syncAuxiliaryHolderDonorIds([person.id]);
@@ -436,6 +451,21 @@ export async function deleteDonor(id) {
   `,
     [id],
   );
+  const assignmentRows = await queryPrepared(
+    `
+    SELECT
+      id,
+      donor_id,
+      project_id,
+      CAST(valid_from AS VARCHAR) AS valid_from,
+      CAST(valid_to AS VARCHAR) AS valid_to,
+      reason,
+      CAST(created_at AS VARCHAR) AS created_at
+    FROM donor_project_assignments
+    WHERE donor_id = ?
+  `,
+    [id],
+  );
   let trashItemId = "";
 
   await runInTransaction(async () => {
@@ -447,8 +477,17 @@ export async function deleteDonor(id) {
         donors: donorRows,
         people: personRows,
         donorCpfLinks: cpfRows,
+        donorProjectAssignments: assignmentRows,
       },
     });
+
+    await executePrepared(
+      `
+      DELETE FROM donor_project_assignments
+      WHERE donor_id = ?
+    `,
+      [id],
+    );
 
     await executePrepared(
       `

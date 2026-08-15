@@ -49,6 +49,8 @@ test("snapshot helpers detect data and count rows correctly", () => {
 
   assert.equal(snapshotHasData(snapshot), true);
   assert.deepEqual(buildSnapshotStats(snapshot), {
+    projects: 0,
+    donorProjectAssignments: 0,
     demands: 2,
     people: 0,
     donors: 1,

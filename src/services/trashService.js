@@ -346,6 +346,12 @@ async function restoreDonor(payload) {
 
   await insertRows("donors", donors);
   await insertRows("donor_cpf_links", donorCpfLinks);
+  // Sem os vínculos, o doador restaurado voltaria sem projeto e todo o
+  // crédito dele apareceria como "não atribuído".
+  await insertRows(
+    "donor_project_assignments",
+    payload.donorProjectAssignments ?? [],
+  );
 
   for (const donor of donors.filter((item) => item.donor_type === "holder")) {
     await execute(`
