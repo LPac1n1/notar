@@ -78,21 +78,28 @@ export function ProjectProvider({ children }) {
     setSyncedProjectId(activeProjectId);
   }
 
-  // O último projeto aberto continua sendo o contexto de navegação mesmo em
-  // telas de plataforma. Sem isso, entrar em Importações apagaria a lista do
-  // projeto da barra lateral e deixaria o usuário sem caminho de volta — e o
-  // rótulo "Plataforma" já é o que comunica que aquela tela é compartilhada.
+  // O último projeto aberto continua sendo o contexto de navegação em telas
+  // de plataforma e de conta. Sem isso, entrar em Importações apagaria a
+  // lista do projeto da barra lateral e deixaria o usuário sem caminho de
+  // volta — e o rótulo "Plataforma" já comunica que aquela tela é
+  // compartilhada.
+  //
+  // A tela de ESCOLHA é a exceção: ali o trabalho é justamente escolher, e
+  // mostrar a navegação de um projeto contradiz a própria tela. A memória não
+  // é apagada, só não é exibida — ir de `/` direto para Importações continua
+  // trazendo o projeto de volta.
   //
   // A memória vem do módulo, não de estado React: restaurar um backup remonta
   // a árvore, e um `useState` voltaria ao inicial — a barra lateral perderia
   // o projeto depois de uma operação que não tem nada a ver com projeto.
-  // `syncedProjectId` fica nas deps só para o valor ser relido a cada troca.
-  const lastProject =
-    activeProject ??
-    (projects ?? NO_PROJECTS).find(
-      (item) => item.slug === getLastVisitedProjectSlug(),
-    ) ??
-    null;
+  const isProjectChooser = location.pathname === "/";
+  const lastProject = isProjectChooser
+    ? null
+    : (activeProject ??
+      (projects ?? NO_PROJECTS).find(
+        (item) => item.slug === getLastVisitedProjectSlug(),
+      ) ??
+      null);
 
   const value = useMemo(
     () => ({

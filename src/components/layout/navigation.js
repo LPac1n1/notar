@@ -116,31 +116,3 @@ export function resolveProjectNavItems(project) {
     (item) => !item.module || modules[item.module],
   );
 }
-
-/**
- * Resolve o item de navegação a partir do caminho atual, para o cabeçalho.
- * Compara pelo sufixo depois de `/p/:slug` quando a rota é de projeto.
- */
-export function getNavigationItem(pathname) {
-  const platformMatch = [...PLATFORM_NAV_ITEMS, ...FOOTER_NAV_ITEMS].find(
-    (item) => pathname.startsWith(item.to),
-  );
-
-  if (platformMatch) {
-    return platformMatch;
-  }
-
-  const projectMatch = pathname.match(/^\/p\/[^/]+\/?(.*)$/);
-
-  if (!projectMatch) {
-    return { label: "Projetos", description: "Escolha o projeto" };
-  }
-
-  const suffix = projectMatch[1] ?? "";
-
-  return (
-    PROJECT_NAV_ITEMS.find(
-      (item) => item.path && suffix.startsWith(item.path),
-    ) ?? PROJECT_NAV_ITEMS[0]
-  );
-}

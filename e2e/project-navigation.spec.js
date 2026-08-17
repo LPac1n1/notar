@@ -47,3 +47,30 @@ test("rotas anteriores ao multiprojeto redirecionam em vez de 404", async ({ pag
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Projetos" })).toBeVisible();
 });
+
+test("a tela de escolha não mostra a navegação de projeto nenhum", async ({ page }) => {
+  const sidebarText = () => page.locator("aside").first().innerText();
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Projetos" })).toBeVisible();
+  expect(await sidebarText()).not.toContain("Neste projeto");
+
+  await page.getByText("Demandas de Moradia").first().click();
+  await expect(page).toHaveURL(/\/p\/demandas-de-moradia$/);
+  await expect(page.locator("aside").first()).toContainText("Neste projeto");
+
+  // Voltar para a escolha precisa LIMPAR a navegação do projeto: ali o
+  // trabalho é justamente escolher, e mostrar a navegação de um projeto
+  // contradiz a própria tela.
+  await page.locator("aside").first().getByRole("button").first().click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect
+    .poll(async () => (await sidebarText()).includes("Neste projeto"))
+    .toBe(false);
+
+  // Mas a memória não é apagada: sair da escolha para uma tela de plataforma
+  // traz o projeto de volta, senão o usuário fica sem caminho de retorno.
+  await page.getByRole("link", { name: "Importações" }).click();
+  await expect(page).toHaveURL(/\/importacoes$/);
+  await expect(page.locator("aside").first()).toContainText("Neste projeto");
+});
