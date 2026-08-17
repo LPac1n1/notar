@@ -446,9 +446,46 @@ Usuário pediu quatro coisas: ver TODOS os doadores nos cards de "Pontos para re
 
 **Estado:** 151/151 testes (4 novos de integração), 18/18 e2e (3 novos), lint 0 erros, build OK. Verificação visual por screenshot em ambos os temas.
 
+## Plataforma multiprojeto (commits 232-235)
+
+Sistema evoluiu de projeto único para plataforma. Documento de arquitetura (v3) publicado como artifact; decisões fechadas lá: **Demanda subdivide Projeto**, **projeto como ambiente com Importações compartilhada**, **projeto novo com Dashboard, Doadores e Anotações**.
+
+**Regra de negócio que define o modelo:** todos os projetos compartilham o MESMO CNPJ recebedor. Existe uma planilha só, uma importação, uma conciliação, uma base de doações. **O projeto não vem da planilha — vem do vínculo doador→projeto, com vigência em mês.** (Uma versão anterior da proposta assumia um CNPJ por projeto e roteava a importação por ele; estava errada e foi descartada.)
+
+Consequência: nenhuma tabela de importação/doação/conciliação recebe `project_id`. O projeto é uma **dimensão de atribuição**, não uma partição de dados.
+
+### Fase 1 — Vínculo e projeto (commit 232)
+
+- **Migration v12**: `projects` + `donor_project_assignments`. Projeto padrão "Demandas de Moradia" com todos os módulos ligados; todo doador existente (inclusive inativo, que carrega histórico) ganha vínculo aberto desde sempre.
+- **DuckDB não suporta índice único parcial** — verificado contra o build real: `CREATE UNIQUE INDEX ... WHERE valid_to IS NULL` falha. Por isso a vigência usa **datas-sentinela** (`1900-01-01` / `9999-12-01`) em vez de NULL: o invariante "um vínculo aberto por doador" passa a ser garantido por um índice comum em `(donor_id, valid_to)`, e a consulta por vigência vira `BETWEEN` sem ramo de NULL. As sentinelas são traduzidas para null no mapper.
+- **A junção é pelo mês da NOTA**, nunca pela data da importação — planilha atrasada precisa cair no projeto vigente à época.
+- **`LEFT JOIN` de propósito** em `CREDIT_BY_PROJECT_SQL`: crédito de doador sem vínculo precisa aparecer como "não atribuído". Com INNER, esse dinheiro sumiria da soma em silêncio.
+- **Invariante central**: `Σ(por projeto) + Σ(não atribuído) = Σ(conciliado)`. 8 testes de integração em `tests/projectAssignments.test.js`.
+- Restore de backup reexecuta `ENSURE_DEFAULT_PROJECT_SQL` + `BACKFILL_ASSIGNMENTS_SQL` — um arquivo anterior à v12 apaga projetos e vínculos sem repor.
+- e2e `project-assignments.spec.js` exporta o backup pelo navegador para provar que o vínculo é criado no runtime real (passar nos outros testes só provaria que nada quebrou).
+
+### Fase 2 — O projeto vira ambiente (commits 233-235)
+
+- **Migration v13**: `demands.project_id` (caminho B). `uq_demands_name` global virou `uq_demands_project_name` — sem isso, dois projetos não poderiam ter uma demanda com o mesmo nome. `demandService` filtra/grava/checa duplicidade por projeto, e o **cache key inclui o projeto** (sem isso, trocar de projeto serviria a lista anterior).
+- **Rotas**: `/` = escolha de projeto + painel; `/p/:slug/…` = ambiente do projeto; `/importacoes` fora de qualquer projeto. `LegacyProjectRedirect` mantém favoritos e links antigos funcionando.
+- **`activeProject.js`** — holder do projeto ativo, padrão do `setActiveCloudUser`. A alternativa (passar `projectId` em centenas de chamadas) teria uma superfície de erro muito maior.
+- **`ProjectProvider` fica ACIMA do Layout**: a barra lateral precisa do projeto tanto quanto as páginas. Sincroniza o holder **durante o render**, não em efeito — efeito roda depois da primeira pintura, e as páginas já teriam consultado com o projeto anterior.
+- **Barra lateral com três blocos rotulados**: "Neste projeto" / "Plataforma" / conta. O rótulo "Plataforma" é o que impede a leitura de que Importações pertence ao projeto aberto.
+
+**Cinco bugs reais encontrados (todos pelos testes, não por inspeção):**
+1. Lateral não via o projeto — contexto estava dentro das rotas, abaixo do Layout.
+2. Tela presa em "Abrindo projeto" ao ir para Configurações — o gate continua montado durante a animação de saída e comparava com o projeto ativo (já nulo). Passou a comparar com o projeto do **próprio slug**.
+3. Sair do projeto apagava a navegação dele — usuário sem caminho de volta em Importações.
+4. Memória do projeto se perdia em dois cenários: `useState` some no remount do restore de backup; e guardar o **id** falha se o usuário sai de `/p/:slug` antes de a lista carregar. A correção guarda o **slug**, que vem da URL e existe no primeiro render.
+5. Restore com instruções de reparo FORA da transaction: `execute` emite evento de mudança, e as páginas consultavam um banco em estado intermediário. Falhava 2 de 3 rodadas.
+
+**Código morto encontrado**: contador da lixeira era calculado e nunca exibido (`FooterNavItem` não tinha badge) — religado. `getNavigationItem` tinha zero consumidores — removido.
+
+**Estado:** 161 testes, 24 e2e, lint 0, build OK. Fases 3 (segundo projeto utilizável) e 4 (reinvestimento) pendentes.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 228**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 235**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
