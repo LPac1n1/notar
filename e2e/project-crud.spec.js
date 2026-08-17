@@ -154,9 +154,26 @@ test("o dashboard de um projeto não mostra dados de outro", async ({ page }) =>
   await page.getByText("Capoeira").first().click();
   await expect(page).toHaveURL(/\/p\/capoeira$/);
 
+  // Projeto sem apuração mensal recebe o painel de crédito, não o completo:
+  // o painel completo fala de importação e conciliação, que são da
+  // plataforma, e exibi-los aqui daria a impressão de dado herdado.
   await expect(
-    page.getByText("Ainda não há dados suficientes para o dashboard"),
+    page.getByText("Nenhum doador vinculado ainda"),
   ).toBeVisible();
   await expect(page.getByText("Sem início")).toHaveCount(0);
   await expect(page.getByText("CESTAS BASICAS")).toHaveCount(0);
+  await expect(page.getByText("Pontos para revisar")).toHaveCount(0);
+  await expect(page.getByText("Conciliação")).toHaveCount(0);
+
+  // Com doador próprio, o painel abre — e abre ZERADO. O crédito do doador
+  // de Moradia não pode aparecer aqui de forma nenhuma.
+  await page.getByRole("link", { name: "Doadores", exact: true }).click();
+  await addDonor(page, { name: "Carla Capoeira", cpf: "15350946056" });
+  await page.getByRole("link", { name: "Dashboard" }).click();
+
+  await expect(page.getByText("Crédito acumulado")).toBeVisible();
+  await expect(page.getByText("Doadores vinculados")).toBeVisible();
+  await expect(page.getByText("CARLA CAPOEIRA").first()).toBeVisible();
+  await expect(page.getByText("ALICE MORADIA")).toHaveCount(0);
+  await expect(page.getByText("R$ 0,00").first()).toBeVisible();
 });

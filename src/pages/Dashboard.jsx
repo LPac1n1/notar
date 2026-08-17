@@ -15,11 +15,13 @@ import DashboardReconciliationSection from "../features/dashboard/components/Das
 import DashboardRecentImportsSection from "../features/dashboard/components/DashboardRecentImportsSection";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
 import DashboardTrendSection from "../features/dashboard/components/DashboardTrendSection";
+import ProjectCreditDashboard from "../features/dashboard/components/ProjectCreditDashboard";
 import TopDonorsSection from "../features/dashboard/components/TopDonorsSection";
 import { useDashboardActions } from "../features/dashboard/hooks/useDashboardActions";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
+import { useActiveProject } from "../hooks/useProject";
 import { useProjectPath } from "../hooks/useProjectPath";
 import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
@@ -38,7 +40,27 @@ import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
  *
  * Nenhuma zona gasta espaço quando está vazia.
  */
+/**
+ * Duas telas sob o mesmo endereço, escolhidas pelo módulo Gestão Mensal.
+ *
+ * O painel completo é sobre APURAÇÃO: importação, conciliação, abatimento,
+ * pendências do mês. Num projeto que não faz apuração, esses blocos não são
+ * só irrelevantes — eles trazem números da plataforma (importações,
+ * conciliação) e dão a impressão de que o projeto novo herdou dados do
+ * principal. O painel de crédito responde as perguntas que esse projeto tem:
+ * quanto gerou, como fechou o mês, está crescendo, quem sustenta.
+ */
 export default function Dashboard() {
+  const activeProject = useActiveProject();
+
+  if (activeProject && activeProject.modules?.monthly === false) {
+    return <ProjectCreditDashboard project={activeProject} />;
+  }
+
+  return <FullDashboard />;
+}
+
+function FullDashboard() {
   const location = useLocation();
   const [activeModal, setActiveModal] = useState("");
   const restoredScrollTopRef = useRef(location.state?.dashboardScrollTop ?? null);

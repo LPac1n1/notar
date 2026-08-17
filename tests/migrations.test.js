@@ -10,6 +10,11 @@ import { ABATEMENT_SHEET_SQL } from "../src/services/monthly/abatementSheetSql.j
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 import { buildTopDonorsQuery } from "../src/services/dashboard/topDonorsSql.js";
 import {
+  buildProjectCreditByDonorSql,
+  buildProjectCreditByMonthSql,
+  buildProjectDonorsWithoutCreditSql,
+} from "../src/services/dashboard/projectCreditSql.js";
+import {
   ASSIGNMENT_OPEN_END,
   ASSIGNMENT_OPEN_START,
   BACKFILL_ASSIGNMENTS_SQL,
@@ -2569,5 +2574,155 @@ test("listMonthlyTrend returns the most recent months, newest window first", asy
     assert.equal(Number(fev.total_notes), 14 + 7);
   } finally {
     conn.close();
+  }
+});
+
+/**
+ * Painel de crédito por projeto.
+ *
+ * O cenário reproduz a queixa que originou o painel: um projeto novo mostrando
+ * número do projeto principal. Aqui os dois projetos têm crédito no MESMO mês,
+ * de propósito — se cada um tivesse meses distintos, uma query mal escopada
+ * passaria despercebida.
+ */
+async function seedProjectCreditFixtures(conn) {
+  await conn.query(`
+    INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+    VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#6366f1', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+    VALUES
+      ('donor-mor', 'Marina Moradia', '33333333333', 'Sao Lucas', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('donor-cap', 'Carla Capoeira', '44444444444', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('donor-cap-sem', 'Cesar Sem Credito', '55555555555', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, created_at, updated_at)
+    VALUES
+      ('lk-mor', 'donor-mor', 'Marina Moradia', '33333333333', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('lk-cap', 'donor-cap', 'Carla Capoeira', '44444444444', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('lk-cap-sem', 'donor-cap-sem', 'Cesar Sem Credito', '55555555555', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO donor_project_assignments
+      (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+    VALUES
+      ('dpa-mor', 'donor-mor', '${DEFAULT_PROJECT_ID}', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP),
+      ('dpa-cap', 'donor-cap', 'prj-capoeira', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP),
+      ('dpa-cap-sem', 'donor-cap-sem', 'prj-capoeira', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO donation_notes (
+      id, import_id, cpf, numero_nota, valor_nota, reference_month,
+      cnpj_estabelecimento, is_valid, created_at
+    )
+    VALUES
+      ('dn-mor', 'imp-p', '33333333333', '701', 50.00, DATE '2026-03-01', '33333333000133', TRUE, CURRENT_TIMESTAMP),
+      ('dn-cap', 'imp-p', '44444444444', '702', 80.00, DATE '2026-03-01', '44444444000144', TRUE, CURRENT_TIMESTAMP),
+      ('dn-cap-2', 'imp-p', '44444444444', '703', 30.00, DATE '2026-04-01', '44444444000144', TRUE, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO credit_notes (
+      id, credit_import_id, cnpj_estabelecimento, numero_nota,
+      valor_nf, credito, situacao, is_valid, created_at
+    )
+    VALUES
+      ('cn-mor', 'ci-p', '33333333000133', '701', 50.00, 7.00, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+      ('cn-cap', 'ci-p', '44444444000144', '702', 80.00, 2.00, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+      ('cn-cap-2', 'ci-p', '44444444000144', '703', 30.00, 3.00, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+  `);
+}
+
+test("project credit dashboard only sees the credit of its own donors", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedProjectCreditFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    const capRows = (
+      await conn.query(buildProjectCreditByMonthSql("prj-capoeira"))
+    )
+      .toArray()
+      .map((row) => [String(row.reference_month), Number(row.total_credit)]);
+
+    // Marina gerou R$7,00 no MESMO marco. Sem escopo, marco viria R$9,00.
+    assert.deepEqual(capRows, [
+      ["2026-04-01", 3],
+      ["2026-03-01", 2],
+    ]);
+
+    const moradiaRows = (
+      await conn.query(buildProjectCreditByMonthSql(DEFAULT_PROJECT_ID))
+    ).toArray();
+    assert.equal(moradiaRows.length, 1);
+    assert.equal(Number(moradiaRows[0].total_credit), 7);
+
+    const donorRows = (
+      await conn.query(buildProjectCreditByDonorSql("prj-capoeira", { limit: 10 }))
+    ).toArray();
+    assert.equal(donorRows.length, 1, "so Carla tem credito em Capoeira");
+    assert.equal(donorRows[0].donor_name, "Carla Capoeira");
+    assert.equal(Number(donorRows[0].total_credit), 5);
+    assert.equal(Number(donorRows[0].month_count), 2);
+
+    // Marina nao gerou credito NESTE projeto, mas tambem nao e doadora dele —
+    // nao pode aparecer como pendencia de Capoeira.
+    const withoutRows = (
+      await conn.query(buildProjectDonorsWithoutCreditSql("prj-capoeira"))
+    ).toArray();
+    assert.deepEqual(
+      withoutRows.map((row) => row.donor_name),
+      ["Cesar Sem Credito"],
+    );
+  } finally {
+    await conn.close();
+  }
+});
+
+test("project credit stays with the project the donor had at the time of the note", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedProjectCreditFixtures(conn);
+
+    // Carla e transferida para Moradia a partir de abril: a janela de Capoeira
+    // fecha em marco e a de Moradia abre em abril.
+    await conn.query(`
+      UPDATE donor_project_assignments
+      SET valid_to = DATE '2026-03-01'
+      WHERE id = 'dpa-cap'
+    `);
+    await conn.query(`
+      INSERT INTO donor_project_assignments
+        (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+      VALUES ('dpa-cap-2', 'donor-cap', '${DEFAULT_PROJECT_ID}', DATE '2026-04-01', DATE '${ASSIGNMENT_OPEN_END}', 'transferencia', CURRENT_TIMESTAMP)
+    `);
+
+    await runCreditReconciliation(conn);
+
+    // Marco continua em Capoeira mesmo depois da transferencia.
+    const capRows = (
+      await conn.query(buildProjectCreditByMonthSql("prj-capoeira"))
+    )
+      .toArray()
+      .map((row) => [String(row.reference_month), Number(row.total_credit)]);
+    assert.deepEqual(capRows, [["2026-03-01", 2]]);
+
+    const moradiaRows = (
+      await conn.query(buildProjectCreditByMonthSql(DEFAULT_PROJECT_ID))
+    )
+      .toArray()
+      .map((row) => [String(row.reference_month), Number(row.total_credit)]);
+    assert.deepEqual(moradiaRows, [
+      ["2026-04-01", 3],
+      ["2026-03-01", 7],
+    ]);
+  } finally {
+    await conn.close();
   }
 });

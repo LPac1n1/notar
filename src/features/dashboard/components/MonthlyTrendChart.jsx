@@ -20,9 +20,21 @@ const METRICS = [
   { key: "totalAbatement", label: "Abatimento", format: formatCurrency },
   { key: "totalNotes", label: "Notas", format: formatInteger },
   { key: "donorCount", label: "Doadores", format: formatInteger },
+  // Usado pelo painel de projetos de crédito, onde só existe uma métrica que
+  // faz sentido — e por isso lá a alternância nem aparece.
+  { key: "totalCredit", label: "Crédito", format: formatCurrency },
 ];
 
 const GRID_STEPS = [1, 0.5, 0];
+
+// Teto de largura por coluna, aplicado igualmente à barra e ao rótulo abaixo
+// dela — se só um dos dois tivesse o limite, as duas linhas desalinhavam.
+//
+// Sem o teto, `flex-1` reparte a largura inteira entre as colunas: um projeto
+// novo, com um ou dois meses, renderizava lajes de ~400px que não se leem
+// como um gráfico. Com 12 meses (o limite da série) cada coluna já fica
+// abaixo deste valor, então o painel principal não muda em nada.
+const COLUMN_MAX_WIDTH = "max-w-[4.5rem]";
 
 function niceCeiling(value) {
   if (value <= 0) return 1;
@@ -31,10 +43,17 @@ function niceCeiling(value) {
   return Math.ceil(value / magnitude) * magnitude;
 }
 
-export default function MonthlyTrendChart({ months = [] }) {
-  const [metricKey, setMetricKey] = useState(METRICS[0].key);
+/**
+ * `metricKey` fixa a métrica e esconde a alternância. Serve ao painel de
+ * projetos de crédito, onde só existe uma série possível — oferecer um
+ * seletor de uma opção só seria ruído.
+ */
+export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricKey = "" }) {
+  const [selectedMetricKey, setSelectedMetricKey] = useState(METRICS[0].key);
   const [activeIndex, setActiveIndex] = useState(-1);
 
+  const metricKey = fixedMetricKey || selectedMetricKey;
+  const setMetricKey = setSelectedMetricKey;
   const metric = METRICS.find((item) => item.key === metricKey) ?? METRICS[0];
 
   const { scaleMax, peakIndex } = useMemo(() => {
@@ -55,7 +74,11 @@ export default function MonthlyTrendChart({ months = [] }) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Métrica do gráfico">
+      <div
+        className={`mb-4 flex-wrap gap-1.5 ${fixedMetricKey ? "hidden" : "flex"}`}
+        role="group"
+        aria-label="Métrica do gráfico"
+      >
         {METRICS.map((item) => {
           const isActive = item.key === metric.key;
 
@@ -132,7 +155,7 @@ export default function MonthlyTrendChart({ months = [] }) {
                       type="button"
                       // A coluna inteira é o alvo — a barra pode ser baixa
                       // demais para ser apontada com precisão.
-                      className="group flex h-full min-w-0 flex-1 cursor-default flex-col justify-end rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                      className={`group flex h-full min-w-0 flex-1 cursor-default flex-col justify-end rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${COLUMN_MAX_WIDTH}`}
                       onMouseEnter={() => setActiveIndex(index)}
                       onFocus={() => setActiveIndex(index)}
                       onBlur={() => setActiveIndex(-1)}
@@ -158,7 +181,7 @@ export default function MonthlyTrendChart({ months = [] }) {
               {months.map((month, index) => (
                 <span
                   key={month.referenceMonth}
-                  className={`min-w-0 flex-1 truncate text-center text-[0.6875rem] ${
+                  className={`min-w-0 flex-1 truncate text-center text-[0.6875rem] ${COLUMN_MAX_WIDTH} ${
                     index === peakIndex || index === months.length - 1
                       ? "text-[var(--text-soft)]"
                       : "text-[var(--muted)]"
