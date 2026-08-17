@@ -18,6 +18,7 @@ import DonorCpfSourcesSection from "../features/donors/components/DonorCpfSource
 import DonorCreditReconciliationSection from "../features/donors/components/DonorCreditReconciliationSection";
 import DonorLinkedSection from "../features/donors/components/DonorLinkedSection";
 import DonorMonthlyHistorySection from "../features/donors/components/DonorMonthlyHistorySection";
+import DonorProjectSection from "../features/donors/components/DonorProjectSection";
 import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
 import {
   createAbatementAdjustment,
@@ -358,6 +359,8 @@ export default function DonorProfile() {
         auxiliaryDonors={profile.auxiliaryDonors}
         onNavigateToRelated={navigateToRelatedDonor}
       />
+
+      <DonorProjectSection donor={donor} />
 
       <DonorCreditReconciliationSection donorId={donor.id} showAbatement={hasMonthly} />
 

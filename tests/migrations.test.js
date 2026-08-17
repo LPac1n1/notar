@@ -2726,3 +2726,121 @@ test("project credit stays with the project the donor had at the time of the not
     await conn.close();
   }
 });
+
+/**
+ * Doadores sem vínculo de projeto.
+ *
+ * Contador e lista precisam usar o MESMO predicado. Quando divergiram em
+ * Pessoas, o resultado foi total inflado e última página vazia — o card diria
+ * "3 sem projeto" e o modal abriria com 5, ou pior, vazio.
+ */
+test("orphan donor list and count agree on the same predicate", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    await conn.query(`
+      INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+      VALUES
+        ('orf-1', 'Orfao Um', '11111111111', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('orf-2', 'Orfao Dois', '22222222222', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('orf-inativo', 'Orfao Inativo', '33333333333', NULL, 'holder', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('vinculado', 'Com Projeto', '44444444444', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await seedAssignments(conn, ["vinculado"]);
+
+    const listRows = (
+      await conn.query(`
+        SELECT donors.id, donors.name, donors.cpf
+        FROM donors
+        WHERE donors.is_active = TRUE
+          AND NOT EXISTS (
+            SELECT 1 FROM donor_project_assignments
+            WHERE donor_project_assignments.donor_id = donors.id
+          )
+        ORDER BY donors.name ASC
+        LIMIT 200
+      `)
+    ).toArray();
+
+    const countRows = (
+      await conn.query(`
+        SELECT count(*) AS total
+        FROM donors
+        WHERE donors.is_active = TRUE
+          AND NOT EXISTS (
+            SELECT 1 FROM donor_project_assignments
+            WHERE donor_project_assignments.donor_id = donors.id
+          )
+      `)
+    ).toArray();
+
+    // Inativo fica de fora dos dois; vinculado idem.
+    assert.deepEqual(
+      listRows.map((row) => row.name),
+      ["Orfao Dois", "Orfao Um"],
+    );
+    assert.equal(Number(countRows[0].total), listRows.length);
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Uma transferência não pode reescrever o passado.
+ *
+ * O invariante é a janela FECHADA: o mês anterior à transferência continua
+ * apontando para o projeto antigo. Reescrever `project_id` do vínculo — o
+ * atalho óbvio — moveria todo o histórico junto.
+ */
+test("transferring a donor closes the previous window instead of rewriting it", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-b', 'Projeto B', 'projeto-b', '{}', '#6366f1', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+      VALUES ('donor-t', 'Doador Transferido', '11111111111', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await seedAssignments(conn, ["donor-t"]);
+
+    // Mesma sequência que `transferDonorToProject` executa.
+    await conn.query(`
+      UPDATE donor_project_assignments
+      SET valid_to = (DATE '2026-04-01' - INTERVAL 1 MONTH)
+      WHERE donor_id = 'donor-t' AND valid_to = DATE '${ASSIGNMENT_OPEN_END}'
+    `);
+    await conn.query(`
+      INSERT INTO donor_project_assignments
+        (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+      VALUES ('dpa-novo', 'donor-t', 'prj-b', DATE '2026-04-01', DATE '${ASSIGNMENT_OPEN_END}', 'transferencia', CURRENT_TIMESTAMP)
+    `);
+
+    const atMarch = (
+      await conn.query(`
+        SELECT project_id FROM donor_project_assignments
+        WHERE donor_id = 'donor-t'
+          AND DATE '2026-03-01' BETWEEN valid_from AND valid_to
+      `)
+    ).toArray();
+    const atApril = (
+      await conn.query(`
+        SELECT project_id FROM donor_project_assignments
+        WHERE donor_id = 'donor-t'
+          AND DATE '2026-04-01' BETWEEN valid_from AND valid_to
+      `)
+    ).toArray();
+
+    // Exatamente UM projeto por mês: vigência sobreposta contaria o crédito
+    // do mês da transferência duas vezes.
+    assert.equal(atMarch.length, 1);
+    assert.equal(atMarch[0].project_id, DEFAULT_PROJECT_ID);
+    assert.equal(atApril.length, 1);
+    assert.equal(atApril[0].project_id, "prj-b");
+  } finally {
+    await conn.close();
+  }
+});

@@ -11,6 +11,7 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { PlusIcon, TrashIcon } from "../components/ui/icons";
 import ProjectFormModal from "../features/projects/components/ProjectFormModal";
+import UnassignedDonorsModal from "../features/projects/components/UnassignedDonorsModal";
 import { useDataResource } from "../hooks/useDataResource";
 import { useMutationAction } from "../hooks/useMutationAction";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
@@ -72,6 +73,7 @@ export default function Projects() {
     domains: ["projects", "donors", "credits", "imports"],
   });
 
+  const [isUnassignedOpen, setIsUnassignedOpen] = useState(false);
   const [formProject, setFormProject] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -277,9 +279,26 @@ export default function Projects() {
             <p className="mt-2 text-sm text-[var(--muted)]">
               Cadastros ativos que não aparecem na lista de nenhum projeto.
             </p>
+            {donorsWithoutProject > 0 ? (
+              <Button
+                className="mt-3"
+                variant="subtle"
+                onClick={() => setIsUnassignedOpen(true)}
+              >
+                Ver e vincular
+              </Button>
+            ) : null}
           </div>
         </div>
       </SectionCard>
+
+      {isUnassignedOpen ? (
+        <UnassignedDonorsModal
+          projects={summary?.projects ?? []}
+          onAssigned={reloadAll}
+          onClose={() => setIsUnassignedOpen(false)}
+        />
+      ) : null}
 
       {isFormOpen ? (
         <ProjectFormModal

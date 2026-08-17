@@ -602,6 +602,33 @@ export async function countDonorsWithoutProject() {
   return Number(rows[0]?.total ?? 0);
 }
 
+/**
+ * Os doadores que o card "sem projeto" conta.
+ *
+ * O predicado é o MESMO de `countDonorsWithoutProject` — de propósito, e não
+ * por coincidência: contador e lista divergentes já produziram total inflado e
+ * última página vazia em Pessoas. Se um dos dois mudar, o outro muda junto.
+ */
+export async function listDonorsWithoutProject() {
+  const rows = await query(`
+    SELECT donors.id, donors.name, donors.cpf
+    FROM donors
+    WHERE donors.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM donor_project_assignments
+        WHERE donor_project_assignments.donor_id = donors.id
+      )
+    ORDER BY donors.name ASC
+    LIMIT 200
+  `);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    cpf: row.cpf,
+  }));
+}
+
 export async function listOverlappingAssignments() {
   const rows = await query(OVERLAPPING_ASSIGNMENTS_SQL);
 
