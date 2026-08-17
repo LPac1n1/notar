@@ -1,4 +1,5 @@
 import { startOfMonth } from "../../utils/date.js";
+import { donorBelongsToProject } from "../project/projectAssignmentSql.js";
 
 /**
  * Builder do ranking de maiores doadores.
@@ -30,8 +31,13 @@ export function buildTopDonorsQuery({
   demand = "",
   sort = "abatement",
   limit = 5,
+  projectId = "",
 } = {}) {
-  const conditions = [];
+  // O ranking é do projeto ativo. Sem o recorte, um projeto novo mostraria
+  // os maiores doadores do projeto principal.
+  const conditions = projectId
+    ? [donorBelongsToProject("monthly_donor_summary.donor_id", projectId)]
+    : [];
   const params = [];
 
   if (referenceMonth) {
@@ -72,14 +78,16 @@ export function buildTopDonorsQuery({
 }
 
 export const TOP_DONOR_FILTER_OPTIONS_SQL = {
-  months: `
+  months: (projectId) => `
     SELECT DISTINCT strftime(reference_month, '%Y-%m-01') AS reference_month
     FROM monthly_donor_summary
+    WHERE ${donorBelongsToProject("monthly_donor_summary.donor_id", projectId)}
     ORDER BY reference_month DESC
   `,
-  demands: `
+  demands: (projectId) => `
     SELECT DISTINCT ${DEMAND_EXPRESSION} AS demand
     FROM monthly_donor_summary
+    WHERE ${donorBelongsToProject("monthly_donor_summary.donor_id", projectId)}
     ORDER BY demand ASC
   `,
 };

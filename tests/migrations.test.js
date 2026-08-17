@@ -5,13 +5,42 @@ import {
   MIGRATIONS,
   runMigrations,
 } from "../src/services/db/migrations.js";
-import { DONOR_INACTIVITY_STREAKS_SQL } from "../src/services/monthly/inactivityStreaksSql.js";
+import { buildDonorInactivityStreaksSql } from "../src/services/monthly/inactivityStreaksSql.js";
 import { ABATEMENT_SHEET_SQL } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 import { buildTopDonorsQuery } from "../src/services/dashboard/topDonorsSql.js";
 import {
+  ASSIGNMENT_OPEN_END,
+  ASSIGNMENT_OPEN_START,
+  BACKFILL_ASSIGNMENTS_SQL,
+  DEFAULT_PROJECT_ID,
+} from "../src/services/project/projectAssignmentSql.js";
+
+/**
+ * Vincula doadores ao projeto padrão.
+ *
+ * As queries do dashboard passaram a ser escopadas por projeto, e um doador
+ * sem vínculo não pertence a projeto nenhum — por desenho. As fixtures que
+ * inserem linhas direto (sem passar pelo bootstrap, que faz o backfill)
+ * precisam criar o vínculo explicitamente.
+ */
+async function seedAssignments(conn, donorIds) {
+  const values = donorIds
+    .map(
+      (donorId, index) =>
+        `('dpa-test-${index}', '${donorId}', '${DEFAULT_PROJECT_ID}', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP)`,
+    )
+    .join(",");
+
+  await conn.query(`
+    INSERT INTO donor_project_assignments
+      (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+    VALUES ${values}
+  `);
+}
+import {
   MONTHLY_TREND_LIMIT,
-  MONTHLY_TREND_SQL,
+  buildMonthlyTrendSql,
 } from "../src/services/dashboard/monthlyTrendSql.js";
 
 test("prepared statements bind parameters via ? placeholders", async () => {
@@ -1993,7 +2022,9 @@ test("donor inactivity streaks count consecutive imported months without notes",
       }
     }
 
-    const rows = (await conn.query(DONOR_INACTIVITY_STREAKS_SQL)).toArray();
+    await conn.query(BACKFILL_ASSIGNMENTS_SQL);
+
+    const rows = (await conn.query(buildDonorInactivityStreaksSql(DEFAULT_PROJECT_ID))).toArray();
     const byId = new Map(rows.map((row) => [String(row.donor_id), row]));
 
     assert.equal(Number(byId.get("always").months_without_donating), 0);
@@ -2064,7 +2095,9 @@ test("donor inactivity streaks resolve auxiliaries by their own CPF", async () =
       VALUES ('m1', 'imp-2026-02-01', 'h1', DATE '2026-02-01', '11111111111', 'TITULAR', 'D', 2, 10, 20, 'pending')
     `);
 
-    const rows = (await conn.query(DONOR_INACTIVITY_STREAKS_SQL)).toArray();
+    await conn.query(BACKFILL_ASSIGNMENTS_SQL);
+
+    const rows = (await conn.query(buildDonorInactivityStreaksSql(DEFAULT_PROJECT_ID))).toArray();
     const byId = new Map(rows.map((row) => [String(row.donor_id), row]));
 
     // The holder stopped in February even though their summary row has notes.
@@ -2371,10 +2404,15 @@ async function seedTopDonorFixtures(conn) {
       ('t-carla-jan', 'imp-1', 'donor-c', DATE '2026-01-01', '33333333333', 'Carla', '',
        5, 1.00, 5.00, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `);
+
+  await seedAssignments(conn, ["donor-a", "donor-b", "donor-c"]);
 }
 
 async function runTopDonors(conn, filters) {
-  const { sql, params } = buildTopDonorsQuery(filters);
+  const { sql, params } = buildTopDonorsQuery({
+    ...filters,
+    projectId: DEFAULT_PROJECT_ID,
+  });
   const stmt = await conn.prepare(sql);
   try {
     return (await stmt.query(...params)).toArray().map((row) => row.toJSON());
@@ -2492,7 +2530,9 @@ test("listMonthlyTrend returns the most recent months, newest window first", asy
       VALUES ${values.join(",")}
     `);
 
-    const rows = (await conn.query(MONTHLY_TREND_SQL)).toArray().map((row) => row.toJSON());
+    await seedAssignments(conn, ["donor-0", "donor-1"]);
+
+    const rows = (await conn.query(buildMonthlyTrendSql(DEFAULT_PROJECT_ID))).toArray().map((row) => row.toJSON());
 
     assert.equal(rows.length, MONTHLY_TREND_LIMIT);
 
@@ -2515,7 +2555,15 @@ test("listMonthlyTrend returns the most recent months, newest window first", asy
               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
 
-    const updated = (await conn.query(MONTHLY_TREND_SQL)).toArray().map((row) => row.toJSON());
+    await conn.query(`
+      INSERT INTO donor_project_assignments
+        (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+      VALUES ('dpa-extra', 'donor-9', '${DEFAULT_PROJECT_ID}',
+              DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}',
+              'inicial', CURRENT_TIMESTAMP)
+    `);
+
+    const updated = (await conn.query(buildMonthlyTrendSql(DEFAULT_PROJECT_ID))).toArray().map((row) => row.toJSON());
     const fev = updated.find((row) => row.reference_month === "2026-02-01");
     assert.equal(Number(fev.donor_count), 2);
     assert.equal(Number(fev.total_notes), 14 + 7);

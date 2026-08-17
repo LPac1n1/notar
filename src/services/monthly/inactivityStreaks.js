@@ -1,5 +1,6 @@
 import { query } from "../db";
-import { DONOR_INACTIVITY_STREAKS_SQL } from "./inactivityStreaksSql";
+import { getActiveProjectId } from "../activeProject.js";
+import { buildDonorInactivityStreaksSql } from "./inactivityStreaksSql";
 
 /**
  * A one-month gap is routine (the donor may simply not have shopped). Two or
@@ -68,7 +69,7 @@ export function mapInactivityRow(row) {
  * never expected to donate then.
  */
 export async function listDonorInactivityStreaks() {
-  const rows = await query(DONOR_INACTIVITY_STREAKS_SQL);
+  const rows = await query(buildDonorInactivityStreaksSql(getActiveProjectId()));
   return rows.map(mapInactivityRow);
 }
 

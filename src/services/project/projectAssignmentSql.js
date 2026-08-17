@@ -126,6 +126,48 @@ export const BACKFILL_DEMAND_PROJECT_SQL = `
   WHERE project_id IS NULL OR trim(project_id) = ''
 `;
 
+// Ids de projeto são gerados no servidor (nanoid ou a constante do projeto
+// padrão), então nunca carregam aspas. A limpeza é defensiva: garante que um
+// valor inesperado não consiga escapar do literal.
+function safeProjectId(projectId) {
+  return String(projectId ?? "").replaceAll("'", "");
+}
+
+/**
+ * Predicado "este doador pertence AO PROJETO hoje".
+ *
+ * Usa o vínculo ABERTO, não o do mês: serve para listas e contagens de
+ * cadastro, em que a pergunta é "quem é meu doador agora". Para somas por
+ * mês use `assignmentJoin`, que respeita a vigência da época.
+ *
+ * Existe como fragmento porque o dashboard tem mais de uma dezena de queries
+ * derivadas de doador — escrever o filtro em cada uma seria uma dezena de
+ * chances de esquecer, e esquecer significa dado de um projeto aparecendo em
+ * outro.
+ */
+export function donorBelongsToProject(donorExpression, projectId) {
+  return `EXISTS (
+    SELECT 1
+    FROM donor_project_assignments AS dpa_scope
+    WHERE dpa_scope.donor_id = ${donorExpression}
+      AND dpa_scope.project_id = '${safeProjectId(projectId)}'
+      AND dpa_scope.valid_to = DATE '${ASSIGNMENT_OPEN_END}'
+  )`;
+}
+
+/** Mesma ideia para linhas que referenciam o doador por um CPF vinculado. */
+export function cpfLinkBelongsToProject(cpfLinkExpression, projectId) {
+  return `EXISTS (
+    SELECT 1
+    FROM donor_cpf_links AS dcl_scope
+    INNER JOIN donor_project_assignments AS dpa_scope
+      ON dpa_scope.donor_id = dcl_scope.donor_id
+    WHERE dcl_scope.id = ${cpfLinkExpression}
+      AND dpa_scope.project_id = '${safeProjectId(projectId)}'
+      AND dpa_scope.valid_to = DATE '${ASSIGNMENT_OPEN_END}'
+  )`;
+}
+
 /**
  * Fragmento de junção: liga uma linha que tenha `donor_id` e um mês de
  * referência ao projeto vigente NAQUELE mês.

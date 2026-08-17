@@ -8,7 +8,12 @@
  * See `inactivityStreaks.js` for the rationale behind the month grid and the
  * per-CPF activity resolution.
  */
-export const DONOR_INACTIVITY_STREAKS_SQL = `
+import { donorBelongsToProject } from "../project/projectAssignmentSql.js";
+
+// Escopado por projeto: quem parou de doar é uma leitura do estado atual
+// dos doadores DAQUELE projeto.
+export function buildDonorInactivityStreaksSql(projectId) {
+  return `
   WITH imported_months AS (
     SELECT DISTINCT strftime(reference_month, '%Y-%m-%d') AS reference_month
     FROM imports
@@ -40,6 +45,7 @@ export const DONOR_INACTIVITY_STREAKS_SQL = `
     FROM donors
     CROSS JOIN ranked_months
     WHERE donors.is_active = TRUE
+      AND ${donorBelongsToProject("donors.id", projectId)}
       AND (
         donors.donation_start_date IS NULL
         OR strftime(donors.donation_start_date, '%Y-%m-%d')
@@ -71,3 +77,4 @@ export const DONOR_INACTIVITY_STREAKS_SQL = `
   GROUP BY donors.id, donors.name, donors.cpf, donors.demand, donors.donor_type
   ORDER BY months_without_donating DESC, donors.name ASC
 `;
+}

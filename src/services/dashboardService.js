@@ -1,5 +1,10 @@
 import { query, queryPrepared } from "./db";
-import { MONTHLY_TREND_SQL } from "./dashboard/monthlyTrendSql.js";
+import { getActiveProjectId } from "./activeProject.js";
+import {
+  cpfLinkBelongsToProject,
+  donorBelongsToProject,
+} from "./project/projectAssignmentSql.js";
+import { buildMonthlyTrendSql } from "./dashboard/monthlyTrendSql.js";
 import {
   buildTopDonorsQuery,
   TOP_DONOR_FILTER_OPTIONS_SQL,
@@ -10,10 +15,12 @@ import {
   INACTIVITY_ALERT_THRESHOLD,
   mapInactivityRow,
 } from "./monthly/inactivityStreaks";
-import { DONOR_INACTIVITY_STREAKS_SQL } from "./monthly/inactivityStreaksSql";
+import { buildDonorInactivityStreaksSql } from "./monthly/inactivityStreaksSql";
 import { getCached, setCached } from "./queryCache.js";
 
-const DASHBOARD_CACHE_KEY = "dashboard:overview";
+// A chave inclui o projeto: sem isso, trocar de projeto serviria o
+// panorama do anterior a partir do cache.
+const dashboardCacheKey = () => `dashboard:overview:${getActiveProjectId()}`;
 const DASHBOARD_TTL_MS = 30_000;
 
 function toNumber(value) {
@@ -33,7 +40,10 @@ export { TOP_DONOR_SORT_OPTIONS };
  * mês, `imported_month_count` vale 1 por construção e a UI esconde a coluna.
  */
 export async function listTopDonors(filters = {}) {
-  const { sql, params } = buildTopDonorsQuery(filters);
+  const { sql, params } = buildTopDonorsQuery({
+    ...filters,
+    projectId: getActiveProjectId(),
+  });
   const rows = await queryPrepared(sql, params);
 
   return rows.map((row) => ({
@@ -56,7 +66,7 @@ export async function listTopDonors(filters = {}) {
  * cronológica (a query busca os mais recentes primeiro).
  */
 export async function listMonthlyTrend() {
-  const rows = await query(MONTHLY_TREND_SQL);
+  const rows = await query(buildMonthlyTrendSql(getActiveProjectId()));
 
   return rows
     .map((row) => ({
@@ -70,8 +80,8 @@ export async function listMonthlyTrend() {
 
 export async function getTopDonorFilterOptions() {
   const [monthRows, demandRows] = await Promise.all([
-    query(TOP_DONOR_FILTER_OPTIONS_SQL.months),
-    query(TOP_DONOR_FILTER_OPTIONS_SQL.demands),
+    query(TOP_DONOR_FILTER_OPTIONS_SQL.months(getActiveProjectId())),
+    query(TOP_DONOR_FILTER_OPTIONS_SQL.demands(getActiveProjectId())),
   ]);
 
   return {
@@ -97,15 +107,29 @@ export async function getTopDonorFilterOptions() {
  * statements internally.
  */
 export async function getDashboardOverview() {
-  const cached = getCached(DASHBOARD_CACHE_KEY);
+  const cached = getCached(dashboardCacheKey());
   if (cached !== undefined) return cached;
 
   const result = await _fetchDashboardOverview();
-  setCached(DASHBOARD_CACHE_KEY, result, DASHBOARD_TTL_MS);
+  setCached(dashboardCacheKey(), result, DASHBOARD_TTL_MS);
   return result;
 }
 
 async function _fetchDashboardOverview() {
+  // O dashboard é do PROJETO ATIVO. Tudo que deriva de doador ou de demanda
+  // ganha o recorte; importação e conciliação NÃO, porque a base é uma só
+  // para toda a plataforma — os números delas são a verdade compartilhada.
+  const projectId = getActiveProjectId();
+  const donorScope = donorBelongsToProject("donors.id", projectId);
+  const cpfLinkScope = cpfLinkBelongsToProject(
+    "import_cpf_summary.matched_source_id",
+    projectId,
+  );
+  const summaryScope = donorBelongsToProject(
+    "monthly_donor_summary.donor_id",
+    projectId,
+  );
+
   const [
     totalsRows,
     recentImportsRows,
@@ -122,8 +146,8 @@ async function _fetchDashboardOverview() {
   ] = await Promise.all([
     query(`
       SELECT
-        (SELECT count(*) FROM donors WHERE is_active = TRUE) AS donor_count,
-        (SELECT count(*) FROM demands WHERE is_active = TRUE) AS demand_count,
+        (SELECT count(*) FROM donors WHERE is_active = TRUE AND ${donorScope}) AS donor_count,
+        (SELECT count(*) FROM demands WHERE is_active = TRUE AND project_id = '${projectId}') AS demand_count,
         (SELECT count(*) FROM imports) AS import_count,
         (SELECT count(*) FROM imports WHERE status = 'processed') AS processed_import_count
     `),
@@ -150,6 +174,7 @@ async function _fetchDashboardOverview() {
         strftime(donation_start_date, '%Y-%m-01') AS donation_start_date
       FROM donors
       WHERE is_active = TRUE
+        AND ${donorScope}
       ORDER BY name ASC
       LIMIT 20
     `),
@@ -162,7 +187,9 @@ async function _fetchDashboardOverview() {
       LEFT JOIN donors
         ON lower(trim(donors.demand)) = lower(trim(demands.name))
         AND donors.is_active = TRUE
+        AND ${donorScope}
       WHERE demands.is_active = TRUE
+        AND demands.project_id = '${projectId}'
       GROUP BY demands.id, demands.name
       ORDER BY demands.name ASC
       LIMIT 20
@@ -174,18 +201,21 @@ async function _fetchDashboardOverview() {
          INNER JOIN donor_cpf_links
            ON donor_cpf_links.id = import_cpf_summary.matched_source_id
          WHERE donor_cpf_links.donation_start_date IS NOT NULL
-           AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date) AS donation_start_conflict_count,
+           AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
+           AND ${cpfLinkScope}) AS donation_start_conflict_count,
         (SELECT count(*)
          FROM donors
          WHERE is_active = TRUE
-           AND coalesce(trim(demand), '') = '') AS donor_without_demand_count,
+           AND coalesce(trim(demand), '') = ''
+           AND ${donorScope}) AS donor_without_demand_count,
         (SELECT count(*)
          FROM donor_cpf_links
          INNER JOIN donors
            ON donors.id = donor_cpf_links.donor_id
          WHERE donor_cpf_links.is_active = TRUE
            AND donors.is_active = TRUE
-           AND donor_cpf_links.donation_start_date IS NULL) AS donor_without_start_date_count,
+           AND donor_cpf_links.donation_start_date IS NULL
+           AND ${donorScope}) AS donor_without_start_date_count,
         (SELECT count(*)
          FROM imports
          WHERE status = 'processed'
@@ -210,6 +240,7 @@ async function _fetchDashboardOverview() {
         ON donors.id = donor_cpf_links.donor_id
       WHERE donor_cpf_links.donation_start_date IS NOT NULL
         AND import_cpf_summary.reference_month < donor_cpf_links.donation_start_date
+        AND ${donorScope}
       ORDER BY import_cpf_summary.reference_month DESC, donor_cpf_links.name ASC
       LIMIT 500
     `),
@@ -221,6 +252,7 @@ async function _fetchDashboardOverview() {
       FROM donors
       WHERE is_active = TRUE
         AND coalesce(trim(demand), '') = ''
+        AND ${donorScope}
       ORDER BY name ASC
       LIMIT 500
     `),
@@ -289,6 +321,7 @@ async function _fetchDashboardOverview() {
       WHERE donor_cpf_links.is_active = TRUE
         AND donors.is_active = TRUE
         AND donor_cpf_links.donation_start_date IS NULL
+        AND ${donorScope}
       -- Quem já doou vem primeiro: são os casos que estão gerando nota sem
       -- início declarado, e portanto os mais urgentes.
       ORDER BY (donation_history.first_month IS NULL) ASC, donor_cpf_links.name ASC
@@ -317,7 +350,7 @@ async function _fetchDashboardOverview() {
       ORDER BY updated_at DESC
       LIMIT 500
     `),
-    query(DONOR_INACTIVITY_STREAKS_SQL),
+    query(buildDonorInactivityStreaksSql(projectId)),
     getReconciliationStats(),
   ]);
 
@@ -367,28 +400,33 @@ async function _fetchDashboardOverview() {
               SELECT sum(notes_count)
               FROM import_cpf_summary
               WHERE import_id = imports.id
+                AND ${cpfLinkScope}
             ), 0) AS total_notes,
             coalesce((
               SELECT sum(abatement_amount)
               FROM monthly_donor_summary
               WHERE import_id = imports.id
+                AND ${summaryScope}
             ), 0) AS total_abatement,
             coalesce((
               SELECT count(DISTINCT donor_id)
               FROM monthly_donor_summary
               WHERE import_id = imports.id
+                AND ${summaryScope}
             ), 0) AS donor_count,
             coalesce((
               SELECT count(*)
               FROM monthly_donor_summary
               WHERE import_id = imports.id
                 AND abatement_status = 'pending'
+                AND ${summaryScope}
             ), 0) AS pending_count,
             coalesce((
               SELECT count(*)
               FROM monthly_donor_summary
               WHERE import_id = imports.id
                 AND abatement_status = 'applied'
+                AND ${summaryScope}
             ), 0) AS applied_count,
             coalesce((
               SELECT count(*)
@@ -413,6 +451,7 @@ async function _fetchDashboardOverview() {
             sum(CASE WHEN abatement_status = 'applied' THEN 1 ELSE 0 END) AS applied_count
           FROM monthly_donor_summary
           WHERE import_id = ?
+            AND ${summaryScope}
           GROUP BY 1
           ORDER BY total_abatement DESC, total_notes DESC, demand ASC
         `,

@@ -123,3 +123,40 @@ test("o projeto principal não pode ser excluído; o novo pode, com desfazer", a
   await page.getByRole("button", { name: "Desfazer" }).click();
   await expect(page.getByRole("button", { name: "Excluir" })).toBeVisible();
 });
+
+test("o dashboard de um projeto não mostra dados de outro", async ({ page }) => {
+  await page.goto("/p/demandas-de-moradia");
+
+  await page.getByRole("link", { name: "Demandas" }).click();
+  await page.getByRole("button", { name: "Adicionar demanda" }).click();
+  const demandDialog = page.getByRole("dialog", { name: "Adicionar demanda" });
+  await demandDialog.getByPlaceholder("Nome da demanda").fill("Cestas Basicas");
+  await demandDialog.getByRole("button", { name: "Adicionar demanda" }).click();
+  await expect(page.getByText("CESTAS BASICAS")).toBeVisible();
+
+  await page.getByRole("link", { name: "Doadores", exact: true }).click();
+  await addDonor(page, {
+    name: "Alice Moradia",
+    cpf: "52998224725",
+    demand: "CESTAS BASICAS",
+  });
+
+  // No projeto principal, o doador aparece nos pontos para revisar (foi
+  // cadastrado sem início das doações).
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page.getByText("Sem início")).toBeVisible();
+
+  // O dashboard tem mais de uma dezena de queries derivadas de doador. Se
+  // qualquer uma escapar do recorte, o projeto novo herda o painel do
+  // principal — foi exatamente o que acontecia.
+  await openProjectChooser(page);
+  await createProject(page, "Capoeira");
+  await page.getByText("Capoeira").first().click();
+  await expect(page).toHaveURL(/\/p\/capoeira$/);
+
+  await expect(
+    page.getByText("Ainda não há dados suficientes para o dashboard"),
+  ).toBeVisible();
+  await expect(page.getByText("Sem início")).toHaveCount(0);
+  await expect(page.getByText("CESTAS BASICAS")).toHaveCount(0);
+});
