@@ -311,6 +311,79 @@ export async function checkCreditAttributionIdentity() {
   };
 }
 
+/**
+ * Um resumo por projeto para a tela de escolha.
+ *
+ * A tela de abertura é a escolha E o painel: se ela só listasse nomes, seria
+ * pedágio. Com os números, abrir o sistema já responde "como estão as coisas"
+ * antes de entrar em qualquer lugar.
+ */
+export async function listProjectSummaries() {
+  const [projects, creditRows, donorRows] = await Promise.all([
+    listProjects({ activeStatus: "active" }),
+    listCreditByProject(),
+    queryPrepared(
+      `
+      SELECT dpa.project_id AS project_id, count(DISTINCT donors.id) AS donor_count
+      FROM donor_project_assignments AS dpa
+      INNER JOIN donors ON donors.id = dpa.donor_id
+      WHERE donors.is_active = TRUE
+        AND dpa.valid_to = CAST(? AS DATE)
+      GROUP BY dpa.project_id
+    `,
+      [ASSIGNMENT_OPEN_END],
+    ),
+  ]);
+
+  const donorCounts = new Map(
+    donorRows.map((row) => [row.project_id, Number(row.donor_count ?? 0)]),
+  );
+  const totals = new Map();
+  const latestMonths = new Map();
+
+  for (const row of creditRows) {
+    if (!row.projectId) continue;
+
+    totals.set(row.projectId, (totals.get(row.projectId) ?? 0) + row.totalCredit);
+
+    const current = latestMonths.get(row.projectId) ?? "";
+    if (row.referenceMonth > current) {
+      latestMonths.set(row.projectId, row.referenceMonth);
+    }
+  }
+
+  const unattributedCredit = creditRows
+    .filter((row) => !row.projectId)
+    .reduce((sum, row) => sum + row.totalCredit, 0);
+
+  return {
+    projects: projects.map((project) => ({
+      ...project,
+      totalCredit: totals.get(project.id) ?? 0,
+      donorCount: donorCounts.get(project.id) ?? 0,
+      latestCreditMonth: latestMonths.get(project.id) ?? "",
+    })),
+    // Crédito de doador sem vínculo vigente. Some da conta de todo projeto,
+    // então precisa aparecer aqui ou vira dinheiro invisível.
+    unattributedCredit,
+  };
+}
+
+/** Doadores ativos sem nenhum vínculo — não aparecem em projeto nenhum. */
+export async function countDonorsWithoutProject() {
+  const rows = await query(`
+    SELECT count(*) AS total
+    FROM donors
+    WHERE donors.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM donor_project_assignments
+        WHERE donor_project_assignments.donor_id = donors.id
+      )
+  `);
+
+  return Number(rows[0]?.total ?? 0);
+}
+
 export async function listOverlappingAssignments() {
   const rows = await query(OVERLAPPING_ASSIGNMENTS_SQL);
 

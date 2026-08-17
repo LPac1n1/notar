@@ -14,7 +14,7 @@ test("monthly management shows donors with and without donations", async ({ page
     new URL("./fixtures/monthly-donor-filters-backup.json", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await page.getByRole("link", { name: "Configurações" }).click();
   await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(backupPath);

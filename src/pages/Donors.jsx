@@ -53,6 +53,7 @@ import { buildSelectOptions } from "../utils/select";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useMutationAction } from "../hooks/useMutationAction";
+import { useProjectPath } from "../hooks/useProjectPath";
 
 const EMPTY_DONOR_FORM = {
   name: "",
@@ -76,6 +77,7 @@ const INITIAL_DONOR_FILTERS = {
 export default function Donors() {
   const location = useLocation();
   const navigate = useNavigate();
+  const projectPath = useProjectPath();
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
   const [createForm, setCreateForm] = useState({ ...EMPTY_DONOR_FORM });
@@ -125,11 +127,11 @@ export default function Donors() {
 
   const openDonorProfile = useCallback(
     (donorId) => {
-      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+      navigate(projectPath(`doadores/${encodeURIComponent(donorId)}`), {
         state: {
           from: {
             label: "Voltar para doadores",
-            pathname: "/doadores",
+            pathname: projectPath("doadores"),
             state: {
               donorFilters: filters,
               donorScrollTop: getAppScrollTop(),
@@ -140,7 +142,7 @@ export default function Donors() {
         },
       });
     },
-    [filters, donorsPagination.page, donorsPagination.pageSize, navigate],
+    [filters, donorsPagination.page, donorsPagination.pageSize, navigate, projectPath],
   );
 
   const donorFormDemandOptions = useMemo(

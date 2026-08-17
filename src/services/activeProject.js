@@ -21,10 +21,43 @@ import { DEFAULT_PROJECT_ID } from "./project/projectAssignmentSql.js";
  */
 let activeProjectId = DEFAULT_PROJECT_ID;
 
+/**
+ * Último projeto que o usuário realmente abriu nesta sessão.
+ *
+ * Começa VAZIO — diferente de `activeProjectId`, que já nasce no padrão. É a
+ * diferença entre "ainda não escolhi" e "estou trabalhando neste", e é o que
+ * mantém a tela de escolha honesta: antes de entrar em algum projeto, a barra
+ * lateral não mostra a navegação de nenhum.
+ *
+ * Vive fora do React de propósito: restaurar um backup remonta a árvore, e um
+ * `useState` voltaria ao inicial — a barra lateral perderia o projeto e o
+ * usuário ficaria sem caminho de volta bem depois de uma operação que não tem
+ * nada a ver com projeto.
+ */
+let lastVisitedProjectSlug = "";
+
 export function setActiveProjectId(projectId) {
   activeProjectId = projectId || DEFAULT_PROJECT_ID;
 }
 
 export function getActiveProjectId() {
   return activeProjectId;
+}
+
+/**
+ * Guarda o SLUG, não o id resolvido.
+ *
+ * O slug vem da URL e está disponível no primeiro render; o id só existe
+ * depois que a lista de projetos carrega. Guardando o id, sair de
+ * `/p/:slug` antes da lista chegar — um clique rápido em Configurações —
+ * deixaria a memória vazia e a barra lateral sem o projeto.
+ */
+export function setLastVisitedProjectSlug(slug) {
+  if (slug) {
+    lastVisitedProjectSlug = slug;
+  }
+}
+
+export function getLastVisitedProjectSlug() {
+  return lastVisitedProjectSlug;
 }

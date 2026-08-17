@@ -39,11 +39,13 @@ import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
 import { useMutationAction } from "../hooks/useMutationAction";
+import { useProjectPath } from "../hooks/useProjectPath";
 
 export default function DonorProfile() {
   const { donorId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const projectPath = useProjectPath();
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -88,7 +90,7 @@ export default function DonorProfile() {
 
   const backTarget = location.state?.from ?? {
     label: "Voltar para doadores",
-    pathname: "/doadores",
+    pathname: projectPath("doadores"),
     state: null,
   };
   const handleBack = () => {
@@ -154,7 +156,7 @@ export default function DonorProfile() {
     });
 
   const navigateToRelatedDonor = (nextDonorId) => {
-    navigate(`/doadores/${encodeURIComponent(nextDonorId)}`, {
+    navigate(projectPath(`doadores/${encodeURIComponent(nextDonorId)}`), {
       state: location.state,
     });
   };

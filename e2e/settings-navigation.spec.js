@@ -17,7 +17,7 @@ for (const source of SOURCES) {
       }
     });
 
-    await page.goto("/");
+    await page.goto("/p/demandas-de-moradia");
 
     if (source !== "Dashboard") {
       await page.getByRole("link", { name: source }).click();

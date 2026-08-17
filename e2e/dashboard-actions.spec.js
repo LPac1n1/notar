@@ -21,7 +21,7 @@ async function addDonor(page, { name, cpf, demand }) {
 }
 
 test("dashboard resolve doadores sem início pelo próprio modal", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
 
   await page.getByRole("link", { name: "Demandas" }).click();
   await page.getByRole("button", { name: "Adicionar demanda" }).click();
@@ -106,7 +106,7 @@ test("dashboard resolve doadores sem início pelo próprio modal", async ({ page
 });
 
 test("dashboard vincula demanda de doador sem demanda pelo próprio modal", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
 
   await page.getByRole("link", { name: "Demandas" }).click();
   await page.getByRole("button", { name: "Adicionar demanda" }).click();
@@ -172,7 +172,7 @@ test("sem início distingue quem já doou e pré-preenche o mês da primeira not
     new URL("./fixtures/donors-without-start-backup.json", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await page.getByRole("link", { name: "Configurações" }).click();
   await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(backupPath);
@@ -233,7 +233,7 @@ test("titular sem doação vira pessoa de referência mantendo o vínculo do aux
     new URL("./fixtures/donors-without-start-backup.json", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await page.getByRole("link", { name: "Configurações" }).click();
   await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(backupPath);

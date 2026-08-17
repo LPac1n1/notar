@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { FOOTER_NAV_ITEMS, MAIN_NAV_ITEMS, WORKSPACE_NAV_ITEMS } from "./navigation";
+import {
+  FOOTER_NAV_ITEMS,
+  PLATFORM_NAV_ITEMS,
+  resolveProjectNavItems,
+} from "./navigation";
 import { CloseIcon } from "../ui/icons";
+import { useNavigationProject } from "../../hooks/useProject";
+import { useProjectPath } from "../../hooks/useProjectPath";
 
-// The 4 workspace pages (Dashboard/Gestão Mensal/Importações/Anotações) get
-// dedicated tabs — they're the daily-use pages; everything else goes in "Mais".
-const PRIMARY = WORKSPACE_NAV_ITEMS;
-const OVERFLOW = [
-  ...MAIN_NAV_ITEMS.filter((item) => !PRIMARY.includes(item)),
-  ...FOOTER_NAV_ITEMS,
-];
+// Quantas abas fixas cabem na barra antes do botão "Mais".
+const PRIMARY_TAB_LIMIT = 3;
 
 function Tab({ item }) {
   const Icon = item.icon;
@@ -34,6 +35,22 @@ function Tab({ item }) {
 export default function MobileBottomNav() {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const navigate = useNavigate();
+  const navProject = useNavigationProject();
+  const projectPath = useProjectPath();
+
+  // As abas do projeto são resolvidas em tempo de render porque dependem dos
+  // módulos ligados nele — uma lista fixa mostraria Gestão Mensal num projeto
+  // que não tem o módulo.
+  const projectItems = resolveProjectNavItems(navProject).map((item) => ({
+    ...item,
+    to: projectPath(item.path),
+  }));
+  const primary = projectItems.slice(0, PRIMARY_TAB_LIMIT);
+  const overflow = [
+    ...projectItems.slice(PRIMARY_TAB_LIMIT),
+    ...PLATFORM_NAV_ITEMS,
+    ...FOOTER_NAV_ITEMS,
+  ];
 
   const handleOverflowNav = (to) => {
     setIsOverflowOpen(false);
@@ -62,7 +79,7 @@ export default function MobileBottomNav() {
               </button>
             </div>
             <nav className="grid grid-cols-2 gap-1 p-2">
-              {OVERFLOW.map((item) => {
+              {overflow.map((item) => {
                 const Icon = item.icon;
                 return (
                   <button
@@ -83,7 +100,7 @@ export default function MobileBottomNav() {
 
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--line)] bg-[var(--surface)] md:hidden">
         <div className="mx-auto flex max-w-[1600px] items-stretch px-2">
-          {PRIMARY.map((item) => (
+          {primary.map((item) => (
             <Tab key={item.to} item={item} />
           ))}
           <button

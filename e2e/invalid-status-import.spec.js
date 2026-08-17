@@ -16,7 +16,7 @@ test("imports drop invalid status rows and report them per donor", async ({
     new URL("./fixtures/nfp-with-invalid-status.csv", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await expect(
     page.getByText("Ainda não há dados suficientes para o dashboard"),
   ).toBeVisible();

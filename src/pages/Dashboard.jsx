@@ -20,6 +20,7 @@ import { useDashboardActions } from "../features/dashboard/hooks/useDashboardAct
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
+import { useProjectPath } from "../hooks/useProjectPath";
 import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
 
@@ -42,6 +43,7 @@ export default function Dashboard() {
   const [activeModal, setActiveModal] = useState("");
   const restoredScrollTopRef = useRef(location.state?.dashboardScrollTop ?? null);
   const navigate = useNavigate();
+  const projectPath = useProjectPath();
 
   const dashboardLoader = useCallback(() => getDashboardOverview(), []);
   const dashboardFilters = useMemo(() => ({}), []);
@@ -76,11 +78,11 @@ export default function Dashboard() {
 
   const openDonorProfile = (donorId) => {
     if (donorId) {
-      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+      navigate(projectPath(`doadores/${encodeURIComponent(donorId)}`), {
         state: {
           from: {
             label: "Voltar para dashboard",
-            pathname: "/",
+            pathname: projectPath(),
             state: {
               dashboardScrollTop: getAppScrollTop(),
             },

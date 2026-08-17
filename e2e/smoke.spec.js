@@ -14,7 +14,7 @@ test("main flow smoke test", async ({ page }) => {
     new URL("./fixtures/nfp-sample.csv", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await expect(
     page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
@@ -104,7 +104,7 @@ test("old auxiliary donor model is migrated from backup", async ({ page }) => {
     new URL("./fixtures/old-model-backup.json", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await page.getByRole("link", { name: "Configurações" }).click();
   await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(oldBackupPath);

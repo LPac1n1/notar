@@ -59,6 +59,7 @@ import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useAsync } from "../hooks/useAsync";
 import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { useDelayedLoading } from "../hooks/useDelayedLoading";
+import { useProjectPath } from "../hooks/useProjectPath";
 import { logError } from "../services/logger";
 
 function normalizeMonthlyFilters(filters) {
@@ -111,6 +112,7 @@ export default function Monthly() {
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const navigate = useNavigate();
+  const projectPath = useProjectPath();
 
   const {
     data: rawSummaries,
@@ -366,23 +368,23 @@ export default function Monthly() {
     () => ({
       from: {
         label: "Voltar para gestão mensal",
-        pathname: "/mensal",
+        pathname: projectPath("mensal"),
         state: {
           monthlyFilters: filters,
           monthlyScrollTop: getAppScrollTop(),
         },
       },
     }),
-    [filters],
+    [filters, projectPath],
   );
 
   const handleOpenDonorProfile = useCallback(
     (donorId) => {
-      navigate(`/doadores/${encodeURIComponent(donorId)}`, {
+      navigate(projectPath(`doadores/${encodeURIComponent(donorId)}`), {
         state: getMonthlyNavigationState(),
       });
     },
-    [getMonthlyNavigationState, navigate],
+    [getMonthlyNavigationState, navigate, projectPath],
   );
 
   const handleOpenCatchUp = useCallback((donor) => {

@@ -30,7 +30,7 @@ test("import CPF copy buttons copy the expected CPF", async ({
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
 
   await page.getByRole("link", { name: "Demandas" }).click();
   await page.getByRole("button", { name: "Adicionar demanda" }).click();

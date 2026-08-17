@@ -3,9 +3,12 @@ import { NavLink } from "react-router-dom";
 import {
   AUDIT_NAV_ITEMS,
   CONFIG_NAV_ITEMS,
-  REGISTRY_NAV_ITEMS,
-  WORKSPACE_NAV_ITEMS,
+  PLATFORM_NAV_ITEMS,
+  resolveProjectNavItems,
 } from "./navigation";
+import ProjectSwitcher from "../project/ProjectSwitcher";
+import { useNavigationProject } from "../../hooks/useProject";
+import { useProjectPath } from "../../hooks/useProjectPath";
 import { countTrashItems } from "../../services/trashService";
 import { useDatabaseChangeEffect } from "../../hooks/useDatabaseChangeEffect";
 import { logError } from "../../services/logger";
@@ -103,8 +106,9 @@ function NavItem({ item, compact = false, badgeCount = 0, badgeTitle = "" }) {
   );
 }
 
-function FooterNavItem({ item }) {
+function FooterNavItem({ item, badgeCount = 0, badgeTitle = "" }) {
   const Icon = item.icon;
+  const hasBadge = badgeCount > 0;
 
   return (
     <NavLink
@@ -130,7 +134,24 @@ function FooterNavItem({ item }) {
           <Icon
             className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--accent)]" : "group-hover:text-[var(--text-main)]"}`}
           />
-          <span className="hidden font-medium lg:inline">{item.label}</span>
+          <span className="hidden flex-1 font-medium lg:inline">{item.label}</span>
+          {/* O contador da lixeira era calculado e nunca exibido: `badgeFor`
+              só devolve valor para `/lixeira`, que sempre foi renderizada
+              aqui — e este componente não tinha badge. */}
+          {hasBadge ? (
+            <span
+              className="hidden rounded-full border border-[var(--line-strong)] bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--text-soft)] lg:inline"
+              title={badgeTitle}
+            >
+              {formatInteger(badgeCount)}
+            </span>
+          ) : null}
+          {hasBadge ? (
+            <span
+              aria-hidden="true"
+              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-[var(--surface)] bg-[var(--muted)] lg:hidden"
+            />
+          ) : null}
         </>
       )}
     </NavLink>
@@ -138,6 +159,9 @@ function FooterNavItem({ item }) {
 }
 
 export default function Sidebar() {
+  const navProject = useNavigationProject();
+  const projectPath = useProjectPath();
+  const projectNavItems = resolveProjectNavItems(navProject);
   const [trashItemCount, setTrashItemCount] = useState(0);
   const recountTimerRef = useRef(null);
 
@@ -196,35 +220,32 @@ export default function Sidebar() {
       <aside className="hidden h-full shrink-0 md:block md:w-16 lg:w-72">
         <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-4 text-[var(--text-main)] lg:px-4 lg:py-5">
           <div className="relative">
-            <div className="flex items-center justify-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3 lg:justify-start">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
-                <span className="font-display text-2xl font-semibold">
-                  N
-                </span>
-              </div>
-              <div className="hidden min-w-0 lg:block">
-                <p className="font-display text-2xl font-bold text-[var(--text-main)]">
-                  Notar
-                </p>
-              </div>
-            </div>
+            <ProjectSwitcher />
           </div>
 
           <nav className="mt-5 flex flex-1 flex-col gap-2 overflow-y-auto">
-            <p className="hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
-              Workspace
-            </p>
-            {WORKSPACE_NAV_ITEMS.map((item) => (
-              <NavItem
-                key={item.to}
-                item={item}
-                badgeCount={badgeFor(item)}
-                badgeTitle={badgeTitleFor(item)}
-              />
-            ))}
+            {navProject ? (
+              <>
+                {/* Não repete o nome do projeto: o seletor logo acima já o
+                    mostra, e vê-lo duas vezes seguidas não acrescenta nada.
+                    O rótulo existe para contrastar com "Plataforma". */}
+                <p className="hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
+                  Neste projeto
+                </p>
+                {projectNavItems.map((item) => (
+                  <NavItem
+                    key={item.path}
+                    item={{ ...item, to: projectPath(item.path) }}
+                  />
+                ))}
+              </>
+            ) : null}
 
+            {/* O rótulo "Plataforma" é o que impede a leitura errada de que
+                Importações pertence ao projeto aberto: existe um CNPJ e uma
+                planilha para todos. */}
             <p className="mt-3 hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
-              Cadastros
+              Plataforma
             </p>
             {/* Compact (md) breakpoint: divider replaces the label so the
                 grouping is still visible without taking vertical space. */}
@@ -232,20 +253,20 @@ export default function Sidebar() {
               aria-hidden="true"
               className="my-1 border-t border-[var(--line)] lg:hidden"
             />
-            {REGISTRY_NAV_ITEMS.map((item) => (
-              <NavItem
-                key={item.to}
-                item={item}
-                badgeCount={badgeFor(item)}
-                badgeTitle={badgeTitleFor(item)}
-              />
+            {PLATFORM_NAV_ITEMS.map((item) => (
+              <NavItem key={item.to} item={item} />
             ))}
           </nav>
 
           <div className="mt-4 border-t border-[var(--line)] pt-4">
             <nav className="flex flex-col gap-1">
               {AUDIT_NAV_ITEMS.map((item) => (
-                <FooterNavItem key={item.to} item={item} />
+                <FooterNavItem
+                  key={item.to}
+                  item={item}
+                  badgeCount={badgeFor(item)}
+                  badgeTitle={badgeTitleFor(item)}
+                />
               ))}
               <div className="my-1 border-t border-[var(--line)]" />
               {CONFIG_NAV_ITEMS.map((item) => (

@@ -27,7 +27,7 @@ test("ranking de maiores doadores filtra por mês, demanda e ordenação", async
     new URL("./fixtures/ranking-backup.json", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
   await page.getByRole("link", { name: "Configurações" }).click();
   await page.getByRole("heading", { name: "Cópia de segurança" }).click();
   await page.locator('input[type="file"]').setInputFiles(backupPath);

@@ -11,66 +11,75 @@ import {
   UserIcon,
 } from "../ui/icons";
 
-// Workspace = trabalho diário. Dashboard puxa o usuário pra ação, Mensal
-// e Importações são as duas oficinas onde o operador gasta a maior
-// parte do tempo. Anotações fica aqui porque é captura de contexto,
-// não configuração.
-export const WORKSPACE_NAV_ITEMS = [
+/**
+ * A navegação tem três blocos, e o rótulo de cada um é que torna o
+ * compartilhamento honesto:
+ *
+ *   PROJETO     — estes dados são deste projeto.
+ *   PLATAFORMA  — vale para TODOS os projetos. Uma planilha só.
+ *   CONTA       — nem projeto, nem dado.
+ *
+ * Sem o bloco "Plataforma" explícito, Importações pareceria pertencer ao
+ * projeto aberto, e o usuário concluiria que precisa importar uma planilha
+ * por projeto — exatamente o erro que o modelo de atribuição evita.
+ */
+
+// Itens do projeto. `path` é relativo: o prefixo `/p/:slug` é montado em
+// tempo de render, então nenhum item precisa conhecer o formato da rota.
+// `module` liga o item à chave em `projects.modules`; sem `module`, o item
+// está sempre presente.
+export const PROJECT_NAV_ITEMS = [
   {
-    to: "/",
+    path: "",
     label: "Dashboard",
     end: true,
     description: "Visão geral, alertas e indicadores",
     icon: DashboardIcon,
   },
   {
-    to: "/mensal",
-    label: "Gestão Mensal",
-    description: "Apuração, abatimentos e pendências",
-    icon: MonthlyIcon,
-  },
-  {
-    to: "/importacoes",
-    label: "Importações",
-    description: "Planilhas de doações e créditos, conciliação e busca de CPFs",
-    icon: ImportIcon,
-  },
-  {
-    to: "/anotacoes",
-    label: "Anotações",
-    description: "Registros internos rápidos",
-    icon: NotesIcon,
-  },
-];
-
-// Cadastros = entidades configuradas raramente. Separadas visualmente
-// pra reforçar "isso é setup, não rotina diária".
-export const REGISTRY_NAV_ITEMS = [
-  {
-    to: "/doadores",
+    path: "doadores",
     label: "Doadores",
     description: "Cadastros, CPFs e início das doações",
     icon: DonorIcon,
   },
   {
-    to: "/pessoas",
+    path: "mensal",
+    label: "Gestão Mensal",
+    module: "monthly",
+    description: "Apuração, abatimentos e pendências",
+    icon: MonthlyIcon,
+  },
+  {
+    path: "pessoas",
     label: "Pessoas",
+    module: "people",
     description: "Referências, vínculos e papéis no sistema",
     icon: UserIcon,
   },
   {
-    to: "/demandas",
+    path: "demandas",
     label: "Demandas",
+    module: "demands",
     description: "Grupos atendidos e vínculos principais",
     icon: DemandIcon,
   },
+  {
+    path: "anotacoes",
+    label: "Anotações",
+    module: "notes",
+    description: "Registros internos rápidos",
+    icon: NotesIcon,
+  },
 ];
 
-// Back-compat barrel — MobileBottomNav consome a lista plana. Ordem
-// preserva a hierarquia: workspace primeiro.
-export const MAIN_NAV_ITEMS = [
-  ...WORKSPACE_NAV_ITEMS,
-  ...REGISTRY_NAV_ITEMS,
+// Base compartilhada — fora de qualquer projeto.
+export const PLATFORM_NAV_ITEMS = [
+  {
+    to: "/importacoes",
+    label: "Importações",
+    description: "Planilha única de doações e créditos, para todos os projetos",
+    icon: ImportIcon,
+  },
 ];
 
 export const AUDIT_NAV_ITEMS = [
@@ -99,13 +108,39 @@ export const CONFIG_NAV_ITEMS = [
 
 export const FOOTER_NAV_ITEMS = [...AUDIT_NAV_ITEMS, ...CONFIG_NAV_ITEMS];
 
-// Kept for backwards-compatibility with getNavigationItem
-export const NAV_ITEMS = [...MAIN_NAV_ITEMS, ...FOOTER_NAV_ITEMS];
+/** Só os itens cujo módulo está ligado no projeto. */
+export function resolveProjectNavItems(project) {
+  const modules = project?.modules ?? {};
 
+  return PROJECT_NAV_ITEMS.filter(
+    (item) => !item.module || modules[item.module],
+  );
+}
+
+/**
+ * Resolve o item de navegação a partir do caminho atual, para o cabeçalho.
+ * Compara pelo sufixo depois de `/p/:slug` quando a rota é de projeto.
+ */
 export function getNavigationItem(pathname) {
-  if (pathname === "/") {
-    return NAV_ITEMS[0];
+  const platformMatch = [...PLATFORM_NAV_ITEMS, ...FOOTER_NAV_ITEMS].find(
+    (item) => pathname.startsWith(item.to),
+  );
+
+  if (platformMatch) {
+    return platformMatch;
   }
 
-  return NAV_ITEMS.find((item) => item.to !== "/" && pathname.startsWith(item.to)) ?? NAV_ITEMS[0];
+  const projectMatch = pathname.match(/^\/p\/[^/]+\/?(.*)$/);
+
+  if (!projectMatch) {
+    return { label: "Projetos", description: "Escolha o projeto" };
+  }
+
+  const suffix = projectMatch[1] ?? "";
+
+  return (
+    PROJECT_NAV_ITEMS.find(
+      (item) => item.path && suffix.startsWith(item.path),
+    ) ?? PROJECT_NAV_ITEMS[0]
+  );
 }

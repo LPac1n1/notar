@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test("records system actions in the dedicated history page", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
 
   await page.getByRole("link", { name: "Demandas" }).click();
   await page.getByRole("button", { name: "Adicionar demanda" }).click();

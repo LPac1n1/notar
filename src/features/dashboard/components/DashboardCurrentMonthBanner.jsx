@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../../components/ui/Button";
 import Eyebrow from "../../../components/ui/Eyebrow";
+import { useProjectPath } from "../../../hooks/useProjectPath";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
@@ -37,6 +38,7 @@ function monthsBehindCurrent(referenceMonth) {
  */
 export default function DashboardCurrentMonthBanner({ latestMonth }) {
   const navigate = useNavigate();
+  const projectPath = useProjectPath();
 
   if (!latestMonth) return null;
 
@@ -92,7 +94,7 @@ export default function DashboardCurrentMonthBanner({ latestMonth }) {
         <div className="flex flex-wrap gap-2 lg:shrink-0">
           <Button
             variant="primary"
-            onClick={() => navigate("/mensal")}
+            onClick={() => navigate(projectPath("mensal"))}
             className="min-h-9 px-4 py-2 text-sm"
           >
             Abrir Gestão Mensal

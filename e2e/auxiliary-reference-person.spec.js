@@ -14,7 +14,7 @@ test("auxiliary donor can link to a reference person who is not an active donor"
     new URL("./fixtures/nfp-sample.csv", import.meta.url),
   );
 
-  await page.goto("/");
+  await page.goto("/p/demandas-de-moradia");
 
   await page.getByRole("link", { name: "Demandas" }).click();
   await page.getByRole("button", { name: "Adicionar demanda" }).click();
