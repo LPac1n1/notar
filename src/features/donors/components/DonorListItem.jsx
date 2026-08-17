@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { useProjectModules } from "../../../hooks/useProject";
 import Button from "../../../components/ui/Button";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
@@ -140,6 +141,8 @@ function DonorListItemBase({
   onReactivate,
   onRemove,
 }) {
+  const { hasDemands } = useProjectModules();
+
   return (
     <li className="group flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between">
       <div className="min-w-0 flex-1">
@@ -188,9 +191,11 @@ function DonorListItemBase({
               <span>{donor.cpf}</span>
             </CopyableValue>
           </div>
-          <p className="text-sm text-[var(--muted)]">
-            Demanda: {donor.demand || "Não informada"}
-          </p>
+          {hasDemands ? (
+            <p className="text-sm text-[var(--muted)]">
+              Demanda: {donor.demand || "Não informada"}
+            </p>
+          ) : null}
           <p className="text-sm text-[var(--muted)]">
             Início: {donor.donationStartDate || "Não informado"}
           </p>

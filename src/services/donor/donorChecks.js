@@ -5,6 +5,7 @@ import {
   queryPrepared,
 } from "../db";
 import { getActiveProjectId } from "../activeProject.js";
+import { ASSIGNMENT_OPEN_END } from "../project/projectAssignmentSql.js";
 import { findProjectById } from "../projectService";
 import { reconcileImportsForCpfs } from "../importService";
 import {
@@ -37,10 +38,17 @@ export async function ensureDonationCpfIsAvailable(
         donor_cpf_links.id,
         donor_cpf_links.donor_id,
         donor_cpf_links.name,
-        donors.name AS donor_name
+        donors.name AS donor_name,
+        projects.id AS project_id,
+        projects.name AS project_name
       FROM donor_cpf_links
       INNER JOIN donors
         ON donors.id = donor_cpf_links.donor_id
+      LEFT JOIN donor_project_assignments AS dpa
+        ON dpa.donor_id = donors.id
+       AND dpa.valid_to = DATE '${ASSIGNMENT_OPEN_END}'
+      LEFT JOIN projects
+        ON projects.id = dpa.project_id
       WHERE ${conditions.join(" AND ")}
       LIMIT 1
     `,
@@ -50,6 +58,19 @@ export async function ensureDonationCpfIsAvailable(
   if (existingLink.length > 0) {
     const holderName =
       existingLink[0].donor_name || existingLink[0].name || "outro doador";
+    const conflictProjectId = existingLink[0].project_id ?? "";
+    const conflictProjectName = existingLink[0].project_name ?? "";
+
+    // O doador em conflito pode estar em OUTRO projeto — o CPF é único na
+    // plataforma porque cada pessoa é doadora de um projeto por vez. Sem
+    // dizer qual, o operador procura o nome na lista do projeto aberto, não
+    // acha e fica sem saída, com uma mensagem que parece errada.
+    if (conflictProjectId && conflictProjectId !== getActiveProjectId()) {
+      throw new UserFacingError(
+        `Este CPF já está vinculado a ${holderName}, no projeto ${conflictProjectName}. Cada doador pertence a um projeto por vez: transfira-o por lá antes de cadastrá-lo aqui.`,
+      );
+    }
+
     throw new UserFacingError(`Este CPF já está vinculado a ${holderName}.`);
   }
 }

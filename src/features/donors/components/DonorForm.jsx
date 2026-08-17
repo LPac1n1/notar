@@ -2,6 +2,12 @@ import MonthInput from "../../../components/ui/MonthInput";
 import SelectInput from "../../../components/ui/SelectInput";
 import TextInput from "../../../components/ui/TextInput";
 
+/**
+ * `showDemand` acompanha o módulo Demandas do projeto ativo. Num projeto que
+ * não o usa, o campo não fica vazio nem opcional: ele não existe. A demanda
+ * subdivide o projeto, então oferecê-la onde não há nenhuma pede um dado que
+ * não pode ser preenchido.
+ */
 export default function DonorForm({
   demandOptions,
   errors = {},
@@ -10,6 +16,7 @@ export default function DonorForm({
   isIdentityLocked = false,
   onChange,
   selectedHolder,
+  showDemand = true,
   typeOptions,
 }) {
   return (
@@ -24,17 +31,19 @@ export default function DonorForm({
         error={errors.donorType}
       />
 
-      <SelectInput
-        label="Demanda"
-        name="demand"
-        value={form.demand}
-        onChange={onChange}
-        options={demandOptions}
-        placeholder="Selecione uma demanda"
-        searchable
-        searchPlaceholder="Buscar demanda..."
-        error={errors.demand}
-      />
+      {showDemand ? (
+        <SelectInput
+          label="Demanda"
+          name="demand"
+          value={form.demand}
+          onChange={onChange}
+          options={demandOptions}
+          placeholder="Selecione uma demanda"
+          searchable
+          searchPlaceholder="Buscar demanda..."
+          error={errors.demand}
+        />
+      ) : null}
 
       {form.donorType === "auxiliary" ? (
         <div className="space-y-1.5 md:col-span-2">

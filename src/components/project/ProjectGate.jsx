@@ -1,6 +1,28 @@
-import { Navigate, Outlet, useParams } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import LoadingScreen from "../ui/LoadingScreen";
+import { PROJECT_NAV_ITEMS } from "../layout/navigation";
 import { useProjects } from "../../hooks/useProject";
+
+/**
+ * O módulo que responde por um caminho dentro do projeto, ou `null` quando o
+ * caminho não depende de módulo nenhum (Dashboard, Doadores, Anotações).
+ *
+ * Deriva de `PROJECT_NAV_ITEMS` de propósito: a barra lateral já esconde o
+ * item por ali, e uma segunda lista aqui divergiria na primeira vez que
+ * alguém mexesse só numa delas.
+ */
+function moduleForPath(projectSlug, pathname) {
+  const prefix = `/p/${projectSlug}/`;
+  if (!pathname.startsWith(prefix)) return null;
+
+  const rest = pathname.slice(prefix.length);
+  const item = PROJECT_NAV_ITEMS.find(
+    (navItem) =>
+      navItem.path && (rest === navItem.path || rest.startsWith(`${navItem.path}/`)),
+  );
+
+  return item?.module ?? null;
+}
 
 /**
  * Guarda das rotas de projeto: só libera as páginas quando o projeto do slug
@@ -13,6 +35,7 @@ import { useProjects } from "../../hooks/useProject";
  */
 export default function ProjectGate() {
   const { projectSlug = "" } = useParams();
+  const location = useLocation();
   const { projects, status, syncedProjectId } = useProjects();
 
   if (status === "loading") {
@@ -43,6 +66,15 @@ export default function ProjectGate() {
         description="Carregando os dados do projeto."
       />
     );
+  }
+
+  // Módulo desligado: a barra lateral já não mostra o item, mas a rota
+  // continuava acessível por URL direta, favorito ou link antigo — e a página
+  // abria inteira, com o vocabulário de apuração de um projeto que não faz
+  // apuração. Volta para o painel do próprio projeto.
+  const requiredModule = moduleForPath(projectSlug, location.pathname);
+  if (requiredModule && project.modules?.[requiredModule] === false) {
+    return <Navigate to={`/p/${projectSlug}`} replace />;
   }
 
   return <Outlet />;

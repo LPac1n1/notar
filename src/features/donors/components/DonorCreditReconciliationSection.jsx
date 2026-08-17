@@ -52,7 +52,19 @@ function MetricTile({ label, value, hint, valueClass = "" }) {
   );
 }
 
-export default function DonorCreditReconciliationSection({ donorId }) {
+/**
+ * `showAbatement` acompanha o módulo Gestão Mensal. Sem ele o doador não tem
+ * abatimento nenhum, então "Total abatido" e "Diferença" seriam sempre zero —
+ * dois campos vazios sugerindo dado faltando onde não há o que preencher.
+ */
+export default function DonorCreditReconciliationSection({
+  donorId,
+  showAbatement = true,
+}) {
+  const description = showAbatement
+    ? "Comparação entre o valor abatido no sistema e o crédito real gerado na NFP."
+    : "Crédito real gerado por este doador na NFP.";
+
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
 
@@ -78,7 +90,7 @@ export default function DonorCreditReconciliationSection({ donorId }) {
     return (
       <SectionCard
         title="Conciliação de créditos"
-        description="Comparação entre o valor abatido no sistema e o crédito real gerado na NFP."
+        description={description}
         className="mb-6"
       >
         <p className="text-sm text-[var(--danger)]">{error}</p>
@@ -90,7 +102,7 @@ export default function DonorCreditReconciliationSection({ donorId }) {
     return (
       <SectionCard
         title="Conciliação de créditos"
-        description="Comparação entre o valor abatido no sistema e o crédito real gerado na NFP."
+        description={description}
         className="mb-6"
       >
         <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
@@ -116,7 +128,7 @@ export default function DonorCreditReconciliationSection({ donorId }) {
   return (
     <SectionCard
       title="Conciliação de créditos"
-      description="Comparação entre o valor abatido no sistema e o crédito real gerado na NFP."
+      description={description}
       className="mb-6"
     >
       <div
@@ -131,24 +143,28 @@ export default function DonorCreditReconciliationSection({ donorId }) {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className={`grid gap-3 ${showAbatement ? "md:grid-cols-4" : "md:grid-cols-2"}`}>
         <MetricTile
           label="Crédito real gerado"
           value={formatCurrency(summary.totalCredit)}
           hint={`${formatInteger(summary.matchedNoteCount)} nota(s) casada(s) com a planilha de créditos`}
         />
-        <MetricTile
-          label="Total abatido"
-          value={formatCurrency(summary.totalAbated)}
-          hint="Apenas abatimentos marcados como realizados"
-        />
-        <MetricTile
-          label="Diferença"
-          value={differenceLabel}
-          valueClass={
-            summary.status === "exceeded" ? "text-[var(--danger)]" : ""
-          }
-        />
+        {showAbatement ? (
+          <>
+            <MetricTile
+              label="Total abatido"
+              value={formatCurrency(summary.totalAbated)}
+              hint="Apenas abatimentos marcados como realizados"
+            />
+            <MetricTile
+              label="Diferença"
+              value={differenceLabel}
+              valueClass={
+                summary.status === "exceeded" ? "text-[var(--danger)]" : ""
+              }
+            />
+          </>
+        ) : null}
         <MetricTile
           label="Notas sem crédito"
           value={formatInteger(summary.orphanDonationNoteCount)}

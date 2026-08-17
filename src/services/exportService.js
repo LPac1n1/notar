@@ -36,14 +36,19 @@ function downloadCsv(fileName, csvContent) {
   });
 }
 
-export async function exportDonorsCsv(filters = {}) {
+/**
+ * `includeDemand` acompanha o módulo Demandas do projeto ativo — sem ele a
+ * coluna sairia presente e vazia em todas as linhas, sugerindo dado faltando
+ * em vez de dimensão que não se aplica.
+ */
+export async function exportDonorsCsv(filters = {}, { includeDemand = true } = {}) {
   const donors = await listDonors(filters);
   const csvContent = buildCsvContent(
     [
       { key: "name", label: "Nome" },
       { key: "donorTypeLabel", label: "Tipo" },
       { key: "cpf", label: "CPF" },
-      { key: "demand", label: "Demanda" },
+      ...(includeDemand ? [{ key: "demand", label: "Demanda" }] : []),
       { key: "holderName", label: "Pessoa vinculada" },
       { key: "donationStartDate", label: "Início das doações" },
       { key: "isActive", label: "Ativo" },

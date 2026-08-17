@@ -34,3 +34,27 @@ export function useActiveProject() {
 export function useNavigationProject() {
   return useContext(ProjectContext)?.lastProject ?? null;
 }
+
+/**
+ * Quais módulos o projeto atual usa.
+ *
+ * Fonte única para as telas decidirem o que mostrar. Sem isto, cada página
+ * repetia `activeProject?.modules?.x !== false` — e bastava um esquecimento
+ * para um projeto de crédito exibir campo de demanda ou botão de abatimento,
+ * que é o que acontecia.
+ *
+ * O padrão é TUDO LIGADO quando não há projeto ativo: as telas de plataforma
+ * (Importações) e de conta não pertencem a projeto nenhum e não podem perder
+ * funcionalidade por isso.
+ */
+export function useProjectModules() {
+  const modules = useContext(ProjectContext)?.activeProject?.modules;
+
+  return {
+    hasDemands: modules?.demands !== false,
+    hasPeople: modules?.people !== false,
+    // A Gestão Mensal é o que traz abatimento, acumulado e histórico mensal.
+    // Um projeto sem ela acompanha crédito, não apuração.
+    hasMonthly: modules?.monthly !== false,
+  };
+}

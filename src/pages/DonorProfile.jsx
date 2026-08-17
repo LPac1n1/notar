@@ -39,6 +39,7 @@ import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
 import { useMutationAction } from "../hooks/useMutationAction";
+import { useProjectModules } from "../hooks/useProject";
 import { useProjectPath } from "../hooks/useProjectPath";
 
 export default function DonorProfile() {
@@ -46,6 +47,14 @@ export default function DonorProfile() {
   const location = useLocation();
   const navigate = useNavigate();
   const projectPath = useProjectPath();
+  const { hasDemands, hasMonthly } = useProjectModules();
+
+  // Sem apuração mensal não há abatimento: o perfil vira identidade + crédito
+  // gerado. Os blocos de acumulado, ajustes e histórico mensal descrevem um
+  // fluxo que esse projeto não executa.
+  const profileSubtitle = hasMonthly
+    ? "Perfil completo do doador, com abatimentos separados e vínculos informativos."
+    : "Perfil do doador, com o crédito gerado e os vínculos informativos.";
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -200,7 +209,7 @@ export default function DonorProfile() {
       <Breadcrumbs
         className="mb-3"
         items={[
-          { label: "Doadores", to: "/doadores" },
+          { label: "Doadores", to: projectPath("doadores") },
           { label: donor.name },
         ]}
       />
@@ -214,7 +223,7 @@ export default function DonorProfile() {
             <span>{donor.name}</span>
           </CopyableValue>
         }
-        subtitle="Perfil completo do doador, com abatimentos separados e vínculos informativos."
+        subtitle={profileSubtitle}
         className="mb-6"
       />
       <FeedbackMessage message={error} tone="error" />
@@ -250,12 +259,14 @@ export default function DonorProfile() {
           </Button>
         )}
 
-        <Button
-          variant="subtle"
-          onClick={() => setShowCatchUpModal(true)}
-        >
-          Lançar acumulado
-        </Button>
+        {hasMonthly ? (
+          <Button
+            variant="subtle"
+            onClick={() => setShowCatchUpModal(true)}
+          >
+            Lançar acumulado
+          </Button>
+        ) : null}
 
         {/* Deep-link para o Histórico já filtrado pelo nome do doador.
             Substitui o caminho "abrir histórico → digitar nome → buscar"
@@ -286,7 +297,7 @@ export default function DonorProfile() {
         />
       ) : null}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-5">
+      <div className={`mb-6 grid gap-3 ${hasDemands ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Tipo</p>
           <div className="mt-2">
@@ -304,12 +315,14 @@ export default function DonorProfile() {
             </CopyableValue>
           </div>
         </div>
-        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-          <p className="text-sm text-[var(--muted)]">Demanda</p>
-          <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {donor.demand || "Não informada"}
-          </p>
-        </div>
+        {hasDemands ? (
+          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+            <p className="text-sm text-[var(--muted)]">Demanda</p>
+            <p className="mt-1 font-semibold text-[var(--text-main)]">
+              {donor.demand || "Não informada"}
+            </p>
+          </div>
+        ) : null}
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Início das doações</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
@@ -346,35 +359,41 @@ export default function DonorProfile() {
         onNavigateToRelated={navigateToRelatedDonor}
       />
 
-      <DonorCreditReconciliationSection donorId={donor.id} />
+      <DonorCreditReconciliationSection donorId={donor.id} showAbatement={hasMonthly} />
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <div
+        className={`mb-6 grid gap-3 ${hasMonthly ? "md:grid-cols-4" : "md:grid-cols-2"}`}
+      >
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">Notas históricas</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
             {formatInteger(profile.totals.totalNotes)}
           </p>
         </div>
-        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-          <p className="text-sm text-[var(--muted)]">Total acumulado</p>
-          <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {formatCurrency(profile.totals.totalAbatement)}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-            <span className="text-[var(--warning)]">
-              Pendente: {formatCurrency(profile.totals.totalPending)}
-            </span>
-            <span className="text-[var(--success)]">
-              Realizado: {formatCurrency(profile.totals.totalApplied)}
-            </span>
-          </div>
-        </div>
-        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-          <p className="text-sm text-[var(--muted)]">Meses com abatimento</p>
-          <p className="mt-1 font-semibold text-[var(--text-main)]">
-            {formatInteger(profile.totals.monthCount)}
-          </p>
-        </div>
+        {hasMonthly ? (
+          <>
+            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+              <p className="text-sm text-[var(--muted)]">Total acumulado</p>
+              <p className="mt-1 font-semibold text-[var(--text-main)]">
+                {formatCurrency(profile.totals.totalAbatement)}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span className="text-[var(--warning)]">
+                  Pendente: {formatCurrency(profile.totals.totalPending)}
+                </span>
+                <span className="text-[var(--success)]">
+                  Realizado: {formatCurrency(profile.totals.totalApplied)}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+              <p className="text-sm text-[var(--muted)]">Meses com abatimento</p>
+              <p className="mt-1 font-semibold text-[var(--text-main)]">
+                {formatInteger(profile.totals.monthCount)}
+              </p>
+            </div>
+          </>
+        ) : null}
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">CPFs de doação</p>
           <p className="mt-1 font-semibold text-[var(--text-main)]">
@@ -413,13 +432,17 @@ export default function DonorProfile() {
         </SectionCard>
       ) : null}
 
-      <DonorAbatementAdjustmentsSection
-        adjustments={profile.abatementAdjustments}
-        isSubmitting={isSubmitting}
-        onDelete={handleDeleteAdjustment}
-      />
+      {hasMonthly ? (
+        <>
+          <DonorAbatementAdjustmentsSection
+            adjustments={profile.abatementAdjustments}
+            isSubmitting={isSubmitting}
+            onDelete={handleDeleteAdjustment}
+          />
 
-      <DonorMonthlyHistorySection monthlyHistory={profile.monthlyHistory} />
+          <DonorMonthlyHistorySection monthlyHistory={profile.monthlyHistory} />
+        </>
+      ) : null}
 
       <AnimatePresence>
         {showDeactivateModal ? (

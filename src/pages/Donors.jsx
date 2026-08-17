@@ -53,7 +53,7 @@ import { buildSelectOptions } from "../utils/select";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useMutationAction } from "../hooks/useMutationAction";
-import { useActiveProject } from "../hooks/useProject";
+import { useProjectModules } from "../hooks/useProject";
 import { useProjectPath } from "../hooks/useProjectPath";
 
 const EMPTY_DONOR_FORM = {
@@ -79,8 +79,20 @@ export default function Donors() {
   const location = useLocation();
   const navigate = useNavigate();
   // A demanda só é obrigatória em projeto que usa o módulo Demandas.
-  const activeProject = useActiveProject();
-  const requiresDemand = activeProject?.modules?.demands !== false;
+  const { hasDemands, hasMonthly } = useProjectModules();
+
+  // "Abatimento" é vocabulário da apuração mensal. Num projeto que só
+  // acompanha o crédito gerado, prometer abatimento na tela de cadastro
+  // descreve um fluxo que ali não existe.
+  const donorsSubtitle = hasMonthly
+    ? "Titulares e auxiliares com abatimento próprio."
+    : "Doadores vinculados a este projeto.";
+  const emptyStateDescription = hasMonthly
+    ? "Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."
+    : "Cadastre o primeiro doador para começar a acompanhar o crédito gerado.";
+  const createModalDescription = hasMonthly
+    ? "Cadastre titulares ou auxiliares com abatimento próprio."
+    : "Cadastre os doadores cujo crédito deve ser atribuído a este projeto.";
   const projectPath = useProjectPath();
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
@@ -368,7 +380,7 @@ export default function Donors() {
   };
 
   const handleAdd = async () => {
-    const validationErrors = validateDonorForm(createForm, { requiresDemand });
+    const validationErrors = validateDonorForm(createForm, { requiresDemand: hasDemands });
 
     if (hasValidationErrors(validationErrors)) {
       setCreateFormErrors(validationErrors);
@@ -424,7 +436,7 @@ export default function Donors() {
       return;
     }
 
-    const validationErrors = validateDonorForm(editForm, { requiresDemand });
+    const validationErrors = validateDonorForm(editForm, { requiresDemand: hasDemands });
 
     if (hasValidationErrors(validationErrors)) {
       setEditFormErrors(validationErrors);
@@ -473,7 +485,7 @@ export default function Donors() {
       setSuccessMessage("");
       setSuccessAction(null);
       setIsExporting(true);
-      const result = await exportDonorsCsv(filters);
+      const result = await exportDonorsCsv(filters, { includeDemand: hasDemands });
       await createActionHistoryEntry({
         actionType: "export",
         entityType: "export",
@@ -527,7 +539,7 @@ export default function Donors() {
       <div>
         <PageHeader
           title="Doadores"
-          subtitle="Titulares e auxiliares com abatimento próprio."
+          subtitle={donorsSubtitle}
           className="mb-6"
         />
         <LoadingScreen
@@ -568,7 +580,7 @@ export default function Donors() {
           label="Busca"
           name="search"
           type="search"
-          placeholder="Digite nome, CPF ou demanda..."
+          placeholder={hasDemands ? "Digite nome, CPF ou demanda..." : "Digite nome ou CPF..."}
           value={filters.search}
           onChange={handleFilterChange}
           description="Busca por parte do texto. Os campos abaixo filtram por seleção exata."
@@ -595,16 +607,18 @@ export default function Donors() {
             searchable
             searchPlaceholder="Buscar CPF..."
           />
-          <SelectInput
-            label="Demanda"
-            name="demand"
-            value={filters.demand}
-            onChange={handleFilterChange}
-            options={donorFilterDemandOptions}
-            placeholder="Todas as demandas"
-            searchable
-            searchPlaceholder="Buscar demanda..."
-          />
+          {hasDemands ? (
+            <SelectInput
+              label="Demanda"
+              name="demand"
+              value={filters.demand}
+              onChange={handleFilterChange}
+              options={donorFilterDemandOptions}
+              placeholder="Todas as demandas"
+              searchable
+              searchPlaceholder="Buscar demanda..."
+            />
+          ) : null}
           <SelectInput
             label="Tipo"
             name="donorType"
@@ -675,7 +689,7 @@ export default function Donors() {
         ) : (
           <EmptyState
             title="Nenhum doador cadastrado"
-            description="Cadastre o primeiro titular ou auxiliar para começar a acompanhar os abatimentos."
+            description={emptyStateDescription}
             action={
               <Button
                 leftIcon={<PlusIcon className="h-4 w-4" />}
@@ -730,7 +744,7 @@ export default function Donors() {
         {isCreateModalOpen ? (
           <FormModal
             title="Adicionar doador"
-            description="Cadastre titulares ou auxiliares com abatimento próprio."
+            description={createModalDescription}
             confirmLabel="Adicionar doador"
             feedbackMessage={formError}
             isLoading={isSubmitting}
@@ -739,6 +753,7 @@ export default function Donors() {
           >
             <DonorForm
               demandOptions={donorFormDemandOptions}
+              showDemand={hasDemands}
               errors={createFormErrors}
               form={createForm}
               holderOptions={createHolderOptions}
@@ -763,6 +778,7 @@ export default function Donors() {
           >
             <DonorForm
               demandOptions={donorFormDemandOptions}
+              showDemand={hasDemands}
               errors={editFormErrors}
               form={editForm}
               holderOptions={editHolderOptions}
