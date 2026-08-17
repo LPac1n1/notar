@@ -4,6 +4,8 @@ import {
   normalizeCpf,
   queryPrepared,
 } from "../db";
+import { getActiveProjectId } from "../activeProject.js";
+import { findProjectById } from "../projectService";
 import { reconcileImportsForCpfs } from "../importService";
 import {
   createPerson,
@@ -52,25 +54,42 @@ export async function ensureDonationCpfIsAvailable(
   }
 }
 
+/**
+ * Valida a demanda do doador.
+ *
+ * A obrigatoriedade é CONDICIONADA ao módulo Demandas do projeto ativo. Num
+ * projeto que não usa demandas — o caso dos projetos de crédito — exigir uma
+ * seria um bloqueio impossível de satisfazer: não existe demanda para
+ * escolher, e a tela que as cadastra nem aparece na navegação.
+ *
+ * É a única regra de NEGÓCIO que o multiprojeto muda; o resto foi escopo.
+ */
 export async function ensureDemandExists(demand, { required = true } = {}) {
   const trimmedDemand = demand.trim();
 
   if (!trimmedDemand) {
-    if (required) {
+    const project = await findProjectById(getActiveProjectId());
+    const projectUsesDemands = project?.modules?.demands !== false;
+
+    if (required && projectUsesDemands) {
       throw new Error("Selecione uma demanda para o titular.");
     }
 
     return "";
   }
 
+  // A demanda precisa ser DO PROJETO ATIVO: um doador de Capoeira não pode
+  // receber uma demanda de Moradia, senão as duas classificações passam a se
+  // contradizer.
   const existingDemand = await queryPrepared(
     `
       SELECT name
       FROM demands
-      WHERE lower(trim(name)) = lower(trim(?))
+      WHERE project_id = ?
+        AND lower(trim(name)) = lower(trim(?))
       LIMIT 1
     `,
-    [trimmedDemand],
+    [getActiveProjectId(), trimmedDemand],
   );
 
   if (existingDemand.length === 0) {

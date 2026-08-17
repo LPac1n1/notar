@@ -40,6 +40,7 @@ import { useModalState } from "../hooks/useModalState";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useMutationAction } from "../hooks/useMutationAction";
+import { useActiveProject } from "../hooks/useProject";
 import { formatInteger } from "../utils/format";
 
 const EMPTY_PERSON_FORM = {
@@ -73,6 +74,9 @@ const countReferencePeople = (currentFilters) =>
   countPeople({ ...currentFilters, role: "reference" });
 
 export default function People() {
+  // A demanda só é obrigatória em projeto que usa o módulo Demandas.
+  const activeProject = useActiveProject();
+  const requiresDemand = activeProject?.modules?.demands !== false;
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
   const [allPeople, setAllPeople] = useState([]);
   const [demands, setDemands] = useState([]);
@@ -345,7 +349,7 @@ export default function People() {
       return;
     }
 
-    const validationErrors = validateDonorForm(convertForm);
+    const validationErrors = validateDonorForm(convertForm, { requiresDemand });
 
     if (hasValidationErrors(validationErrors)) {
       setConvertFormErrors(validationErrors);

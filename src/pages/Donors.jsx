@@ -53,6 +53,7 @@ import { buildSelectOptions } from "../utils/select";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useMutationAction } from "../hooks/useMutationAction";
+import { useActiveProject } from "../hooks/useProject";
 import { useProjectPath } from "../hooks/useProjectPath";
 
 const EMPTY_DONOR_FORM = {
@@ -77,6 +78,9 @@ const INITIAL_DONOR_FILTERS = {
 export default function Donors() {
   const location = useLocation();
   const navigate = useNavigate();
+  // A demanda só é obrigatória em projeto que usa o módulo Demandas.
+  const activeProject = useActiveProject();
+  const requiresDemand = activeProject?.modules?.demands !== false;
   const projectPath = useProjectPath();
   const [people, setPeople] = useState([]);
   const [demands, setDemands] = useState([]);
@@ -364,7 +368,7 @@ export default function Donors() {
   };
 
   const handleAdd = async () => {
-    const validationErrors = validateDonorForm(createForm);
+    const validationErrors = validateDonorForm(createForm, { requiresDemand });
 
     if (hasValidationErrors(validationErrors)) {
       setCreateFormErrors(validationErrors);
@@ -420,7 +424,7 @@ export default function Donors() {
       return;
     }
 
-    const validationErrors = validateDonorForm(editForm);
+    const validationErrors = validateDonorForm(editForm, { requiresDemand });
 
     if (hasValidationErrors(validationErrors)) {
       setEditFormErrors(validationErrors);

@@ -62,7 +62,7 @@ export const MODULE_DEPENDENCIES = {
 // Cor do projeto padrão. Literal em vez de import de `demandColor` para o
 // módulo continuar sem dependência nenhuma — é o que permite ao teste rodar
 // este SQL direto contra DuckDB-Node.
-const DEFAULT_PROJECT_COLOR = "#6366f1";
+export const DEFAULT_PROJECT_COLOR = "#6366f1";
 
 /**
  * Garantia de que existe o projeto padrão. Idempotente.

@@ -18,6 +18,8 @@ import {
 } from "./donorMappers";
 import { formatCpf } from "../../utils/cpf";
 import { formatMonthYear } from "../../utils/date";
+import { getActiveProjectId } from "../activeProject.js";
+import { ASSIGNMENT_OPEN_END } from "../project/projectAssignmentSql.js";
 
 /**
  * Read-side queries for the donors domain. Anything that *projects* donor
@@ -42,8 +44,23 @@ function buildDonorListConditions({
   activeStatus = "active",
   search = "",
 } = {}) {
-  const conditions = [];
-  const params = [];
+  // A lista de doadores é a do PROJETO ATIVO: quem tem vínculo VIGENTE com
+  // ele. Um doador transferido some daqui e aparece no projeto de destino, e
+  // é isso que faz cada projeto ter sua própria base sem os dados serem
+  // duplicados — o registro de doadores é um só na plataforma.
+  //
+  // A comparação usa a sentinela de "vigente" em vez do mês corrente: o
+  // vínculo aberto é o que vale para cadastro, independentemente de qual mês
+  // o usuário esteja consultando.
+  const conditions = [
+    `EXISTS (
+      SELECT 1 FROM donor_project_assignments
+      WHERE donor_project_assignments.donor_id = donors.id
+        AND donor_project_assignments.project_id = ?
+        AND donor_project_assignments.valid_to = CAST(? AS DATE)
+    )`,
+  ];
+  const params = [getActiveProjectId(), ASSIGNMENT_OPEN_END];
 
   // Busca livre: nome do doador, qualquer CPF vinculado a ele, ou a demanda.
   const searchCondition = buildTextSearchCondition(search, [

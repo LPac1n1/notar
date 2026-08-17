@@ -53,6 +53,10 @@ function parsePayload(payloadJson) {
 }
 
 function getTrashEntityDomains(entityType) {
+  if (entityType === "project") {
+    return ["projects", "demands", "trash", "history"];
+  }
+
   if (entityType === "demand") {
     return ["demands", "trash", "history"];
   }
@@ -197,6 +201,30 @@ export async function deleteAllTrashItemsPermanently() {
       total,
     },
   });
+}
+
+async function restoreProject(payload) {
+  const projectRow = payload.projects?.[0];
+
+  if (projectRow?.slug) {
+    const existing = await query(`
+      SELECT id
+      FROM projects
+      WHERE slug = '${escapeSqlString(projectRow.slug)}'
+      LIMIT 1
+    `);
+
+    if (existing.length > 0) {
+      throw new Error(
+        "Já existe um projeto com esse endereço. Renomeie o projeto atual antes de restaurar.",
+      );
+    }
+  }
+
+  await insertRows("projects", payload.projects ?? []);
+  // As demandas foram excluídas junto e voltam junto — sem elas o projeto
+  // restaurado perderia sua própria classificação.
+  await insertRows("demands", payload.demands ?? []);
 }
 
 async function restoreDemand(payload) {
@@ -430,7 +458,9 @@ export async function restoreTrashItem(id) {
 
   await runInTransaction(
     async () => {
-      if (trashItem.entity_type === "demand") {
+      if (trashItem.entity_type === "project") {
+        await restoreProject(payload);
+      } else if (trashItem.entity_type === "demand") {
         await restoreDemand(payload);
       } else if (trashItem.entity_type === "person") {
         await restorePerson(payload);

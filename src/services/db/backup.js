@@ -5,11 +5,6 @@ import {
   snapshotHasData,
 } from "../../utils/backup.js";
 import {
-  BACKFILL_ASSIGNMENTS_SQL,
-  BACKFILL_DEMAND_PROJECT_SQL,
-  ENSURE_DEFAULT_PROJECT_SQL,
-} from "../project/projectAssignmentSql.js";
-import {
   execute,
   flushAfterTransaction,
   getConnection,
@@ -663,21 +658,12 @@ export async function restoreDatabaseSnapshot(
         }
       }
 
-      // Reposição do estado de projeto, DENTRO da mesma transaction.
-      //
-      // Um backup anterior à v12/v13 não traz `projects`,
-      // `donor_project_assignments` nem `demands.project_id` — e os DELETEs
-      // acima já apagaram os que existiam. Sem isto o sistema ficaria sem
-      // projeto nenhum, com todo o crédito como "não atribuído".
-      //
-      // Precisa ser atômico com o restore por dois motivos: um banco
-      // restaurado pela metade não pode ser commitado, e `execute` fora da
-      // transaction emite evento de mudança — o que faz as páginas montadas
-      // dispararem consultas no meio da restauração, contra um banco em
-      // estado intermediário. Idempotente: com backup novo, não insere nada.
-      await execute(ENSURE_DEFAULT_PROJECT_SQL);
-      await execute(BACKFILL_ASSIGNMENTS_SQL);
-      await execute(BACKFILL_DEMAND_PROJECT_SQL);
+      // A reposição do estado de projeto (projeto padrão, demanda sem
+      // projeto, doador sem vínculo) NÃO fica aqui: vive em
+      // `runSchemaBootstrap`, que roda logo abaixo no reload estrutural.
+      // Precisa ser lá porque as normalizações podem CRIAR doadores — a
+      // conversão do modelo antigo de auxiliares é um caso — e um doador
+      // criado depois deste ponto ficaria sem vínculo.
     },
     { emitChange: false },
   );

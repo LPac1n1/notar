@@ -78,13 +78,22 @@ export function validatePersonForm(form = {}) {
   };
 }
 
-export function validateDonorForm(form = {}) {
+/**
+ * `requiresDemand` acompanha o módulo Demandas do projeto ativo.
+ *
+ * Num projeto que não usa demandas, exigir uma seria um bloqueio impossível
+ * de satisfazer: não há demanda para escolher e a tela que as cadastra nem
+ * aparece na navegação. A mesma condição existe no serviço
+ * (`ensureDemandExists`) — as duas precisam concordar, senão o formulário
+ * barra o que o servidor aceitaria, ou o contrário.
+ */
+export function validateDonorForm(form = {}, { requiresDemand = true } = {}) {
   const donorType = form.donorType === "auxiliary" ? "auxiliary" : "holder";
 
   return {
     donorType: donorType ? "" : "Selecione o tipo de doador.",
     demand:
-      donorType === "holder"
+      donorType === "holder" && requiresDemand
         ? validateRequiredText(form.demand, "Demanda")
         : "",
     holderPersonId:

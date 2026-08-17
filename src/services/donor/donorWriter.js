@@ -23,8 +23,8 @@ import {
   findPersonByCpf,
   findPersonById,
 } from "../personService";
+import { getActiveProjectId } from "../activeProject.js";
 import { assignDonorToProject } from "../projectService";
-import { DEFAULT_PROJECT_ID } from "../project/projectAssignmentSql.js";
 import { createTrashItem } from "../trashService";
 import { normalizePersonName } from "../../utils/normalize";
 
@@ -168,9 +168,13 @@ export async function createDonor({
   // Fica FORA da transaction de propósito: um doador sem vínculo é
   // recuperável pela tela de "não atribuído", mas um vínculo órfão apontando
   // para um doador que o rollback desfez não é.
+  // O projeto é o ATIVO, não o padrão: um doador cadastrado dentro de
+  // Capoeira precisa nascer vinculado a Capoeira. Usar o padrão criaria o
+  // doador na tela de um projeto e o vincularia a outro — ele sumiria da
+  // lista logo depois de ser criado.
   await assignDonorToProject({
     donorId: id,
-    projectId: projectId || DEFAULT_PROJECT_ID,
+    projectId: projectId || getActiveProjectId(),
   });
 
   await syncAuxiliaryHolderDonorIds([person.id]);

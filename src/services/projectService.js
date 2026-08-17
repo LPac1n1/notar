@@ -6,11 +6,15 @@ import {
   runInTransaction,
   startOfMonth,
 } from "./db";
+import { createActionHistoryEntry } from "./actionHistoryService";
+import { createTrashItem } from "./trashService";
+import { buildSlug } from "../utils/slug";
 import {
   ASSIGNMENT_OPEN_END,
   ASSIGNMENT_OPEN_START,
   CREDIT_ATTRIBUTION_IDENTITY_SQL,
   CREDIT_BY_PROJECT_SQL,
+  DEFAULT_PROJECT_COLOR,
   DEFAULT_PROJECT_ID,
   MODULE_DEPENDENCIES,
   NEW_PROJECT_MODULES,
@@ -66,6 +70,220 @@ function mapAssignmentRow(row) {
     isOpen: validTo === ASSIGNMENT_OPEN_END,
     reason: row.reason ?? "",
   };
+}
+
+/**
+ * Slug a partir do nome. Serve de identificador na URL, então precisa ser
+ * estável e legível — e único, garantido por índice.
+ */
+function buildProjectSlug(name) {
+  return buildSlug(name) || "projeto";
+}
+
+async function resolveAvailableSlug(baseSlug, ignoreProjectId = "") {
+  const rows = await queryPrepared(
+    `SELECT slug FROM projects WHERE slug LIKE ? AND id <> ?`,
+    [`${baseSlug}%`, ignoreProjectId],
+  );
+  const taken = new Set(rows.map((row) => String(row.slug)));
+
+  if (!taken.has(baseSlug)) return baseSlug;
+
+  // Dois projetos podem legitimamente ter nomes que geram o mesmo slug
+  // ("Capoeira" e "capoeira"). Sufixo numérico em vez de recusar o nome.
+  for (let suffix = 2; suffix < 500; suffix += 1) {
+    const candidate = `${baseSlug}-${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+
+  throw new Error("Não foi possível gerar um endereço único para este projeto.");
+}
+
+export async function createProject({ name, color = DEFAULT_PROJECT_COLOR }) {
+  const trimmedName = String(name ?? "").trim();
+
+  if (!trimmedName) {
+    throw new Error("O nome do projeto é obrigatório.");
+  }
+
+  const duplicate = await queryPrepared(
+    `SELECT id FROM projects WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1`,
+    [trimmedName],
+  );
+
+  if (duplicate.length > 0) {
+    throw new Error("Já existe um projeto com esse nome.");
+  }
+
+  const id = nanoid();
+  const slug = await resolveAvailableSlug(buildProjectSlug(trimmedName));
+
+  // Projeto novo nasce com o conjunto mínimo: ver o crédito gerado pelos
+  // doadores dele, e ter onde registrar contexto. Os demais módulos são
+  // ligados depois, se fizerem falta.
+  await executePrepared(
+    `
+    INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `,
+    [id, trimmedName, slug, JSON.stringify(NEW_PROJECT_MODULES), color],
+    { source: "projects", domains: ["projects"] },
+  );
+
+  await createActionHistoryEntry({
+    actionType: "create",
+    entityType: "project",
+    entityId: id,
+    label: trimmedName,
+    description: `Projeto ${trimmedName} criado.`,
+    payload: { slug },
+  });
+
+  return { id, slug };
+}
+
+export async function updateProject({ id, name, color, modules }) {
+  if (!id) {
+    throw new Error("O identificador do projeto é obrigatório.");
+  }
+
+  const trimmedName = String(name ?? "").trim();
+
+  if (!trimmedName) {
+    throw new Error("O nome do projeto é obrigatório.");
+  }
+
+  const duplicate = await queryPrepared(
+    `SELECT id FROM projects WHERE lower(trim(name)) = lower(trim(?)) AND id <> ? LIMIT 1`,
+    [trimmedName, id],
+  );
+
+  if (duplicate.length > 0) {
+    throw new Error("Já existe outro projeto com esse nome.");
+  }
+
+  const current = await findProjectById(id);
+
+  if (!current) {
+    throw new Error("O projeto selecionado não existe mais.");
+  }
+
+  // O slug muda junto com o nome — ele é o endereço, e um endereço que não
+  // corresponde ao nome confunde mais do que a quebra de links antigos, que
+  // já é tratada pelo redirecionamento da tela de escolha.
+  const slug =
+    trimmedName === current.name
+      ? current.slug
+      : await resolveAvailableSlug(buildProjectSlug(trimmedName), id);
+
+  await executePrepared(
+    `
+    UPDATE projects
+    SET name = ?, slug = ?, color = ?, modules = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `,
+    [
+      trimmedName,
+      slug,
+      color ?? current.color,
+      JSON.stringify(resolveModuleDependencies(modules ?? current.modules)),
+      id,
+    ],
+    { source: "projects", domains: ["projects"] },
+  );
+
+  await createActionHistoryEntry({
+    actionType: "update",
+    entityType: "project",
+    entityId: id,
+    label: trimmedName,
+    description: `Projeto ${trimmedName} atualizado.`,
+    payload: { slug },
+  });
+
+  return { id, slug };
+}
+
+/**
+ * Exclui um projeto.
+ *
+ * Duas travas, e as duas existem para proteger o histórico:
+ *
+ * 1. O projeto padrão nunca é excluído. Ele é o destino do backfill e a casa
+ *    de todo doador que não foi transferido para lugar nenhum.
+ * 2. Projeto com QUALQUER vínculo — inclusive fechado — não pode ser
+ *    excluído. Um vínculo fechado é o que mantém o crédito de 2025 somando
+ *    para o projeto de 2025; apagar o projeto reescreveria esse passado, que
+ *    é exatamente o que a regra de negócio proíbe.
+ */
+export async function deleteProject(id) {
+  if (id === DEFAULT_PROJECT_ID) {
+    throw new Error(
+      "O projeto principal não pode ser excluído — ele é o destino padrão dos doadores.",
+    );
+  }
+
+  const project = await findProjectById(id);
+
+  if (!project) return "";
+
+  const assignmentRows = await queryPrepared(
+    `SELECT count(*) AS total FROM donor_project_assignments WHERE project_id = ?`,
+    [id],
+  );
+  const assignmentCount = Number(assignmentRows[0]?.total ?? 0);
+
+  if (assignmentCount > 0) {
+    throw new Error(
+      `Este projeto tem ${assignmentCount} vínculo(s) de doador, inclusive históricos. Transfira os doadores para outro projeto antes de excluir — apagar agora mudaria a atribuição do crédito já registrado.`,
+    );
+  }
+
+  const demandRows = await queryPrepared(
+    `
+    SELECT id, project_id, name, color, is_active,
+           CAST(created_at AS VARCHAR) AS created_at,
+           CAST(updated_at AS VARCHAR) AS updated_at
+    FROM demands WHERE project_id = ?
+  `,
+    [id],
+  );
+  const projectRows = await queryPrepared(
+    `
+    SELECT id, name, slug, modules, color, is_active,
+           CAST(created_at AS VARCHAR) AS created_at,
+           CAST(updated_at AS VARCHAR) AS updated_at
+    FROM projects WHERE id = ?
+  `,
+    [id],
+  );
+  let trashItemId = "";
+
+  await runInTransaction(
+    async () => {
+      trashItemId = await createTrashItem({
+        entityType: "project",
+        entityId: id,
+        label: project.name,
+        payload: { projects: projectRows, demands: demandRows },
+      });
+
+      await executePrepared(`DELETE FROM demands WHERE project_id = ?`, [id]);
+      await executePrepared(`DELETE FROM projects WHERE id = ?`, [id]);
+    },
+    { source: "projects", domains: ["projects", "demands", "trash"] },
+  );
+
+  await createActionHistoryEntry({
+    actionType: "delete",
+    entityType: "project",
+    entityId: id,
+    label: project.name,
+    description: `Projeto ${project.name} enviado para a lixeira.`,
+    payload: { trashItemId },
+  });
+
+  return trashItemId;
 }
 
 export async function listProjects({ activeStatus = "active" } = {}) {

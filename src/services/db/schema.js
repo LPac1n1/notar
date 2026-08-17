@@ -1,4 +1,9 @@
 import { normalizeCpfSqlExpression } from "./sql.js";
+import {
+  BACKFILL_ASSIGNMENTS_SQL,
+  BACKFILL_DEMAND_PROJECT_SQL,
+  ENSURE_DEFAULT_PROJECT_SQL,
+} from "../project/projectAssignmentSql.js";
 import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
 import { runMigrations } from "./migrations.js";
 
@@ -513,6 +518,23 @@ export async function runSchemaBootstrap(conn, { structural = true } = {}) {
   }
 
   await applyDataNormalizations(conn);
+
+  // Invariante da plataforma: existe um projeto padrão, toda demanda pertence
+  // a um projeto e todo doador tem vínculo.
+  //
+  // Roda DEPOIS das normalizações de propósito. Elas podem CRIAR doadores —
+  // é o caso da conversão do modelo antigo de auxiliares, que os promove de
+  // `donor_cpf_links` para `donors`. Um doador criado ali sem passar por aqui
+  // ficaria sem vínculo e sumiria da lista do projeto, que é exatamente o que
+  // acontecia ao restaurar um backup do modelo antigo.
+  //
+  // Como `runSchemaBootstrap` também roda no reload estrutural pós-restore,
+  // este é o único lugar que cobre todos os caminhos: boot, migration e
+  // restauração de backup.
+  await conn.query(ENSURE_DEFAULT_PROJECT_SQL);
+  await conn.query(BACKFILL_DEMAND_PROJECT_SQL);
+  await conn.query(BACKFILL_ASSIGNMENTS_SQL);
+
   return migrationResult;
 }
 
