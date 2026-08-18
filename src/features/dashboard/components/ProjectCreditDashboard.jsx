@@ -34,6 +34,32 @@ const INITIAL_DATA = {
  * projeto principal, e trazê-las aqui daria a impressão de que este projeto
  * herdou dados que não são dele.
  */
+/**
+ * Meses do mais recente para o mais antigo, já com a variação em relação ao
+ * mês anterior.
+ *
+ * A ordem é o inverso da do gráfico de propósito: no gráfico o olho segue a
+ * linha do tempo da esquerda para a direita; numa tabela, a pergunta é
+ * "quanto entrou por último", e a resposta tem de estar na primeira linha.
+ *
+ * A variação compara com o mês IMEDIATAMENTE anterior da série, não com o
+ * mês do calendário: um mês sem conciliação nenhuma não gera linha, e tratar
+ * essa lacuna como queda de 100% inventaria uma retração que não houve.
+ */
+function buildMonthRows(months) {
+  return months
+    .map((month, index) => {
+      const previous = index > 0 ? months[index - 1] : null;
+
+      return {
+        ...month,
+        // Sem mês anterior não há variação — a primeira entrada do projeto
+        // não subiu nem caiu, ela simplesmente começou.
+        delta: previous ? month.totalCredit - previous.totalCredit : null,
+      };
+    })
+    .reverse();
+}
 export default function ProjectCreditDashboard({ project }) {
   const loader = useCallback(() => getProjectCreditOverview(), []);
   const filters = useMemo(() => EMPTY_FILTERS, []);
@@ -61,6 +87,7 @@ export default function ProjectCreditDashboard({ project }) {
 
   // O gráfico é o mesmo componente do projeto principal; o que muda é a
   // série. Aqui só existe uma métrica que faça sentido — crédito em reais.
+  const monthRows = buildMonthRows(overview.months);
   const chartMonths = overview.months.map((month) => ({
     referenceMonth: month.referenceMonth,
     totalCredit: month.totalCredit,
@@ -145,6 +172,86 @@ export default function ProjectCreditDashboard({ project }) {
               <EmptyState
                 title="Sem crédito conciliado ainda"
                 description="A evolução aparece depois que houver ao menos um mês com doações conciliadas."
+              />
+            )}
+          </SectionCard>
+
+          {/* ─── Quanto entrou em cada mês ───────────────────────────── */}
+          <SectionCard
+            title="Retorno mês a mês"
+            description="O crédito conciliado de cada mês, com a variação em relação ao mês anterior da série."
+          >
+            {monthRows.length ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-[var(--line)] text-left text-sm">
+                  <caption className="sr-only">
+                    Crédito conciliado por mês atribuído a este projeto, do mês
+                    mais recente para o mais antigo.
+                  </caption>
+                  <thead className="bg-[var(--surface-strong)] text-xs uppercase tracking-wide text-[var(--muted)]">
+                    <tr>
+                      <th scope="col" className="px-3 py-2">
+                        Mês
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-right">
+                        Crédito
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-right">
+                        Variação
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-right">
+                        Doadores
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line)]">
+                    {monthRows.map((month, index) => (
+                      <tr key={month.referenceMonth}>
+                        {/* O mês mais recente é marcado por uma barra à
+                            esquerda, e não por fundo tingido: sobre o tom de
+                            fundo a variação negativa media 4,35:1, abaixo do
+                            mínimo AA de 4,5:1 para texto normal. A barra dá o
+                            mesmo destaque sem ficar atrás do texto. */}
+                        <th scope="row" className={`border-l-2 py-2 pr-3 pl-3 font-medium ${
+                          index === 0
+                            ? "border-[var(--accent)] text-[var(--text-strong)]"
+                            : "border-transparent text-[var(--text-main)]"
+                        }`}>
+                          {formatMonthYear(month.referenceMonth)}
+                        </th>
+                        <td className="numeric px-3 py-2 text-right font-semibold text-[var(--text-main)]">
+                          {formatCurrency(month.totalCredit)}
+                        </td>
+                        <td className="numeric px-3 py-2 text-right">
+                          {month.delta === null ? (
+                            <span className="text-[var(--muted)]">—</span>
+                          ) : (
+                            <span
+                              className={
+                                month.delta > 0
+                                  ? "text-[var(--success)]"
+                                  : month.delta < 0
+                                    ? "text-[var(--danger)]"
+                                    : "text-[var(--muted)]"
+                              }
+                            >
+                              {month.delta > 0 ? "+" : ""}
+                              {formatCurrency(month.delta)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="numeric px-3 py-2 text-right text-[var(--text-soft)]">
+                          {formatInteger(month.donorCount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
+                title="Nenhum mês conciliado ainda"
+                description="Cada mês aparece aqui depois que a planilha de créditos correspondente for importada e conciliada."
               />
             )}
           </SectionCard>

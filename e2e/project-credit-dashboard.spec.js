@@ -70,3 +70,58 @@ test("o painel de crédito soma, ordena e separa quem ainda não gerou nada", as
   await expect(page.getByText("Pontos para revisar")).toHaveCount(0);
   await expect(page.getByText("Importações recentes")).toHaveCount(0);
 });
+
+/**
+ * O retorno de cada mês, legível como número.
+ *
+ * O gráfico já mostrava a série, mas só revela o valor de um mês quando o
+ * cursor passa por cima — e não responde "quanto entrou a mais que no mês
+ * anterior" sem o leitor fazer a conta.
+ */
+test("a tabela mostra o crédito de cada mês e a variação entre eles", async ({
+  page,
+}) => {
+  const backupPath = fileURLToPath(
+    new URL("./fixtures/project-credit-backup.json", import.meta.url),
+  );
+
+  await page.goto("/p/demandas-de-moradia");
+  await page.getByRole("link", { name: "Configurações" }).click();
+  await page.getByRole("heading", { name: "Cópia de segurança" }).click();
+  await page.locator('input[type="file"]').setInputFiles(backupPath);
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Restaurar backup" })
+    .getByRole("button", { name: "Restaurar backup" })
+    .click({ force: true });
+  await expect(page.getByText("Backup importado:")).toBeVisible();
+
+  await page.locator("aside").first().getByRole("button").first().click();
+  await page.getByText("Capoeira").first().click();
+  await expect(page).toHaveURL(/\/p\/capoeira$/);
+
+  const section = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Retorno mês a mês" }) });
+
+  // Uma linha por mês, do mais recente para o mais antigo. A contagem vem
+  // primeiro porque `allInnerTexts` não espera — sem isso lê a tabela vazia.
+  await expect(section.locator("tbody tr")).toHaveCount(4);
+  const months = await section.locator("tbody tr th").allInnerTexts();
+  expect(months).toEqual([
+    "Abril de 2026",
+    "Março de 2026",
+    "Fevereiro de 2026",
+    "Janeiro de 2026",
+  ]);
+
+  // Valores e variações conferem com a fixture: 210 → 240 → 395 → 540.
+  const abril = section.locator("tbody tr").first();
+  await expect(abril.getByText("R$ 540,00")).toBeVisible();
+  await expect(abril.getByText("+R$ 145,00")).toBeVisible();
+
+  const janeiro = section.locator("tbody tr").last();
+  await expect(janeiro.getByText("R$ 210,00")).toBeVisible();
+  // O primeiro mês da série não subiu nem caiu — ele começou.
+  await expect(janeiro.getByText("—")).toBeVisible();
+});
