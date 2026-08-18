@@ -52,7 +52,6 @@ export function useProjectModules() {
 
   return {
     hasDemands: modules?.demands !== false,
-    hasPeople: modules?.people !== false,
     // A Gestão Mensal é o que traz abatimento, acumulado e histórico mensal.
     // Um projeto sem ela acompanha crédito, não apuração.
     hasMonthly: modules?.monthly !== false,

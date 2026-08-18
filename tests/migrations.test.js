@@ -18,7 +18,10 @@ import {
   ASSIGNMENT_OPEN_END,
   ASSIGNMENT_OPEN_START,
   BACKFILL_ASSIGNMENTS_SQL,
+  COUNT_DONORS_WITHOUT_PROJECT_SQL,
+  CREDIT_BY_PROJECT_SQL,
   DEFAULT_PROJECT_ID,
+  DONORS_WITHOUT_PROJECT_SQL,
 } from "../src/services/project/projectAssignmentSql.js";
 
 /**
@@ -2840,6 +2843,101 @@ test("transferring a donor closes the previous window instead of rewriting it", 
     assert.equal(atMarch[0].project_id, DEFAULT_PROJECT_ID);
     assert.equal(atApril.length, 1);
     assert.equal(atApril[0].project_id, "prj-b");
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Vínculo apontando para um projeto que não existe mais.
+ *
+ * É alcançável pela interface: excluir o doador tira as linhas de
+ * `donor_project_assignments` (elas vão para o payload da lixeira), o que
+ * libera a exclusão do projeto — cujo guard conta exatamente essas linhas.
+ * Restaurar o doador depois reinsere o vínculo apontando para um projeto que
+ * já não existe.
+ *
+ * Sem tratamento, o doador some de toda lista de projeto E não é contado como
+ * "sem projeto" (ele TEM vínculo), ficando invisível e sem caminho de volta.
+ */
+async function seedDanglingAssignment(conn) {
+  await conn.query(`
+    INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+    VALUES
+      ('donor-dangling', 'Carla Orfa', '11111111111', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('donor-ok', 'Bruno Certo', '22222222222', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, created_at, updated_at)
+    VALUES
+      ('lk-dangling', 'donor-dangling', 'Carla Orfa', '11111111111', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('lk-ok', 'donor-ok', 'Bruno Certo', '22222222222', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+
+  // 'prj-apagado' nunca existiu na tabela projects — é o estado que sobra
+  // depois de excluir o projeto e restaurar o doador.
+  await conn.query(`
+    INSERT INTO donor_project_assignments
+      (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+    VALUES
+      ('dpa-dangling', 'donor-dangling', 'prj-apagado', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP),
+      ('dpa-ok', 'donor-ok', '${DEFAULT_PROJECT_ID}', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO donation_notes (
+      id, import_id, cpf, numero_nota, valor_nota, reference_month,
+      cnpj_estabelecimento, is_valid, created_at
+    )
+    VALUES ('dn-dangling', 'imp-x', '11111111111', '901', 100.00, DATE '2026-03-01', '11111111000111', TRUE, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO credit_notes (
+      id, credit_import_id, cnpj_estabelecimento, numero_nota,
+      valor_nf, credito, situacao, is_valid, created_at
+    )
+    VALUES ('cn-dangling', 'ci-x', '11111111000111', '901', 100.00, 9.00, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+  `);
+}
+
+test("a donor whose project was deleted counts as having no project", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedDanglingAssignment(conn);
+
+    const rows = (await conn.query(DONORS_WITHOUT_PROJECT_SQL)).toArray();
+
+    // Bruno tem vínculo com projeto existente e fica de fora; Carla precisa
+    // aparecer para o operador conseguir religá-la.
+    assert.deepEqual(
+      rows.map((row) => row.name),
+      ["Carla Orfa"],
+    );
+  } finally {
+    await conn.close();
+  }
+});
+
+test("credit of a deleted project falls into unattributed instead of vanishing", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedDanglingAssignment(conn);
+    await runCreditReconciliation(conn);
+
+    const rows = (await conn.query(CREDIT_BY_PROJECT_SQL)).toArray();
+    const total = rows.reduce((sum, row) => sum + Number(row.total_credit), 0);
+    const unattributed = rows
+      .filter((row) => !row.project_id)
+      .reduce((sum, row) => sum + Number(row.total_credit), 0);
+
+    // O invariante: o que não pertence a projeto existente tem de aparecer
+    // como não atribuído. Se o project_id apagado passasse adiante, os R$9
+    // sumiriam da tela — não entram em nenhum projeto listado nem no total
+    // de "não atribuído".
+    assert.equal(total, 9);
+    assert.equal(unattributed, 9);
   } finally {
     await conn.close();
   }

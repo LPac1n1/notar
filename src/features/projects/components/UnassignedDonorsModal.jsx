@@ -6,7 +6,7 @@ import Modal from "../../../components/ui/Modal";
 import SelectInput from "../../../components/ui/SelectInput";
 import { logError } from "../../../services/logger";
 import {
-  assignDonorToProject,
+  linkDonorToProject,
   listDonorsWithoutProject,
 } from "../../../services/projectService";
 import { formatCpf } from "../../../utils/cpf";
@@ -19,10 +19,11 @@ import { getErrorMessage } from "../../../utils/error";
  * plataforma: ele some de TODA lista de projeto e o crédito dele cai em "não
  * atribuído" — um problema real, que o painel apontava sem oferecer saída.
  *
- * O vínculo abre desde o início do histórico (sem `validFrom`), porque a
- * ausência de vínculo é uma lacuna a preencher, não uma mudança a partir de
- * agora: datar a partir do mês corrente deixaria o crédito passado desse
- * doador sem projeto para sempre.
+ * Cobre dois estados: o doador sem vínculo nenhum e — o caso que de fato
+ * chega aqui — o vínculo pendurado num projeto excluído. Em ambos a correção
+ * vale desde o início do histórico, porque a ausência de projeto é uma lacuna
+ * a preencher, não uma mudança a partir de agora: datar do mês corrente
+ * deixaria o crédito passado desse doador sem projeto para sempre.
  */
 export default function UnassignedDonorsModal({ onClose, onAssigned, projects }) {
   const [donors, setDonors] = useState([]);
@@ -60,10 +61,9 @@ export default function UnassignedDonorsModal({ onClose, onAssigned, projects })
     try {
       setError("");
       setBusyDonorId(donor.id);
-      await assignDonorToProject({
+      await linkDonorToProject({
         donorId: donor.id,
         projectId,
-        reason: "vinculo-manual",
       });
       await loadDonors();
       onAssigned();

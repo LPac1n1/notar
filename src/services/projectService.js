@@ -12,7 +12,9 @@ import { buildSlug } from "../utils/slug";
 import {
   ASSIGNMENT_OPEN_END,
   ASSIGNMENT_OPEN_START,
+  COUNT_DONORS_WITHOUT_PROJECT_SQL,
   CREDIT_ATTRIBUTION_IDENTITY_SQL,
+  DONORS_WITHOUT_PROJECT_SQL,
   CREDIT_BY_PROJECT_SQL,
   DEFAULT_PROJECT_COLOR,
   DEFAULT_PROJECT_ID,
@@ -587,40 +589,72 @@ export async function listProjectSummaries() {
   };
 }
 
-/** Doadores ativos sem nenhum vínculo — não aparecem em projeto nenhum. */
+/**
+ * Doadores que não aparecem em projeto nenhum — inclusive os que têm vínculo
+ * com um projeto já excluído. Ver DONORS_WITHOUT_PROJECT_SQL.
+ */
 export async function countDonorsWithoutProject() {
-  const rows = await query(`
-    SELECT count(*) AS total
-    FROM donors
-    WHERE donors.is_active = TRUE
-      AND NOT EXISTS (
-        SELECT 1 FROM donor_project_assignments
-        WHERE donor_project_assignments.donor_id = donors.id
-      )
-  `);
+  const rows = await query(COUNT_DONORS_WITHOUT_PROJECT_SQL);
 
   return Number(rows[0]?.total ?? 0);
 }
 
 /**
- * Os doadores que o card "sem projeto" conta.
+ * Religa um doador que não pertence a nenhum projeto existente.
  *
- * O predicado é o MESMO de `countDonorsWithoutProject` — de propósito, e não
- * por coincidência: contador e lista divergentes já produziram total inflado e
- * última página vazia em Pessoas. Se um dos dois mudar, o outro muda junto.
+ * Não é um INSERT simples. O caso que realmente chega aqui é o do vínculo
+ * pendurado — a linha existe e está aberta, só aponta para um projeto que foi
+ * excluído. Inserir outra linha aberta esbarra no índice único que garante um
+ * vínculo vigente por doador, e a operação falhava com erro de constraint.
+ *
+ * Por isso as janelas penduradas são REAPONTADAS em vez de recriadas: isso
+ * preserva desde quando o doador está vinculado, que é justamente o dado que
+ * decide a atribuição do crédito de meses passados.
  */
+export async function linkDonorToProject({ donorId, projectId }) {
+  if (!donorId) {
+    throw new Error(`O doador é obrigatório.`);
+  }
+
+  if (!projectId) {
+    throw new Error(`Selecione o projeto de destino.`);
+  }
+
+  const dangling = await queryPrepared(
+    `
+    SELECT dpa.id
+    FROM donor_project_assignments AS dpa
+    LEFT JOIN projects ON projects.id = dpa.project_id
+    WHERE dpa.donor_id = ?
+      AND projects.id IS NULL
+  `,
+    [donorId],
+  );
+
+  if (dangling.length === 0) {
+    // Doador sem vínculo nenhum: abre desde o início do histórico, para que
+    // o crédito passado dele também passe a contar para o projeto.
+    await assignDonorToProject({
+      donorId,
+      projectId,
+      reason: "vinculo-manual",
+    });
+    return;
+  }
+
+  await executePrepared(
+    `
+    UPDATE donor_project_assignments
+    SET project_id = ?, reason = 'vinculo-manual'
+    WHERE donor_id = ?
+      AND NOT EXISTS (SELECT 1 FROM projects WHERE projects.id = donor_project_assignments.project_id)
+  `,
+    [projectId, donorId],
+    { source: "projects", domains: ["projects", "donors", "monthly"] },
+  );
+}
 export async function listDonorsWithoutProject() {
-  const rows = await query(`
-    SELECT donors.id, donors.name, donors.cpf
-    FROM donors
-    WHERE donors.is_active = TRUE
-      AND NOT EXISTS (
-        SELECT 1 FROM donor_project_assignments
-        WHERE donor_project_assignments.donor_id = donors.id
-      )
-    ORDER BY donors.name ASC
-    LIMIT 200
-  `);
+  const rows = await query(DONORS_WITHOUT_PROJECT_SQL);
 
   return rows.map((row) => ({
     id: row.id,

@@ -221,10 +221,18 @@ export const MATCHED_CREDIT_BY_DONOR_MONTH = `
  * PRECISA aparecer, com `project_id` nulo. Um INNER JOIN faria esse dinheiro
  * sumir silenciosamente da soma — o pior modo de falha possível deste modelo.
  */
+/**
+ * O LEFT JOIN em projects não é decorativo: um vínculo pode apontar para um
+ * projeto que não existe mais (excluir o doador tira as linhas de vínculo, o
+ * que libera a exclusão do projeto; restaurar o doador as traz de volta
+ * apontando para o nada). Sem anular o id nesse caso, o crédito não entra em
+ * nenhum projeto listado NEM no total de não atribuído — ele some da tela,
+ * quebrando a identidade que este módulo existe para garantir.
+ */
 export const CREDIT_BY_PROJECT_SQL = `
   WITH credit AS (${MATCHED_CREDIT_BY_DONOR_MONTH})
   SELECT
-    dpa.project_id AS project_id,
+    existing_project.id AS project_id,
     credit.reference_month AS reference_month,
     sum(credit.total_credit) AS total_credit
   FROM credit
@@ -232,8 +240,9 @@ export const CREDIT_BY_PROJECT_SQL = `
     donorExpression: "credit.donor_id",
     monthExpression: "CAST(credit.reference_month AS DATE)",
   })}
-  GROUP BY dpa.project_id, credit.reference_month
-  ORDER BY credit.reference_month DESC, dpa.project_id
+  LEFT JOIN projects AS existing_project ON existing_project.id = dpa.project_id
+  GROUP BY existing_project.id, credit.reference_month
+  ORDER BY credit.reference_month DESC, existing_project.id
 `;
 
 /**
@@ -287,4 +296,39 @@ export const OVERLAPPING_ASSIGNMENTS_SQL = `
    AND b.id > a.id
    AND a.valid_from <= b.valid_to
    AND b.valid_from <= a.valid_to
+`;
+
+/**
+ * Doadores ativos que não pertencem a nenhum projeto EXISTENTE.
+ *
+ * Não ter vínculo não basta como definição: um vínculo apontando para um
+ * projeto já excluído deixa o doador fora de toda lista de projeto e, se a
+ * consulta olhasse só a existência da linha, também fora daqui — invisível,
+ * sem caminho de volta pela interface. O INNER JOIN em projects é o que faz
+ * esse caso ser detectado e, com isso, recuperável.
+ *
+ * Lista e contagem saem do MESMO predicado de propósito: quando os dois
+ * divergiram em Pessoas, o resultado foi total inflado e página vazia.
+ */
+const WITHOUT_PROJECT_PREDICATE = `
+  FROM donors
+  WHERE donors.is_active = TRUE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM donor_project_assignments AS dpa
+      INNER JOIN projects ON projects.id = dpa.project_id
+      WHERE dpa.donor_id = donors.id
+    )
+`;
+
+export const DONORS_WITHOUT_PROJECT_SQL = `
+  SELECT donors.id, donors.name, donors.cpf
+  ${WITHOUT_PROJECT_PREDICATE}
+  ORDER BY donors.name ASC
+  LIMIT 200
+`;
+
+export const COUNT_DONORS_WITHOUT_PROJECT_SQL = `
+  SELECT count(*) AS total
+  ${WITHOUT_PROJECT_PREDICATE}
 `;

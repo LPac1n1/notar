@@ -309,8 +309,24 @@ export async function runInTransaction(
     return callback();
   }
 
-  await conn.query("BEGIN TRANSACTION");
+  // A posse é marcada ANTES do BEGIN, e não depois.
+  //
+  // `await conn.query("BEGIN")` cede o controle. Com a marcação depois do
+  // await, duas chamadas concorrentes passavam as duas pela checagem acima
+  // enquanto nenhuma tinha marcado posse — a segunda emitia um BEGIN dentro
+  // do BEGIN da primeira, o que o DuckDB rejeita. O erro não ficava contido:
+  // ele aborta a transação em curso, então uma restauração de backup podia
+  // morrer no meio por causa de uma consulta de tela disparada no mesmo
+  // instante. Marcando antes, a segunda chamada cai no ramo de cima e roda
+  // junto, que é o comportamento que o guard já pretendia.
   transactionDepth = 1;
+
+  try {
+    await conn.query("BEGIN TRANSACTION");
+  } catch (error) {
+    transactionDepth = 0;
+    throw error;
+  }
 
   try {
     const result = await callback();

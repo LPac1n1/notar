@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import SectionCard from "../../../components/ui/SectionCard";
-import { LoadingIcon, WarningIcon } from "../../../components/ui/icons";
+import { LoadingIcon } from "../../../components/ui/icons";
 import { getDonorReconciliationSummary } from "../../../services/reconciliation/creditReconciliationService";
 import { logError } from "../../../services/logger";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -29,10 +29,6 @@ function statusClasses(tone) {
   switch (tone) {
     case "success":
       return "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]";
-    case "danger":
-      return "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]";
-    case "warning":
-      return "border-[var(--warning-line)] bg-[var(--warning-soft)] text-[var(--warning)]";
     default:
       return "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--muted)]";
   }
@@ -134,9 +130,6 @@ export default function DonorCreditReconciliationSection({
       <div
         className={`mb-4 flex items-start gap-3 rounded-md border p-3 ${statusClasses(meta.tone)}`}
       >
-        {meta.tone === "danger" || meta.tone === "warning" ? (
-          <WarningIcon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-        ) : null}
         <div>
           <p className="font-semibold">{meta.label}</p>
           <p className="mt-1 text-sm">{meta.description}</p>
@@ -159,9 +152,6 @@ export default function DonorCreditReconciliationSection({
             <MetricTile
               label="Diferença"
               value={differenceLabel}
-              valueClass={
-                summary.status === "exceeded" ? "text-[var(--danger)]" : ""
-              }
             />
           </>
         ) : null}
