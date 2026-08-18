@@ -128,6 +128,20 @@ export const BACKFILL_ASSIGNMENTS_SQL = `
  * backup anterior a esta migration não deixe anotações sem projeto (elas
  * sumiriam de todas as telas, já que a listagem filtra por projeto).
  */
+/**
+ * Pessoas existentes vão para o projeto padrão.
+ *
+ * A pessoa de referência não tem doador de onde derivar projeto — ela é
+ * cadastrada justamente para servir de vínculo informativo. Por isso o
+ * projeto precisa ser uma coluna, como em demandas e anotações, e não uma
+ * dedução a partir do doador.
+ */
+export const BACKFILL_PERSON_PROJECT_SQL = `
+  UPDATE people
+  SET project_id = '${DEFAULT_PROJECT_ID}'
+  WHERE project_id IS NULL OR trim(project_id) = ''
+`;
+
 export const BACKFILL_NOTE_PROJECT_SQL = `
   UPDATE notes
   SET project_id = '${DEFAULT_PROJECT_ID}'
@@ -159,6 +173,29 @@ function safeProjectId(projectId) {
  * chances de esquecer, e esquecer significa dado de um projeto aparecendo em
  * outro.
  */
+/**
+ * O doador pertencia ao projeto NO MÊS informado.
+ *
+ * A Gestão Mensal precisa desta versão, e não da que olha o vínculo
+ * vigente: um doador transferido em abril tem março na apuração do projeto
+ * ANTIGO. Escopar pelo vínculo atual arrastaria os meses passados dele para
+ * o projeto novo — exatamente o histórico se movendo que a vigência existe
+ * para impedir.
+ */
+export function donorBelongedToProjectAtMonth(
+  donorExpression,
+  monthExpression,
+  projectId,
+) {
+  return `EXISTS (
+    SELECT 1
+    FROM donor_project_assignments AS dpa_month
+    WHERE dpa_month.donor_id = ${donorExpression}
+      AND dpa_month.project_id = '${safeProjectId(projectId)}'
+      AND ${monthExpression} BETWEEN dpa_month.valid_from AND dpa_month.valid_to
+  )`;
+}
+
 export function donorBelongsToProject(donorExpression, projectId) {
   return `EXISTS (
     SELECT 1

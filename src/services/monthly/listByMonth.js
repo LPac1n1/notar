@@ -1,3 +1,5 @@
+import { getActiveProjectId } from "../activeProject.js";
+import { donorBelongedToProjectAtMonth } from "../project/projectAssignmentSql.js";
 import {
   buildTextSearchCondition,
   normalizeCpf,
@@ -64,6 +66,22 @@ export async function listMonthlySummariesByMonth({
       donorActiveStatus: "active",
       search,
     });
+  // Recorte do projeto. Os dois ramos usam o mês da LINHA, não o vínculo
+  // vigente: um doador transferido em abril continua com março na apuração
+  // do projeto anterior.
+  //
+  // Aqui o mês é constante (é a consulta de um mês só), então entra como
+  // parâmetro; a condição vai no fim para não desalinhar os params já
+  // montados por `buildDonorConditions`.
+  activeDonorConditions.push(
+    donorBelongedToProjectAtMonth(
+      "donors.id",
+      "CAST(? AS DATE)",
+      getActiveProjectId(),
+    ),
+  );
+  activeDonorParams.push(normalizedReferenceMonth);
+
   const activeDonorWhereClause =
     activeDonorConditions.length > 0
       ? `WHERE ${activeDonorConditions.join(" AND ")}`
@@ -76,6 +94,15 @@ export async function listMonthlySummariesByMonth({
   // doesn't.
   const monthlyRowsConditions = ["monthly_donor_summary.reference_month = ?"];
   const monthlyRowsParams = [normalizedReferenceMonth];
+
+  // Do lado do resumo o mês é uma COLUNA, então não consome parâmetro.
+  monthlyRowsConditions.push(
+    donorBelongedToProjectAtMonth(
+      "monthly_donor_summary.donor_id",
+      "monthly_donor_summary.reference_month",
+      getActiveProjectId(),
+    ),
+  );
 
   if (donorActiveStatus === "active") {
     monthlyRowsConditions.push("donors.is_active = TRUE");

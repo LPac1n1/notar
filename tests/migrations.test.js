@@ -6,7 +6,7 @@ import {
   runMigrations,
 } from "../src/services/db/migrations.js";
 import { buildDonorInactivityStreaksSql } from "../src/services/monthly/inactivityStreaksSql.js";
-import { ABATEMENT_SHEET_SQL } from "../src/services/monthly/abatementSheetSql.js";
+import { buildAbatementSheetSql } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 import { buildTopDonorsQuery } from "../src/services/dashboard/topDonorsSql.js";
 import {
@@ -23,6 +23,7 @@ import {
   CREDIT_BY_PROJECT_SQL,
   DEFAULT_PROJECT_ID,
   DONORS_WITHOUT_PROJECT_SQL,
+  donorBelongedToProjectAtMonth,
 } from "../src/services/project/projectAssignmentSql.js";
 
 /**
@@ -2191,6 +2192,7 @@ test("abatement sheet emits one row per donor CPF with the auxiliary-aware descr
         ('a1', 'p-a1', 'JOAO AUXILIAR', '22222222222', 'CESTAS',  'auxiliary', 'p-h1',  TRUE),
         ('h2', 'p-h2', 'CARLOS SOZINHO','33333333333', 'REMEDIOS','holder',    NULL,    TRUE)
     `);
+    await seedAssignments(conn, ["h1", "a1", "h2"]);
     await conn.query(`
       INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active)
       VALUES
@@ -2210,7 +2212,9 @@ test("abatement sheet emits one row per donor CPF with the auxiliary-aware descr
         ('i3', 'imp', DATE '2026-04-01', '33333333333',  7, 0, 'h2', 'h2-titular', TRUE)
     `);
 
-    const stmt = await conn.prepare(ABATEMENT_SHEET_SQL);
+    const stmt = await conn.prepare(
+      buildAbatementSheetSql(DEFAULT_PROJECT_ID),
+    );
     let rows;
     try {
       rows = (await stmt.query("2026-04-01")).toArray();
@@ -2271,7 +2275,9 @@ test("abatement sheet emits one row per donor CPF with the auxiliary-aware descr
         (id, import_id, reference_month, cpf, notes_count, invalid_notes_count, matched_donor_id, matched_source_id, is_registered_donor)
       VALUES ('i4', 'imp-mai', DATE '2026-05-01', '11111111111', 99, 0, 'h1', 'h1-titular', TRUE)
     `);
-    const aprilStmt = await conn.prepare(ABATEMENT_SHEET_SQL);
+    const aprilStmt = await conn.prepare(
+      buildAbatementSheetSql(DEFAULT_PROJECT_ID),
+    );
     try {
       const aprilRows = (await aprilStmt.query("2026-04-01")).toArray();
       const aprilMaria = aprilRows.find((r) => String(r.cpf) === "11111111111");
@@ -3046,6 +3052,211 @@ test("each project only lists its own notes", async () => {
       moradia.map((row) => row.title),
       ["Lembrete de Moradia"],
     );
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * O recorte da Gestão Mensal usa o mês DA LINHA.
+ *
+ * Um doador transferido em abril tem março na apuração do projeto antigo e
+ * abril na do novo. Escopar pelo vínculo vigente arrastaria março junto — o
+ * histórico se movendo, que é justamente o que a vigência impede.
+ */
+test("monthly scoping follows the assignment in force at the row month", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#059669', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+      VALUES ('donor-x', 'Doador Transferido', '11111111111', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    // Moradia até março; Capoeira de abril em diante.
+    await conn.query(`
+      INSERT INTO donor_project_assignments
+        (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+      VALUES
+        ('dpa-antigo', 'donor-x', '${DEFAULT_PROJECT_ID}', DATE '${ASSIGNMENT_OPEN_START}', DATE '2026-03-01', 'inicial', CURRENT_TIMESTAMP),
+        ('dpa-novo', 'donor-x', 'prj-capoeira', DATE '2026-04-01', DATE '${ASSIGNMENT_OPEN_END}', 'transferencia', CURRENT_TIMESTAMP)
+    `);
+
+    await conn.query(`
+      INSERT INTO monthly_donor_summary (
+        id, import_id, donor_id, reference_month, cpf, donor_name,
+        notes_count, value_per_note, abatement_amount, abatement_status,
+        created_at, updated_at
+      )
+      VALUES
+        ('m-mar', 'imp', 'donor-x', DATE '2026-03-01', '11111111111', 'Doador Transferido', 3, 1.00, 3.00, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('m-abr', 'imp', 'donor-x', DATE '2026-04-01', '11111111111', 'Doador Transferido', 4, 1.00, 4.00, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    const monthsFor = async (projectId) => {
+      const rows = (
+        await conn.query(`
+          SELECT strftime(monthly_donor_summary.reference_month, '%Y-%m-%d') AS reference_month
+          FROM monthly_donor_summary
+          WHERE ${donorBelongedToProjectAtMonth(
+            "monthly_donor_summary.donor_id",
+            "monthly_donor_summary.reference_month",
+            projectId,
+          )}
+          ORDER BY reference_month
+        `)
+      ).toArray();
+
+      return rows.map((row) => String(row.reference_month));
+    };
+
+    assert.deepEqual(await monthsFor(DEFAULT_PROJECT_ID), ["2026-03-01"]);
+    assert.deepEqual(await monthsFor("prj-capoeira"), ["2026-04-01"]);
+  } finally {
+    await conn.close();
+  }
+});
+
+test("the abatement sheet only lists CPFs of the project apurating that month", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#059669', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, holder_person_id, is_active)
+      VALUES
+        ('d-moradia', 'p1', 'DOADOR MORADIA', '11111111111', 'CESTAS', 'holder', NULL, TRUE),
+        ('d-capoeira', 'p2', 'DOADOR CAPOEIRA', '22222222222', NULL, 'holder', NULL, TRUE)
+    `);
+    await conn.query(`
+      INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active)
+      VALUES
+        ('lk-moradia', 'd-moradia', 'DOADOR MORADIA', '11111111111', 'holder', TRUE),
+        ('lk-capoeira', 'd-capoeira', 'DOADOR CAPOEIRA', '22222222222', 'holder', TRUE)
+    `);
+    await conn.query(`
+      INSERT INTO donor_project_assignments
+        (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+      VALUES
+        ('dpa-m', 'd-moradia', '${DEFAULT_PROJECT_ID}', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP),
+        ('dpa-c', 'd-capoeira', 'prj-capoeira', DATE '${ASSIGNMENT_OPEN_START}', DATE '${ASSIGNMENT_OPEN_END}', 'inicial', CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO import_cpf_summary
+        (id, import_id, reference_month, cpf, notes_count, invalid_notes_count, matched_donor_id, matched_source_id, is_registered_donor)
+      VALUES
+        ('i1', 'imp', DATE '2026-04-01', '11111111111', 10, 0, 'd-moradia', 'lk-moradia', TRUE),
+        ('i2', 'imp', DATE '2026-04-01', '22222222222',  7, 0, 'd-capoeira', 'lk-capoeira', TRUE)
+    `);
+
+    const sheetFor = async (projectId) => {
+      const stmt = await conn.prepare(buildAbatementSheetSql(projectId));
+      try {
+        return (await stmt.query("2026-04-01")).toArray().map((row) => String(row.cpf));
+      } finally {
+        await stmt.close();
+      }
+    };
+
+    // A planilha vai para o sistema que dá baixa: levar o CPF do outro projeto
+    // abateria doação que não é daquela apuração.
+    assert.deepEqual(await sheetFor(DEFAULT_PROJECT_ID), ["11111111111"]);
+    assert.deepEqual(await sheetFor("prj-capoeira"), ["22222222222"]);
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Pessoas: listagem por projeto, identidade global.
+ *
+ * A separação é deliberada. A LISTA é do projeto — quem abre Capoeira não deve
+ * ver as pessoas de referência de Moradia. A IDENTIDADE não é: o CPF continua
+ * único na plataforma, senão a mesma pessoa seria cadastrada duas vezes, uma
+ * em cada projeto, e o vínculo doador → pessoa passaria a depender de onde o
+ * operador estava quando cadastrou.
+ *
+ * Este caminho ainda não é alcançável pela interface (o módulo Pessoas não é
+ * ligável em projeto novo), então a garantia fica aqui.
+ */
+test("people are listed per project but identified globally", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#059669', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO people (id, project_id, name, cpf, is_active, created_at, updated_at)
+      VALUES
+        ('p-moradia', '${DEFAULT_PROJECT_ID}', 'PESSOA DE MORADIA', '11111111111', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('p-capoeira', 'prj-capoeira', 'PESSOA DE CAPOEIRA', '22222222222', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    const listFor = async (projectId) => {
+      const rows = (
+        await conn.query(
+          `SELECT name FROM people WHERE is_active = TRUE AND project_id = '${projectId}' ORDER BY name`,
+        )
+      ).toArray();
+      return rows.map((row) => String(row.name));
+    };
+
+    assert.deepEqual(await listFor(DEFAULT_PROJECT_ID), ["PESSOA DE MORADIA"]);
+    assert.deepEqual(await listFor("prj-capoeira"), ["PESSOA DE CAPOEIRA"]);
+
+    // A busca por CPF — que sustenta a unicidade e o vínculo do doador — não
+    // filtra projeto: ela encontra a pessoa venha de onde vier.
+    const byCpf = (
+      await conn.query(
+        `SELECT id, project_id FROM people WHERE cpf = '22222222222' AND is_active = TRUE`,
+      )
+    ).toArray();
+
+    assert.equal(byCpf.length, 1);
+    assert.equal(byCpf[0].id, "p-capoeira");
+  } finally {
+    await conn.close();
+  }
+});
+
+test("migration v15 stamps people written before it with the default project", async () => {
+  const conn = await createTestConnection();
+  try {
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS schema_version (
+        id INTEGER, name TEXT, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    for (const migration of MIGRATIONS.filter((item) => item.id <= 14)) {
+      await migration.up(conn);
+      await conn.query(
+        `INSERT INTO schema_version (id, name) VALUES (${migration.id}, 'x')`,
+      );
+    }
+
+    await conn.query(`
+      INSERT INTO people (id, name, cpf, is_active, created_at, updated_at)
+      VALUES ('p-antiga', 'PESSOA ANTIGA', '11111111111', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    await runMigrations(conn);
+
+    const rows = (
+      await conn.query(`SELECT project_id FROM people WHERE id = 'p-antiga'`)
+    ).toArray();
+
+    // Sem o carimbo a pessoa sumiria da tela, já que a listagem passa a
+    // filtrar por projeto.
+    assert.equal(rows[0].project_id, DEFAULT_PROJECT_ID);
   } finally {
     await conn.close();
   }

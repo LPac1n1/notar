@@ -1,3 +1,5 @@
+import { donorBelongedToProjectAtMonth } from "../project/projectAssignmentSql.js";
+
 /**
  * SQL da planilha de abatimento (uma linha por CPF de doador que enviou notas
  * no mês). Isolado num módulo sem imports para o teste de integração rodar a
@@ -19,7 +21,13 @@
  *
  * Recebe o mês de referência como único parâmetro (`?`).
  */
-export const ABATEMENT_SHEET_SQL = `
+/**
+ * A planilha é a lista de CPFs a abater no mês, e o abatimento é do
+ * projeto que está apurando. O recorte usa o mês DA LINHA, então um doador
+ * transferido não leva os meses antigos para a planilha do projeto novo.
+ */
+export function buildAbatementSheetSql(projectId) {
+  return `
   SELECT
     donor_cpf_links.cpf AS cpf,
     donors.name AS donor_name,
@@ -44,6 +52,11 @@ export const ABATEMENT_SHEET_SQL = `
     ON donors.id = donor_cpf_links.donor_id
   WHERE import_cpf_summary.reference_month = ?
     AND import_cpf_summary.notes_count > 0
+    AND ${donorBelongedToProjectAtMonth(
+      "donors.id",
+      "import_cpf_summary.reference_month",
+      projectId,
+    )}
   GROUP BY
     donor_cpf_links.cpf,
     donors.name,
@@ -52,3 +65,4 @@ export const ABATEMENT_SHEET_SQL = `
     donors.person_id
   ORDER BY donors.name ASC, donor_cpf_links.cpf ASC
 `;
+}

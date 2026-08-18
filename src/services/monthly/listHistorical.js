@@ -1,3 +1,5 @@
+import { getActiveProjectId } from "../activeProject.js";
+import { donorBelongedToProjectAtMonth } from "../project/projectAssignmentSql.js";
 import {
   buildTextSearchCondition,
   normalizeCpf,
@@ -83,7 +85,16 @@ export async function listHistoricalMonthlySummaries({
   donorActiveStatus = "active",
   search = "",
 } = {}) {
-  const conditions = [];
+  const conditions = [
+    // Cada linha é um mês diferente, então o recorte usa a coluna de mês
+    // da própria linha: a visão histórica de um projeto mostra os meses em
+    // que o doador era dele, e só esses.
+    donorBelongedToProjectAtMonth(
+      "monthly_donor_summary.donor_id",
+      "monthly_donor_summary.reference_month",
+      getActiveProjectId(),
+    ),
+  ];
   const params = [];
 
   const searchCondition = buildTextSearchCondition(

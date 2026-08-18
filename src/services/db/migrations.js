@@ -10,6 +10,7 @@ import {
   BACKFILL_ASSIGNMENTS_SQL,
   BACKFILL_DEMAND_PROJECT_SQL,
   BACKFILL_NOTE_PROJECT_SQL,
+  BACKFILL_PERSON_PROJECT_SQL,
   ENSURE_DEFAULT_PROJECT_SQL,
 } from "../project/projectAssignmentSql.js";
 import { escapeSqlString } from "./sql.js";
@@ -1070,6 +1071,37 @@ export const MIGRATIONS = [
         .catch((error) => {
           console.warn(
             "Migration v14: skipping index idx_notes_project.",
+            error,
+          );
+        });
+    },
+  },
+  {
+    id: 15,
+    name: "people-belong-to-a-project",
+    up: async (conn) => {
+      // A tela Pessoas lista pessoas de REFERÊNCIA — as que existem só para
+      // servir de vínculo informativo de um auxiliar. Não há doador de onde
+      // deduzir o projeto delas, então o projeto vira coluna.
+      //
+      // A identidade continua GLOBAL: `uq_people_cpf` não muda e as buscas
+      // por CPF seguem sem filtro de projeto. Uma pessoa é uma pessoa em
+      // qualquer projeto — o que passa a ser por projeto é a LISTAGEM.
+      await conn.query(`
+        ALTER TABLE people
+        ADD COLUMN IF NOT EXISTS project_id TEXT
+      `);
+
+      await conn.query(ENSURE_DEFAULT_PROJECT_SQL);
+      await conn.query(BACKFILL_PERSON_PROJECT_SQL);
+
+      await conn
+        .query(
+          `CREATE INDEX IF NOT EXISTS idx_people_project ON people(project_id)`,
+        )
+        .catch((error) => {
+          console.warn(
+            "Migration v15: skipping index idx_people_project.",
             error,
           );
         });

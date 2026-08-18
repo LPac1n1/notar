@@ -7,6 +7,7 @@ import {
   query,
   queryPrepared,
 } from "./db";
+import { getActiveProjectId } from "./activeProject.js";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { createTrashItem } from "./trashService";
 import { formatCpf } from "../utils/cpf";
@@ -157,8 +158,15 @@ function buildPeopleListConditions({
   role = "",
   search = "",
 } = {}) {
-  const conditions = ["people.is_active = TRUE"];
-  const params = [];
+  // O projeto entra no predicado COMPARTILHADO por listagem e contagem —
+  // separar os dois já produziu total inflado e última página vazia aqui.
+  //
+  // `findPersonById` e `findPersonByCpf` seguem sem este filtro de
+  // propósito: eles servem à unicidade de CPF e ao vínculo de doador, que
+  // são globais. Filtrar lá faria o sistema aceitar a mesma pessoa duas
+  // vezes, uma em cada projeto.
+  const conditions = ["people.is_active = TRUE", "people.project_id = ?"];
+  const params = [getActiveProjectId()];
 
   const searchCondition = buildTextSearchCondition(search, [
     { expression: "people.name" },
@@ -294,14 +302,15 @@ export async function createPerson({
     `
       INSERT INTO people (
         id,
+        project_id,
         name,
         cpf,
         is_active,
         updated_at
       )
-      VALUES (?, ?, ?, TRUE, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP)
     `,
-    [id, normalizedName, normalizedCpf],
+    [id, getActiveProjectId(), normalizedName, normalizedCpf],
     { source: "people", domains: ["people"] },
   );
 

@@ -47,6 +47,7 @@ export const RESTORE_TABLE_COLUMNS = {
   ],
   people: [
     "id",
+    "project_id",
     "name",
     "cpf",
     "is_active",
@@ -271,6 +272,7 @@ export async function exportDatabaseSnapshot() {
   const people = await query(`
     SELECT
       id,
+      project_id,
       name,
       cpf,
       is_active,

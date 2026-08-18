@@ -1,7 +1,8 @@
 import { queryPrepared, startOfMonth } from "../db";
 import { formatCpf } from "../../utils/cpf";
 import { buildAbatementDescription } from "./abatementSheetDescription";
-import { ABATEMENT_SHEET_SQL } from "./abatementSheetSql";
+import { buildAbatementSheetSql } from "./abatementSheetSql";
+import { getActiveProjectId } from "../activeProject.js";
 
 export { buildAbatementDescription };
 
@@ -16,7 +17,9 @@ export async function listAbatementSheetRows({ referenceMonth } = {}) {
     return [];
   }
 
-  const rows = await queryPrepared(ABATEMENT_SHEET_SQL, [normalizedMonth]);
+  const rows = await queryPrepared(buildAbatementSheetSql(getActiveProjectId()), [
+    normalizedMonth,
+  ]);
 
   return rows.map((row) => {
     const donorName = row.donor_name ?? "";

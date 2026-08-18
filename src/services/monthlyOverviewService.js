@@ -1,3 +1,5 @@
+import { getActiveProjectId } from "./activeProject.js";
+import { donorBelongedToProjectAtMonth } from "./project/projectAssignmentSql.js";
 import { query } from "./db";
 
 /**
@@ -126,6 +128,13 @@ export async function getMonthlyImportsOverview() {
             )
           ) AS is_actionable
         FROM monthly_donor_summary
+        -- O rollup de abatimento é do projeto que apura. Sem o recorte,
+        -- a visão por mês somaria as pendências de todos os projetos.
+        WHERE ${donorBelongedToProjectAtMonth(
+          "monthly_donor_summary.donor_id",
+          "monthly_donor_summary.reference_month",
+          getActiveProjectId(),
+        )}
       ) AS mds
       GROUP BY mds.reference_month
     `),
