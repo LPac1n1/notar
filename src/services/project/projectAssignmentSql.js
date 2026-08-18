@@ -120,6 +120,20 @@ export const BACKFILL_ASSIGNMENTS_SQL = `
  * Também roda depois do restore: um backup anterior à v13 não traz a coluna,
  * e demanda com `project_id` nulo não apareceria em projeto nenhum.
  */
+/**
+ * Anotações existentes vão para o projeto padrão.
+ *
+ * Anotação é contexto de trabalho — quem abre Capoeira não deve ler os
+ * lembretes de Moradia. Roda também no bootstrap, para que restaurar um
+ * backup anterior a esta migration não deixe anotações sem projeto (elas
+ * sumiriam de todas as telas, já que a listagem filtra por projeto).
+ */
+export const BACKFILL_NOTE_PROJECT_SQL = `
+  UPDATE notes
+  SET project_id = '${DEFAULT_PROJECT_ID}'
+  WHERE project_id IS NULL OR trim(project_id) = ''
+`;
+
 export const BACKFILL_DEMAND_PROJECT_SQL = `
   UPDATE demands
   SET project_id = '${DEFAULT_PROJECT_ID}'

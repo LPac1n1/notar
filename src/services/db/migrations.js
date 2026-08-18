@@ -9,6 +9,7 @@ import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
 import {
   BACKFILL_ASSIGNMENTS_SQL,
   BACKFILL_DEMAND_PROJECT_SQL,
+  BACKFILL_NOTE_PROJECT_SQL,
   ENSURE_DEFAULT_PROJECT_SQL,
 } from "../project/projectAssignmentSql.js";
 import { escapeSqlString } from "./sql.js";
@@ -1043,6 +1044,35 @@ export const MIGRATIONS = [
           `CREATE INDEX IF NOT EXISTS idx_demands_project ON demands(project_id)`,
         )
         .catch(() => {});
+    },
+  },
+  {
+    id: 14,
+    name: "notes-belong-to-a-project",
+    up: async (conn) => {
+      // Anotação é contexto de trabalho de um projeto, não da plataforma:
+      // quem abre Capoeira não deve encontrar os lembretes de Moradia.
+      //
+      // Diferente de `demands`, não há índice único de nome a refazer —
+      // duas anotações podem ter o mesmo título no mesmo projeto.
+      await conn.query(`
+        ALTER TABLE notes
+        ADD COLUMN IF NOT EXISTS project_id TEXT
+      `);
+
+      await conn.query(ENSURE_DEFAULT_PROJECT_SQL);
+      await conn.query(BACKFILL_NOTE_PROJECT_SQL);
+
+      await conn
+        .query(
+          `CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id)`,
+        )
+        .catch((error) => {
+          console.warn(
+            "Migration v14: skipping index idx_notes_project.",
+            error,
+          );
+        });
     },
   },
 ];

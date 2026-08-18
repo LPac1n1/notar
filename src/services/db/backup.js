@@ -124,6 +124,7 @@ export const RESTORE_TABLE_COLUMNS = {
   ],
   notes: [
     "id",
+    "project_id",
     "title",
     "content",
     "color",
@@ -381,6 +382,7 @@ export async function exportDatabaseSnapshot() {
   const notes = await query(`
     SELECT
       id,
+      project_id,
       title,
       content,
       color,

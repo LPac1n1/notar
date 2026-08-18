@@ -18,6 +18,7 @@ import {
   ASSIGNMENT_OPEN_END,
   ASSIGNMENT_OPEN_START,
   BACKFILL_ASSIGNMENTS_SQL,
+  BACKFILL_NOTE_PROJECT_SQL,
   COUNT_DONORS_WITHOUT_PROJECT_SQL,
   CREDIT_BY_PROJECT_SQL,
   DEFAULT_PROJECT_ID,
@@ -2938,6 +2939,113 @@ test("credit of a deleted project falls into unattributed instead of vanishing",
     // de "não atribuído".
     assert.equal(total, 9);
     assert.equal(unattributed, 9);
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Anotações pertencem a um projeto.
+ *
+ * Antes da v14 a tabela `notes` não tinha projeto, então a mesma lista
+ * aparecia em todos — quem abria um projeto novo encontrava os lembretes do
+ * principal.
+ */
+test("migration v14 stamps notes written before it with the default project", async () => {
+  const conn = await createTestConnection();
+  try {
+    // Reproduz um banco parado na v13: aplica as migrations de produção até
+    // ali e carimba a versão, para que runMigrations siga daí.
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS schema_version (
+        id INTEGER, name TEXT, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    for (const migration of MIGRATIONS.filter((item) => item.id <= 13)) {
+      await migration.up(conn);
+      await conn.query(
+        `INSERT INTO schema_version (id, name) VALUES (${migration.id}, 'x')`,
+      );
+    }
+
+    await conn.query(`
+      INSERT INTO notes (id, title, content, color, created_at, updated_at)
+      VALUES ('nota-antiga', 'Lembrete de Moradia', 'texto', '#4f46e5', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    await runMigrations(conn);
+
+    const rows = (
+      await conn.query(`SELECT project_id FROM notes WHERE id = 'nota-antiga'`)
+    ).toArray();
+
+    // Sem o backfill a anotação ficaria com project_id nulo e sumiria de
+    // todas as telas, já que a listagem passa a filtrar por projeto.
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].project_id, DEFAULT_PROJECT_ID);
+  } finally {
+    await conn.close();
+  }
+});
+
+test("the bootstrap backfill rescues notes restored from a pre-v14 backup", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+
+    // Um backup anterior à v14 não traz project_id: as linhas voltam nulas.
+    await conn.query(`
+      INSERT INTO notes (id, project_id, title, content, color, created_at, updated_at)
+      VALUES ('nota-restaurada', NULL, 'Veio de backup antigo', '', '#4f46e5', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(BACKFILL_NOTE_PROJECT_SQL);
+
+    const rows = (
+      await conn.query(
+        `SELECT project_id FROM notes WHERE id = 'nota-restaurada'`,
+      )
+    ).toArray();
+
+    assert.equal(rows[0].project_id, DEFAULT_PROJECT_ID);
+  } finally {
+    await conn.close();
+  }
+});
+
+test("each project only lists its own notes", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#059669', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO notes (id, project_id, title, content, color, created_at, updated_at)
+      VALUES
+        ('n-moradia', '${DEFAULT_PROJECT_ID}', 'Lembrete de Moradia', '', '#4f46e5', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('n-capoeira', 'prj-capoeira', 'Lembrete de Capoeira', '', '#059669', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    const capoeira = (
+      await conn.query(
+        `SELECT title FROM notes WHERE project_id = 'prj-capoeira'`,
+      )
+    ).toArray();
+    const moradia = (
+      await conn.query(
+        `SELECT title FROM notes WHERE project_id = '${DEFAULT_PROJECT_ID}'`,
+      )
+    ).toArray();
+
+    assert.deepEqual(
+      capoeira.map((row) => row.title),
+      ["Lembrete de Capoeira"],
+    );
+    assert.deepEqual(
+      moradia.map((row) => row.title),
+      ["Lembrete de Moradia"],
+    );
   } finally {
     await conn.close();
   }

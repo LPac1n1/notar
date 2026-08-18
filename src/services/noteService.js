@@ -2,7 +2,8 @@ import { nanoid } from "nanoid";
 import { normalizeDemandColor } from "../utils/demandColor";
 import { DEFAULT_NOTE_COLOR } from "../utils/noteColor";
 import { createActionHistoryEntry } from "./actionHistoryService";
-import { escapeSqlString, execute, executePrepared, query } from "./db";
+import { escapeSqlString, execute, executePrepared, queryPrepared } from "./db";
+import { getActiveProjectId } from "./activeProject.js";
 
 function mapNoteRow(row) {
   return {
@@ -23,8 +24,15 @@ function normalizeNotePayload({ title = "", content = "", color = DEFAULT_NOTE_C
   };
 }
 
+/**
+ * Anotações do projeto ativo.
+ *
+ * O filtro por projeto é o que separa os contextos: sem ele, quem abre um
+ * projeto novo encontra os lembretes do projeto principal.
+ */
 export async function listNotes() {
-  const rows = await query(`
+  const rows = await queryPrepared(
+    `
     SELECT
       id,
       title,
@@ -33,8 +41,11 @@ export async function listNotes() {
       strftime(created_at, '%Y-%m-%d %H:%M:%S') AS created_at,
       strftime(updated_at, '%Y-%m-%d %H:%M:%S') AS updated_at
     FROM notes
+    WHERE project_id = ?
     ORDER BY updated_at DESC, created_at DESC, id ASC
-  `);
+  `,
+    [getActiveProjectId()],
+  );
 
   return rows.map(mapNoteRow);
 }
@@ -58,10 +69,16 @@ export async function createNote({
   // `useDatabaseChangeEffect({ ignoreSources: ["notes"] })`.
   await executePrepared(
     `
-      INSERT INTO notes (id, title, content, color, created_at, updated_at)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO notes (id, project_id, title, content, color, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
-    [id, normalizedNote.title, normalizedNote.content, normalizedNote.color],
+    [
+      id,
+      getActiveProjectId(),
+      normalizedNote.title,
+      normalizedNote.content,
+      normalizedNote.color,
+    ],
     { source: "notes" },
   );
 
@@ -130,12 +147,15 @@ export async function deleteNote(id) {
     return;
   }
 
-  const noteRows = await query(`
+  const noteRows = await queryPrepared(
+    `
     SELECT title
     FROM notes
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
   const noteTitle = noteRows[0]?.title ?? "Anotação";
 
   await execute(
