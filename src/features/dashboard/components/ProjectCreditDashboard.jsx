@@ -9,6 +9,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import CopyableCpf from "../../donors/components/CopyableCpf";
 import CopyableDonorName from "../../donors/components/CopyableDonorName";
 import MonthlyTrendChart from "./MonthlyTrendChart";
+import ProjectDonorCreditSection from "./ProjectDonorCreditSection";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { useDataResource } from "../../../hooks/useDataResource";
 import { getProjectCreditOverview } from "../../../services/projectCreditService";
@@ -21,7 +22,6 @@ const INITIAL_DATA = {
   latestMonth: null,
   months: [],
   donorCount: 0,
-  topDonors: [],
   donorsWithoutCredit: [],
 };
 
@@ -257,43 +257,7 @@ export default function ProjectCreditDashboard({ project }) {
           </SectionCard>
 
           {/* ─── Quem sustenta ───────────────────────────────────────── */}
-          <SectionCard
-            title="Crédito por doador"
-            description="Quanto cada doador deste projeto já gerou."
-          >
-            {overview.topDonors.length ? (
-              <div className="space-y-3">
-                {overview.topDonors.map((donor, index) => (
-                  <div
-                    key={donor.donorId}
-                    className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:grid-cols-[auto_1fr_auto]"
-                  >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[color:var(--surface-muted)] text-sm font-semibold text-[var(--text-soft)]">
-                      {index + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <CopyableDonorName className="font-medium" name={donor.donorName} />
-                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-[var(--muted)]">
-                        <CopyableCpf value={donor.cpf} />
-                        <span>• {formatInteger(donor.monthCount)} mês(es) com doação</span>
-                      </p>
-                    </div>
-                    <div className="text-left md:text-right">
-                      <p className="text-sm text-[var(--muted)]">Crédito</p>
-                      <p className="font-semibold whitespace-nowrap text-[var(--text-main)]">
-                        {formatCurrency(donor.totalCredit)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="Nenhum crédito conciliado"
-                description="Assim que uma planilha do mês for importada e conciliada, o crédito de cada doador aparece aqui."
-              />
-            )}
-          </SectionCard>
+          <ProjectDonorCreditSection months={overview.months} />
 
           {/* ─── Falta alguma coisa? ─────────────────────────────────── */}
           {overview.donorsWithoutCredit.length > 0 ? (

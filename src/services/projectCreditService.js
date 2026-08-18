@@ -22,10 +22,9 @@ import { ASSIGNMENT_OPEN_END } from "./project/projectAssignmentSql.js";
 export async function getProjectCreditOverview() {
   const projectId = getActiveProjectId();
 
-  const [monthRows, donorRows, withoutCreditRows, donorCountRows] =
+  const [monthRows, withoutCreditRows, donorCountRows] =
     await Promise.all([
       query(buildProjectCreditByMonthSql(projectId)),
-      query(buildProjectCreditByDonorSql(projectId, { limit: 10 })),
       query(buildProjectDonorsWithoutCreditSql(projectId)),
       queryPrepared(
         `
@@ -58,13 +57,6 @@ export async function getProjectCreditOverview() {
     latestMonth,
     months,
     donorCount: Number(donorCountRows[0]?.total ?? 0),
-    topDonors: donorRows.map((row) => ({
-      donorId: row.donor_id,
-      donorName: row.donor_name,
-      cpf: row.cpf,
-      totalCredit: Number(row.total_credit ?? 0),
-      monthCount: Number(row.month_count ?? 0),
-    })),
     // Doador cadastrado que nunca gerou crédito. Num projeto de crédito é a
     // pergunta mais frequente, e a causa costuma ser CPF não informado no
     // estabelecimento — não erro do sistema.
@@ -74,4 +66,32 @@ export async function getProjectCreditOverview() {
       cpf: row.cpf,
     })),
   };
+}
+
+/**
+ * Ranking de crédito por doador, opcionalmente de um mês só.
+ *
+ * Recurso separado do painel de propósito: trocar o mês aqui não pode
+ * reprocessar as agregações do resto da tela. As OPÇÕES de mês também não
+ * saem daqui — elas reaproveitam a série que o painel já carregou, senão
+ * cada troca de mês refaria a consulta que monta a própria lista de meses.
+ */
+export async function listProjectCreditByDonor({
+  referenceMonth = "",
+  limit = 10,
+} = {}) {
+  const rows = await query(
+    buildProjectCreditByDonorSql(getActiveProjectId(), {
+      limit,
+      referenceMonth,
+    }),
+  );
+
+  return rows.map((row) => ({
+    donorId: row.donor_id,
+    donorName: row.donor_name,
+    cpf: row.cpf,
+    totalCredit: Number(row.total_credit ?? 0),
+    monthCount: Number(row.month_count ?? 0),
+  }));
 }

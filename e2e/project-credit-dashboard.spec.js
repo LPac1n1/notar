@@ -125,3 +125,59 @@ test("a tabela mostra o crédito de cada mês e a variação entre eles", async 
   // O primeiro mês da série não subiu nem caiu — ele começou.
   await expect(janeiro.getByText("—")).toBeVisible();
 });
+
+/**
+ * O ranking recortado por mês.
+ *
+ * A fixture é montada para o recorte MUDAR a lista: Carla só começa em
+ * março, então em janeiro ela não pode aparecer. Um filtro inerte devolveria
+ * os três doadores e o teste pegaria.
+ */
+test("o crédito por doador pode ser recortado por mês", async ({ page }) => {
+  const backupPath = fileURLToPath(
+    new URL("./fixtures/project-credit-backup.json", import.meta.url),
+  );
+
+  await page.goto("/p/demandas-de-moradia");
+  await page.getByRole("link", { name: "Configurações" }).click();
+  await page.getByRole("heading", { name: "Cópia de segurança" }).click();
+  await page.locator('input[type="file"]').setInputFiles(backupPath);
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Restaurar backup" })
+    .getByRole("button", { name: "Restaurar backup" })
+    .click({ force: true });
+  await expect(page.getByText("Backup importado:")).toBeVisible();
+
+  await page.locator("aside").first().getByRole("button").first().click();
+  await page.getByText("Capoeira").first().click();
+  await expect(page).toHaveURL(/\/p\/capoeira$/);
+
+  const section = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Crédito por doador" }) });
+
+  // Sem recorte: o total de todos os meses, com os três doadores.
+  await expect(section.getByText("ANA CAPOEIRA")).toBeVisible();
+  await expect(section.getByText("R$ 850,00")).toBeVisible();
+  await expect(section.getByText("CARLA CAPOEIRA")).toBeVisible();
+
+  await section
+    .locator('[data-select-name="referenceMonth"]')
+    .getByRole("button")
+    .first()
+    .click();
+  await page
+    .getByRole("listbox")
+    .last()
+    .getByRole("option", { name: "Janeiro de 2026" })
+    .click();
+
+  // Janeiro: só Ana e Bruno, com os valores daquele mês.
+  await expect(section.getByText("R$ 120,00")).toBeVisible();
+  await expect(section.getByText("R$ 90,00")).toBeVisible();
+  await expect(section.getByText("CARLA CAPOEIRA")).toHaveCount(0);
+
+  // Com um mês fixo a contagem de meses seria sempre 1 — some da tela.
+  await expect(section.getByText("mês(es) com doação")).toHaveCount(0);
+});

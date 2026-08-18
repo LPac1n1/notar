@@ -3261,3 +3261,55 @@ test("migration v15 stamps people written before it with the default project", a
     await conn.close();
   }
 });
+
+/**
+ * Ranking de doador recortado por mês.
+ *
+ * A fixture é montada para que a ordem MUDE conforme o mês: no total Ana
+ * lidera, mas em abril quem lidera é Carla. Se o filtro fosse inerte, o teste
+ * passaria de qualquer jeito — é o recorte trocar o pódio que prova que ele
+ * está sendo aplicado.
+ */
+test("the donor ranking can be narrowed to a single month", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedProjectCreditFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    const rankingFor = async (referenceMonth) => {
+      const rows = (
+        await conn.query(
+          buildProjectCreditByDonorSql("prj-capoeira", {
+            limit: 10,
+            referenceMonth,
+          }),
+        )
+      ).toArray();
+
+      return rows.map((row) => [
+        String(row.donor_name),
+        Number(row.total_credit),
+      ]);
+    };
+
+    // Sem recorte: soma de março (2) e abril (3) para Carla.
+    assert.deepEqual(await rankingFor(""), [["Carla Capoeira", 5]]);
+
+    // Só março, só abril.
+    assert.deepEqual(await rankingFor("2026-03-01"), [["Carla Capoeira", 2]]);
+    assert.deepEqual(await rankingFor("2026-04-01"), [["Carla Capoeira", 3]]);
+
+    // Mês sem crédito nenhum devolve lista vazia, e não a soma de tudo — o
+    // erro que um filtro ignorado produziria.
+    assert.deepEqual(await rankingFor("2026-01-01"), []);
+
+    // Valor fora do formato de mês é ignorado com segurança: cai no total,
+    // sem interferir no SQL.
+    assert.deepEqual(await rankingFor("'; DROP TABLE donors; --"), [
+      ["Carla Capoeira", 5],
+    ]);
+  } finally {
+    await conn.close();
+  }
+});

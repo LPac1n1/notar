@@ -45,8 +45,17 @@ export function buildProjectCreditByMonthSql(projectId) {
  * `INNER JOIN donors` porque o ranking é uma lista de pessoas: um crédito
  * cujo doador não existe mais não tem nome para mostrar.
  */
-export function buildProjectCreditByDonorSql(projectId, { limit = 10 } = {}) {
+export function buildProjectCreditByDonorSql(
+  projectId,
+  { limit = 10, referenceMonth = '' } = {},
+) {
   const safeLimit = Number(limit) > 0 ? Math.floor(Number(limit)) : 10;
+  // O mês vem da própria série do projeto, mas é validado assim mesmo:
+  // este módulo monta SQL por interpolação (não aceita parâmetro), então
+  // o formato é a única garantia de que nada mais entra aqui.
+  const monthFilter = /^\d{4}-\d{2}-\d{2}$/.test(referenceMonth)
+    ? `AND credit.reference_month = '${referenceMonth}'`
+    : "";
 
   return `
     WITH credit AS (${MATCHED_CREDIT_BY_DONOR_MONTH})
@@ -64,6 +73,7 @@ export function buildProjectCreditByDonorSql(projectId, { limit = 10 } = {}) {
     })}
     INNER JOIN donors ON donors.id = credit.donor_id
     WHERE dpa.project_id = '${safeProjectId(projectId)}'
+      ${monthFilter}
     GROUP BY credit.donor_id, donors.name, donors.cpf
     ORDER BY total_credit DESC, donors.name ASC
     LIMIT ${safeLimit}
