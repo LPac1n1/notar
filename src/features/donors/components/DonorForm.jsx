@@ -7,6 +7,12 @@ import TextInput from "../../../components/ui/TextInput";
  * não o usa, o campo não fica vazio nem opcional: ele não existe. A demanda
  * subdivide o projeto, então oferecê-la onde não há nenhuma pede um dado que
  * não pode ser preenchido.
+ *
+ * `showDonorRoles` segue a Gestão Mensal. Titular e auxiliar existem para o
+ * rollup mensal — a nota do auxiliar sobe para o titular. Sem apuração, o
+ * crédito é agrupado pelo CPF de cada doador e os dois papéis dariam o mesmo
+ * resultado: o campo pediria uma escolha sem consequência, e o vínculo que
+ * ele destrava não teria efeito nenhum sobre os números.
  */
 export default function DonorForm({
   demandOptions,
@@ -17,19 +23,22 @@ export default function DonorForm({
   onChange,
   selectedHolder,
   showDemand = true,
+  showDonorRoles = true,
   typeOptions,
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <SelectInput
-        label="Tipo de doador"
-        name="donorType"
-        value={form.donorType}
-        onChange={onChange}
-        options={typeOptions}
-        placeholder="Tipo de doador"
-        error={errors.donorType}
-      />
+      {showDonorRoles ? (
+        <SelectInput
+          label="Tipo de doador"
+          name="donorType"
+          value={form.donorType}
+          onChange={onChange}
+          options={typeOptions}
+          placeholder="Tipo de doador"
+          error={errors.donorType}
+        />
+      ) : null}
 
       {showDemand ? (
         <SelectInput
@@ -45,7 +54,7 @@ export default function DonorForm({
         />
       ) : null}
 
-      {form.donorType === "auxiliary" ? (
+      {showDonorRoles && form.donorType === "auxiliary" ? (
         <div className="space-y-1.5 md:col-span-2">
           <SelectInput
             label="Vincular a"

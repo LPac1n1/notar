@@ -75,7 +75,7 @@ const countReferencePeople = (currentFilters) =>
 
 export default function People() {
   // A demanda só é obrigatória em projeto que usa o módulo Demandas.
-  const { hasDemands } = useProjectModules();
+  const { hasDemands, hasDonorRoles } = useProjectModules();
   const [filters, setFilters] = useState({ ...INITIAL_FILTERS });
   const [allPeople, setAllPeople] = useState([]);
   const [demands, setDemands] = useState([]);
@@ -678,6 +678,7 @@ export default function People() {
           <ConvertPersonToDonorModal
             demandOptions={donorFormDemandOptions}
             showDemand={hasDemands}
+            showDonorRoles={hasDonorRoles}
             errors={convertFormErrors}
             feedbackMessage={formError}
             form={convertForm}

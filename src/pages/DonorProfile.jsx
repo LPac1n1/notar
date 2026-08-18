@@ -48,14 +48,25 @@ export default function DonorProfile() {
   const location = useLocation();
   const navigate = useNavigate();
   const projectPath = useProjectPath();
-  const { hasDemands, hasMonthly } = useProjectModules();
+  const { hasDemands, hasDonorRoles, hasMonthly } = useProjectModules();
+
+  // CPF, início e status são fixos; tipo e demanda entram conforme o módulo.
+  // As classes precisam ser literais: o Tailwind varre o código-fonte em
+  // busca do nome exato, então uma classe montada por interpolação nunca
+  // chega a ser gerada e o grid simplesmente não existiria.
+  const summaryGridClass =
+    hasDonorRoles && hasDemands
+      ? "md:grid-cols-5"
+      : hasDonorRoles || hasDemands
+        ? "md:grid-cols-4"
+        : "md:grid-cols-3";
 
   // Sem apuração mensal não há abatimento: o perfil vira identidade + crédito
   // gerado. Os blocos de acumulado, ajustes e histórico mensal descrevem um
   // fluxo que esse projeto não executa.
   const profileSubtitle = hasMonthly
     ? "Perfil completo do doador, com abatimentos separados e vínculos informativos."
-    : "Perfil do doador, com o crédito gerado e os vínculos informativos.";
+    : "Perfil do doador, com o crédito gerado e o projeto a que ele pertence.";
   const [successMessage, setSuccessMessage] = useState("");
   const [successAction, setSuccessAction] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -298,13 +309,15 @@ export default function DonorProfile() {
         />
       ) : null}
 
-      <div className={`mb-6 grid gap-3 ${hasDemands ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
-        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-          <p className="text-sm text-[var(--muted)]">Tipo</p>
-          <div className="mt-2">
-            <StatusBadge status={donor.donorType} />
+      <div className={`mb-6 grid gap-3 ${summaryGridClass}`}>
+        {hasDonorRoles ? (
+          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
+            <p className="text-sm text-[var(--muted)]">Tipo</p>
+            <div className="mt-2">
+              <StatusBadge status={donor.donorType} />
+            </div>
           </div>
-        </div>
+        ) : null}
         <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
           <p className="text-sm text-[var(--muted)]">CPF</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -354,11 +367,13 @@ export default function DonorProfile() {
         </p>
       ) : null}
 
-      <DonorLinkedSection
-        donor={donor}
-        auxiliaryDonors={profile.auxiliaryDonors}
-        onNavigateToRelated={navigateToRelatedDonor}
-      />
+      {hasDonorRoles ? (
+        <DonorLinkedSection
+          donor={donor}
+          auxiliaryDonors={profile.auxiliaryDonors}
+          onNavigateToRelated={navigateToRelatedDonor}
+        />
+      ) : null}
 
       <DonorProjectSection donor={donor} />
 

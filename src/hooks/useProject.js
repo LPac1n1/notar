@@ -56,5 +56,11 @@ export function useProjectModules() {
     // A Gestão Mensal é o que traz abatimento, acumulado e histórico mensal.
     // Um projeto sem ela acompanha crédito, não apuração.
     hasMonthly: modules?.monthly !== false,
+    // Titular x auxiliar só tem consequência dentro da apuração mensal: é lá
+    // que a nota do auxiliar sobe para o titular (o resumo mensal junta por
+    // `holder_person_id`). O crédito agrupa por CPF do próprio doador e não
+    // faz esse rollup — num projeto de crédito os dois papéis produziriam
+    // exatamente o mesmo número, e o campo pediria uma decisão sem efeito.
+    hasDonorRoles: modules?.monthly !== false,
   };
 }

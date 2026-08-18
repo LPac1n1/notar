@@ -141,7 +141,7 @@ function DonorListItemBase({
   onReactivate,
   onRemove,
 }) {
-  const { hasDemands } = useProjectModules();
+  const { hasDemands, hasDonorRoles } = useProjectModules();
 
   return (
     <li className="group flex flex-col gap-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 md:flex-row md:items-stretch md:justify-between">
@@ -157,7 +157,7 @@ function DonorListItemBase({
                 {donor.name}
               </button>
             </CopyableValue>
-            <StatusBadge status={donor.donorType} />
+            {hasDonorRoles ? <StatusBadge status={donor.donorType} /> : null}
             {!donor.isActive ? (
               <>
                 <StatusBadge status="inactive" />
@@ -206,7 +206,7 @@ function DonorListItemBase({
           </p>
         ) : null}
 
-        {donor.donorType === "auxiliary" ? (
+        {hasDonorRoles && donor.donorType === "auxiliary" ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-[var(--muted)]">Vinculado a</span>
             <span className="rounded-md border border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1 font-medium text-[var(--text-soft)]">

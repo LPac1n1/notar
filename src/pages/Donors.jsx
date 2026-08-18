@@ -79,7 +79,7 @@ export default function Donors() {
   const location = useLocation();
   const navigate = useNavigate();
   // A demanda só é obrigatória em projeto que usa o módulo Demandas.
-  const { hasDemands, hasMonthly } = useProjectModules();
+  const { hasDemands, hasDonorRoles, hasMonthly } = useProjectModules();
 
   // "Abatimento" é vocabulário da apuração mensal. Num projeto que só
   // acompanha o crédito gerado, prometer abatimento na tela de cadastro
@@ -485,7 +485,10 @@ export default function Donors() {
       setSuccessMessage("");
       setSuccessAction(null);
       setIsExporting(true);
-      const result = await exportDonorsCsv(filters, { includeDemand: hasDemands });
+      const result = await exportDonorsCsv(filters, {
+        includeDemand: hasDemands,
+        includeDonorType: hasDonorRoles,
+      });
       await createActionHistoryEntry({
         actionType: "export",
         entityType: "export",
@@ -619,14 +622,16 @@ export default function Donors() {
               searchPlaceholder="Buscar demanda..."
             />
           ) : null}
-          <SelectInput
-            label="Tipo"
-            name="donorType"
-            value={filters.donorType}
-            onChange={handleFilterChange}
-            options={DONOR_TYPE_OPTIONS}
-            placeholder="Todos os tipos"
-          />
+          {hasDonorRoles ? (
+            <SelectInput
+              label="Tipo"
+              name="donorType"
+              value={filters.donorType}
+              onChange={handleFilterChange}
+              options={DONOR_TYPE_OPTIONS}
+              placeholder="Todos os tipos"
+            />
+          ) : null}
           <SelectInput
             label="Início das doações"
             name="donationStartDate"
@@ -754,6 +759,7 @@ export default function Donors() {
             <DonorForm
               demandOptions={donorFormDemandOptions}
               showDemand={hasDemands}
+              showDonorRoles={hasDonorRoles}
               errors={createFormErrors}
               form={createForm}
               holderOptions={createHolderOptions}
@@ -779,6 +785,7 @@ export default function Donors() {
             <DonorForm
               demandOptions={donorFormDemandOptions}
               showDemand={hasDemands}
+              showDonorRoles={hasDonorRoles}
               errors={editFormErrors}
               form={editForm}
               holderOptions={editHolderOptions}
