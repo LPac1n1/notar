@@ -74,6 +74,8 @@ export async function listMonthlyTrend() {
       totalNotes: toNumber(row.total_notes),
       totalAbatement: toNumber(row.total_abatement),
       donorCount: toNumber(row.donor_count),
+      totalCredit: toNumber(row.total_credit),
+      netGain: toNumber(row.net_gain),
     }))
     .reverse();
 }

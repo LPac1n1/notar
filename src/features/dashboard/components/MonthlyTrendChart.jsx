@@ -17,12 +17,14 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
  */
 
 const METRICS = [
-  { key: "totalAbatement", label: "Abatimento", format: formatCurrency },
+  { key: "totalCredit", label: "Crédito", format: formatCurrency },
+  // O que sobra para a entidade: crédito conciliado menos o que já foi
+  // efetivamente abatido. Pode ser NEGATIVO num mês em que se abateu mais do
+  // que entrou de crédito — e ver isso é o ponto da métrica.
+  { key: "netGain", label: "Ganho líquido", format: formatCurrency },
+  { key: "totalAbatement", label: "Abatido", format: formatCurrency },
   { key: "totalNotes", label: "Notas", format: formatInteger },
   { key: "donorCount", label: "Doadores", format: formatInteger },
-  // Usado pelo painel de projetos de crédito, onde só existe uma métrica que
-  // faz sentido — e por isso lá a alternância nem aparece.
-  { key: "totalCredit", label: "Crédito", format: formatCurrency },
 ];
 
 const GRID_STEPS = [1, 0.5, 0];
@@ -37,10 +39,36 @@ const GRID_STEPS = [1, 0.5, 0];
 const COLUMN_MAX_WIDTH = "max-w-[4.5rem]";
 
 function niceCeiling(value) {
-  if (value <= 0) return 1;
+  if (value <= 0) return 0;
 
   const magnitude = 10 ** Math.floor(Math.log10(value));
   return Math.ceil(value / magnitude) * magnitude;
+}
+
+/**
+ * Escala com linha de base no ZERO, e não no menor valor.
+ *
+ * Enquanto todas as métricas eram positivas, altura = valor / máximo bastava.
+ * "Ganho líquido" pode ser negativo, e nesse desenho um mês negativo produzia
+ * altura negativa — que o CSS trata como zero. O mês simplesmente sumia do
+ * gráfico, escondendo justamente o caso que interessa olhar.
+ *
+ * Com o zero ancorado, a barra cresce para cima quando entra e para baixo
+ * quando sai, e a distância até a linha é comparável nos dois sentidos.
+ */
+function buildScale(values) {
+  const top = niceCeiling(Math.max(0, ...values));
+  const bottom = -niceCeiling(Math.abs(Math.min(0, ...values)));
+  // Série toda zerada ainda precisa de um intervalo para dividir.
+  const span = top - bottom || 1;
+
+  return {
+    top,
+    bottom,
+    span,
+    // Distância do zero até a base da área de plotagem, em porcentagem.
+    zeroFromBottom: ((0 - bottom) / span) * 100,
+  };
 }
 
 /**
@@ -56,14 +84,17 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
   const setMetricKey = setSelectedMetricKey;
   const metric = METRICS.find((item) => item.key === metricKey) ?? METRICS[0];
 
-  const { scaleMax, peakIndex } = useMemo(() => {
+  const { scale, peakIndex } = useMemo(() => {
     const values = months.map((month) => Number(month[metric.key] ?? 0));
-    const max = Math.max(0, ...values);
+    // O pico é o de maior MAGNITUDE: numa série com negativos, o mês mais
+    // marcante pode ser o de maior queda.
+    const peak = values.reduce(
+      (best, value, index) =>
+        Math.abs(value) > Math.abs(values[best] ?? 0) ? index : best,
+      0,
+    );
 
-    return {
-      scaleMax: niceCeiling(max),
-      peakIndex: values.indexOf(max),
-    };
+    return { scale: buildScale(values), peakIndex: peak };
   }, [months, metric.key]);
 
   if (!months.length) {
@@ -128,7 +159,9 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
             className="numeric flex h-44 w-16 shrink-0 flex-col justify-between text-right text-[0.6875rem] text-[var(--muted)]"
           >
             {GRID_STEPS.map((step) => (
-              <span key={step}>{metric.format(scaleMax * step)}</span>
+              <span key={step}>
+                {metric.format(scale.bottom + scale.span * step)}
+              </span>
             ))}
           </div>
 
@@ -140,14 +173,25 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
                 ))}
               </div>
 
+              {/* Linha do zero, só quando ela não coincide com a base — aí a
+                  grade já a representa. */}
+              {scale.bottom < 0 ? (
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-x-0 h-px bg-[var(--line-strong)]"
+                  style={{ bottom: `${scale.zeroFromBottom}%` }}
+                />
+              ) : null}
+
               <div
                 className="relative flex h-full items-end gap-0.5"
                 onMouseLeave={() => setActiveIndex(-1)}
               >
                 {months.map((month, index) => {
                   const value = Number(month[metric.key] ?? 0);
-                  const heightPercent = scaleMax > 0 ? (value / scaleMax) * 100 : 0;
+                  const heightPercent = (Math.abs(value) / scale.span) * 100;
                   const isActive = index === activeIndex;
+                  const isNegative = value < 0;
 
                   return (
                     <button
@@ -155,7 +199,7 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
                       type="button"
                       // A coluna inteira é o alvo — a barra pode ser baixa
                       // demais para ser apontada com precisão.
-                      className={`group flex h-full min-w-0 flex-1 cursor-default flex-col justify-end rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${COLUMN_MAX_WIDTH}`}
+                      className={`group relative flex h-full min-w-0 flex-1 cursor-default rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${COLUMN_MAX_WIDTH}`}
                       onMouseEnter={() => setActiveIndex(index)}
                       onFocus={() => setActiveIndex(index)}
                       onBlur={() => setActiveIndex(-1)}
@@ -166,10 +210,18 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
                       </span>
                       <span
                         aria-hidden="true"
-                        style={{ height: `${heightPercent}%` }}
-                        className={`w-full rounded-t-[4px] bg-[var(--data-1)] transition-opacity ${
-                          activeIndex >= 0 && !isActive ? "opacity-50" : "opacity-100"
-                        }`}
+                        style={{
+                          height: `${heightPercent}%`,
+                          // Ambos os sentidos partem da linha do zero.
+                          ...(isNegative
+                            ? { top: `${100 - scale.zeroFromBottom}%` }
+                            : { bottom: `${scale.zeroFromBottom}%` }),
+                        }}
+                        className={`absolute inset-x-0 transition-opacity ${
+                          isNegative
+                            ? "rounded-b-[4px] bg-[var(--data-negative)]"
+                            : "rounded-t-[4px] bg-[var(--data-1)]"
+                        } ${activeIndex >= 0 && !isActive ? "opacity-50" : "opacity-100"}`}
                       />
                     </button>
                   );

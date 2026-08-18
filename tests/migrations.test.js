@@ -3313,3 +3313,145 @@ test("the donor ranking can be narrowed to a single month", async () => {
     await conn.close();
   }
 });
+
+/**
+ * Série mensal: crédito, abatido e ganho líquido.
+ *
+ * O bug que originou isto: a série não trazia coluna de crédito nenhuma, então
+ * o botão "Crédito" do gráfico mostrava R$ 0,00 em todos os meses.
+ */
+async function seedTrendFixtures(conn) {
+  await conn.query(`
+    INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+    VALUES ('donor-tr', 'Doador Tendencia', '11111111111', 'CESTAS', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, created_at, updated_at)
+    VALUES ('lk-tr', 'donor-tr', 'Doador Tendencia', '11111111111', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+  await seedAssignments(conn, ["donor-tr"]);
+
+  // Março: R$ 30 de crédito, R$ 10 abatidos  -> líquido +20
+  // Abril: R$  5 de crédito, R$ 40 abatidos  -> líquido -35
+  await conn.query(`
+    INSERT INTO donation_notes (
+      id, import_id, cpf, numero_nota, valor_nota, reference_month,
+      cnpj_estabelecimento, is_valid, created_at
+    )
+    VALUES
+      ('dn-mar', 'imp', '11111111111', '301', 300.00, DATE '2026-03-01', '11111111000111', TRUE, CURRENT_TIMESTAMP),
+      ('dn-abr', 'imp', '11111111111', '401', 50.00, DATE '2026-04-01', '11111111000122', TRUE, CURRENT_TIMESTAMP)
+  `);
+  await conn.query(`
+    INSERT INTO credit_notes (
+      id, credit_import_id, cnpj_estabelecimento, numero_nota,
+      valor_nf, credito, situacao, is_valid, created_at
+    )
+    VALUES
+      ('cn-mar', 'ci', '11111111000111', '301', 300.00, 30.00, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+      ('cn-abr', 'ci', '11111111000122', '401', 50.00, 5.00, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+  `);
+
+  // O abatimento de abril tem uma parcela PENDENTE, que não pode entrar na
+  // conta: "já abatido" é o que saiu, não o que se pretende abater.
+  await conn.query(`
+    INSERT INTO monthly_donor_summary (
+      id, import_id, donor_id, reference_month, cpf, donor_name,
+      notes_count, value_per_note, abatement_amount, abatement_status,
+      created_at, updated_at
+    )
+    VALUES
+      ('ms-mar', 'imp', 'donor-tr', DATE '2026-03-01', '11111111111', 'Doador Tendencia', 3, 1.00, 10.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('ms-abr', 'imp', 'donor-tr', DATE '2026-04-01', '11111111111', 'Doador Tendencia', 1, 1.00, 40.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('ms-mai', 'imp', 'donor-tr', DATE '2026-05-01', '11111111111', 'Doador Tendencia', 2, 1.00, 99.00, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+}
+
+test("the monthly trend carries credit, applied abatement and net gain", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedTrendFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    const rows = (
+      await conn.query(buildMonthlyTrendSql(DEFAULT_PROJECT_ID))
+    ).toArray();
+    const byMonth = new Map(
+      rows.map((row) => [
+        String(row.reference_month),
+        {
+          credito: Number(row.total_credit),
+          abatido: Number(row.total_abatement),
+          liquido: Number(row.net_gain),
+        },
+      ]),
+    );
+
+    // Antes da correção, total_credit nem existia — o gráfico mostrava zero.
+    assert.deepEqual(byMonth.get("2026-03-01"), {
+      credito: 30,
+      abatido: 10,
+      liquido: 20,
+    });
+
+    // Mês em que se abateu mais do que entrou: o líquido é negativo, e é esse
+    // caso que o gráfico precisa conseguir desenhar.
+    assert.deepEqual(byMonth.get("2026-04-01"), {
+      credito: 5,
+      abatido: 40,
+      liquido: -35,
+    });
+
+    // Maio só tem abatimento PENDENTE: não conta como abatido nem derruba o
+    // líquido.
+    assert.deepEqual(byMonth.get("2026-05-01"), {
+      credito: 0,
+      abatido: 0,
+      liquido: 0,
+    });
+  } finally {
+    await conn.close();
+  }
+});
+
+test("the monthly trend keeps a transferred donor's past months in the old project", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await conn.query(`
+      INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
+      VALUES ('prj-capoeira', 'Capoeira', 'capoeira', '{}', '#059669', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await seedTrendFixtures(conn);
+    await runCreditReconciliation(conn);
+
+    // Transfere para Capoeira a partir de abril.
+    await conn.query(`
+      UPDATE donor_project_assignments
+      SET valid_to = DATE '2026-03-01'
+      WHERE donor_id = 'donor-tr' AND valid_to = DATE '${ASSIGNMENT_OPEN_END}'
+    `);
+    await conn.query(`
+      INSERT INTO donor_project_assignments
+        (id, donor_id, project_id, valid_from, valid_to, reason, created_at)
+      VALUES ('dpa-tr-2', 'donor-tr', 'prj-capoeira', DATE '2026-04-01', DATE '${ASSIGNMENT_OPEN_END}', 'transferencia', CURRENT_TIMESTAMP)
+    `);
+
+    const monthsFor = async (projectId) =>
+      (await conn.query(buildMonthlyTrendSql(projectId)))
+        .toArray()
+        .map((row) => String(row.reference_month))
+        .sort();
+
+    // A série usava o vínculo VIGENTE, então março teria migrado junto com o
+    // doador e sumido do projeto que de fato o apurou.
+    assert.deepEqual(await monthsFor(DEFAULT_PROJECT_ID), ["2026-03-01"]);
+    assert.deepEqual(await monthsFor("prj-capoeira"), [
+      "2026-04-01",
+      "2026-05-01",
+    ]);
+  } finally {
+    await conn.close();
+  }
+});

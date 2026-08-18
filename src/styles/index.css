@@ -75,6 +75,10 @@
   --data-3: #38bdf8; /* azul-céu */
   --data-4: #fb923c; /* laranja */
   --data-5: #a78bfa; /* violeta */
+  /* Barra abaixo do zero no gráfico de evolução. Não reusa --danger: ali é
+     alerta (algo a corrigir), e um mês de ganho negativo é leitura, não
+     defeito. Vermelho dessaturado o suficiente para ler como direção. */
+  --data-negative: #e06c6c;
   --data-grid: rgba(255, 255, 255, 0.06);
 
   /* Elevações padrão — use em vez de shadow-[...] arbitrário pra manter
@@ -406,6 +410,7 @@ textarea {
   --data-3: #0284c7;
   --data-4: #c2410c;
   --data-5: #7c3aed;
+  --data-negative: #b91c1c;
   --data-grid: rgba(0, 0, 0, 0.06);
   --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.16);
   --shadow-popover: 0 18px 36px -26px rgba(0, 0, 0, 0.12);
