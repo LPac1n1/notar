@@ -61,6 +61,10 @@ function getTrashEntityDomains(entityType) {
     return ["demands", "trash", "history"];
   }
 
+  if (entityType === "note") {
+    return ["notes", "trash", "history"];
+  }
+
   if (entityType === "person") {
     return ["people", "trash", "history"];
   }
@@ -246,6 +250,17 @@ async function restoreDemand(payload) {
   }
 
   await insertRows("demands", payload.demands ?? []);
+}
+
+/**
+ * Anotação restaurada volta com o mesmo id e o mesmo projeto.
+ *
+ * Não há checagem de nome duplicado como em demanda: duas anotações podem
+ * legitimamente ter o mesmo título, e recusar a restauração por causa
+ * disso deixaria o texto preso na lixeira sem motivo.
+ */
+async function restoreNote(payload) {
+  await insertRows("notes", payload.notes ?? []);
 }
 
 async function restorePerson(payload) {
@@ -462,6 +477,8 @@ export async function restoreTrashItem(id) {
         await restoreProject(payload);
       } else if (trashItem.entity_type === "demand") {
         await restoreDemand(payload);
+      } else if (trashItem.entity_type === "note") {
+        await restoreNote(payload);
       } else if (trashItem.entity_type === "person") {
         await restorePerson(payload);
       } else if (trashItem.entity_type === "donor") {

@@ -29,6 +29,7 @@ import {
   listNotes,
   updateNote,
 } from "../services/noteService";
+import { restoreTrashItem } from "../services/trashService";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 
@@ -46,6 +47,7 @@ export default function Notes() {
   const [editAutoSaveStatus, setEditAutoSaveStatus] = useState("saved");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successAction, setSuccessAction] = useState(null);
   const notesRequestIdRef = useRef(0);
   const createAutoNoteIdRef = useRef("");
   const createAutoSaveTimerRef = useRef(null);
@@ -507,10 +509,28 @@ export default function Notes() {
     try {
       setError("");
       setSuccessMessage("");
+      setSuccessAction(null);
       setIsDeleting(true);
-      await deleteNote(notePendingRemoval.id);
+      const trashItemId = await deleteNote(notePendingRemoval.id);
       setNotePendingRemoval(null);
-      setSuccessMessage("Anotação excluída com sucesso.");
+      setSuccessMessage("Anotação movida para a lixeira.");
+      // A anotação é texto escrito à mão: sem o desfazer aqui, o único
+      // caminho de volta seria o usuário lembrar de procurar na lixeira.
+      if (trashItemId) {
+        setSuccessAction({
+          label: "Desfazer",
+          onAction: async () => {
+            try {
+              await restoreTrashItem(trashItemId);
+              setSuccessMessage("Anotação restaurada.");
+              setSuccessAction(null);
+              await loadNotes();
+            } catch (undoError) {
+              setError(getErrorMessage(undoError));
+            }
+          },
+        });
+      }
       await loadNotes();
     } catch (err) {
       setError(getErrorMessage(err, "Não foi possível excluir a anotação."));
@@ -556,7 +576,12 @@ export default function Notes() {
         message={isCreateModalOpen || editingNote || notePendingRemoval ? "" : error}
         tone="error"
       />
-      <FeedbackMessage message={successMessage} tone="success" />
+      <FeedbackMessage
+        actionLabel={successAction?.label}
+        message={successMessage}
+        onAction={successAction?.onAction}
+        tone="success"
+      />
 
       {showDataRefreshLoading ? (
         <DataSyncSectionLoading

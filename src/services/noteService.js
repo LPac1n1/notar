@@ -2,7 +2,8 @@ import { nanoid } from "nanoid";
 import { normalizeDemandColor } from "../utils/demandColor";
 import { DEFAULT_NOTE_COLOR } from "../utils/noteColor";
 import { createActionHistoryEntry } from "./actionHistoryService";
-import { escapeSqlString, execute, executePrepared, queryPrepared } from "./db";
+import { createTrashItem } from "./trashService";
+import { executePrepared, queryPrepared } from "./db";
 import { getActiveProjectId } from "./activeProject.js";
 
 function mapNoteRow(row) {
@@ -147,22 +148,46 @@ export async function deleteNote(id) {
     return;
   }
 
+  // A linha inteira vai para a lixeira, e não só o título: excluir era a
+  // ÚNICA operação irreversível do sistema. Doador, pessoa, demanda e
+  // projeto já iam para a lixeira; a anotação sumia de vez, levando junto
+  // um texto que o usuário escreveu à mão e não tem de onde recuperar.
   const noteRows = await queryPrepared(
     `
-    SELECT title
+    SELECT
+      id,
+      project_id,
+      title,
+      content,
+      color,
+      CAST(created_at AS VARCHAR) AS created_at,
+      CAST(updated_at AS VARCHAR) AS updated_at
     FROM notes
     WHERE id = ?
     LIMIT 1
   `,
     [id],
   );
-  const noteTitle = noteRows[0]?.title ?? "Anotação";
 
-  await execute(
+  if (noteRows.length === 0) {
+    return;
+  }
+
+  const noteTitle = noteRows[0].title ?? "Anotação";
+
+  const trashItemId = await createTrashItem({
+    entityType: "note",
+    entityId: id,
+    label: noteTitle,
+    payload: { notes: noteRows },
+  });
+
+  await executePrepared(
     `
       DELETE FROM notes
-      WHERE id = '${escapeSqlString(id)}'
+      WHERE id = ?
     `,
+    [id],
     { source: "notes" },
   );
 
@@ -173,4 +198,8 @@ export async function deleteNote(id) {
     label: noteTitle,
     description: `Anotação ${noteTitle} excluída.`,
   });
+
+  // O id volta para a tela poder oferecer "Desfazer" sem ter de procurar
+  // o item na lixeira depois.
+  return trashItemId;
 }
