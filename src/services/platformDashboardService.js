@@ -31,18 +31,22 @@ export async function getPlatformOverview() {
 
   const spreadsheetCredit = toNumber(creditRows[0]?.spreadsheet_credit);
   const matchedCredit = toNumber(creditRows[0]?.matched_credit);
+  const matchedWithDonor = toNumber(creditRows[0]?.matched_with_donor);
 
   return {
     credit: {
       spreadsheet: spreadsheetCredit,
       matched: matchedCredit,
-      // O que a planilha creditou e o sistema não conseguiu ligar a nenhum
-      // doador cadastrado. Não é erro: pode ser doação de quem não está no
-      // sistema. Fica à vista porque, sem ele, a soma dos projetos parece
-      // menor que a planilha sem explicação.
+      matchedWithDonor,
+      // Crédito da planilha que não achou nota de doação correspondente.
       unidentified: spreadsheetCredit - matchedCredit,
+      // Casou com a doação, mas o CPF não é de doador cadastrado. Não é erro:
+      // é doação de quem não está no sistema. Fica à vista porque é
+      // exatamente a diferença entre o conciliado e a soma dos projetos.
+      matchedWithoutDonor: matchedCredit - matchedWithDonor,
     },
     notesCount: toNumber(notesRows[0]?.notes_count),
+    invalidNotesCount: toNumber(notesRows[0]?.invalid_notes_count),
     totals: {
       projectCount: toNumber(totalsRows[0]?.project_count),
       donorCount: toNumber(totalsRows[0]?.donor_count),

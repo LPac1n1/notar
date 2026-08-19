@@ -29,7 +29,9 @@ function safeProjectId(projectId) {
  */
 export function buildProjectNotesCountSql(projectId) {
   return `
-    SELECT coalesce(sum(monthly_donor_summary.notes_count), 0) AS notes_count
+    SELECT
+      coalesce(sum(monthly_donor_summary.notes_count), 0) AS notes_count,
+      coalesce(sum(monthly_donor_summary.invalid_notes_count), 0) AS invalid_notes_count
     FROM monthly_donor_summary
     WHERE ${donorBelongedToProjectAtMonth(
       "monthly_donor_summary.donor_id",

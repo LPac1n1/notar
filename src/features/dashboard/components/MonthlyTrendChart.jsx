@@ -249,8 +249,14 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
 
       {/* Alternativa em tabela para leitor de tela — o gráfico em si é
           decorativo depois que cada coluna já expõe seu valor no sr-only,
-          mas a tabela dá a leitura de conjunto. */}
-      <table className="sr-only">
+          mas a tabela dá a leitura de conjunto.
+
+          O `sr-only` fica no DIV, não na tabela: layout de tabela ignora
+          `width: 1px` e cresce até o conteúdo, então a caixa continuava
+          com o tamanho real (medido: 206x135) em vez de colapsar. Num
+          bloco o colapso funciona, e a tabela some junto. */}
+      <div className="sr-only">
+        <table>
         <caption>Evolução mensal — {metric.label}</caption>
         <thead>
           <tr>
@@ -265,8 +271,9 @@ export default function MonthlyTrendChart({ months = [], metricKey: fixedMetricK
               <td>{metric.format(month[metric.key])}</td>
             </tr>
           ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

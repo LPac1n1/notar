@@ -63,7 +63,15 @@ export default function DashboardOverviewCards({
         compact={compact}
         label="Notas doadas"
         value={formatInteger(totals.notesCount)}
-        helper="Notas encontradas nas planilhas para os doadores deste projeto."
+        helper="Notas válidas encontradas nas planilhas para os doadores deste projeto."
+      />
+      {/* Linhas que a NFP marcou como documento não encontrado ou não
+          doável: aparecem na planilha mas não são doação. */}
+      <MetricCard
+        compact={compact}
+        label="Notas não encontradas"
+        value={formatInteger(totals.invalidNotesCount)}
+        helper="Linhas com aviso de documento não encontrado ou que não pode ser doado."
       />
       <MetricCard
         compact={compact}

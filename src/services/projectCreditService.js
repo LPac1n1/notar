@@ -60,6 +60,7 @@ export async function getProjectCreditOverview() {
     months,
     donorCount: Number(donorCountRows[0]?.total ?? 0),
     notesCount: Number(notesRows[0]?.notes_count ?? 0),
+    invalidNotesCount: Number(notesRows[0]?.invalid_notes_count ?? 0),
     // Doador cadastrado que nunca gerou crédito. Num projeto de crédito é a
     // pergunta mais frequente, e a causa costuma ser CPF não informado no
     // estabelecimento — não erro do sistema.

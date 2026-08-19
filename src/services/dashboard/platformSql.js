@@ -11,12 +11,25 @@
  */
 
 /**
- * O crédito da planilha e a parcela dele que casou com doador cadastrado.
+ * O crédito da planilha e as duas parcelas em que ele se divide.
  *
- * As duas somas saem da MESMA tabela e do mesmo filtro de validade; o que muda
- * é só o `EXISTS` da conciliação. Calculá-las em consultas separadas abriria a
- * chance de os filtros divergirem e a diferença entre elas — o "não
- * identificado" — deixar de fechar.
+ * São TRÊS grandezas distintas, e confundi-las produz número errado:
+ *
+ *   spreadsheet_credit  tudo o que a NFP creditou.
+ *   matched_credit      o que casou com uma nota de doação importada. NÃO
+ *                       exige doador cadastrado — a conciliação compara
+ *                       (CNPJ, número, valor) entre as duas planilhas.
+ *   matched_with_donor  a parcela do casado cujo CPF pertence a um doador
+ *                       cadastrado. É só esta que a atribuição por projeto
+ *                       consegue enxergar.
+ *
+ * A diferença entre as duas últimas é crédito de quem doou mas não está no
+ * sistema. Sem essa linha, a soma por projeto ficaria menor que o conciliado
+ * sem nenhuma explicação na tela.
+ *
+ * As somas saem da MESMA tabela e do mesmo filtro de validade; o que muda é só
+ * o `EXISTS`. Calculá-las em consultas separadas abriria a chance de os
+ * filtros divergirem e as diferenças deixarem de fechar.
  */
 export const PLATFORM_CREDIT_TOTALS_SQL = `
   SELECT
@@ -28,21 +41,42 @@ export const PLATFORM_CREDIT_TOTALS_SQL = `
         WHERE credit_reconciliation.credit_note_id = credit_notes.id
           AND credit_reconciliation.match_status = 'matched'
       ) THEN credit_notes.credito ELSE 0 END
-    ), 0) AS matched_credit
+    ), 0) AS matched_credit,
+    coalesce(sum(
+      CASE WHEN EXISTS (
+        SELECT 1
+        FROM credit_reconciliation
+        INNER JOIN donation_notes
+          ON donation_notes.id = credit_reconciliation.donation_note_id
+        INNER JOIN donor_cpf_links
+          ON donor_cpf_links.cpf = donation_notes.cpf
+          AND donor_cpf_links.is_active = TRUE
+        WHERE credit_reconciliation.credit_note_id = credit_notes.id
+          AND credit_reconciliation.match_status = 'matched'
+      ) THEN credit_notes.credito ELSE 0 END
+    ), 0) AS matched_with_donor
   FROM credit_notes
   WHERE credit_notes.is_valid = TRUE
 `;
 
 /**
- * Notas doadas que o sistema acompanha, somando todos os projetos.
+ * Notas de TODAS as planilhas, de qualquer doador — cadastrado ou não.
  *
- * Denominador da média por nota. Vem de `monthly_donor_summary` — a mesma
- * origem usada no painel de cada projeto — para que a média geral seja
- * comparável com a de cada projeto em vez de medir outra coisa.
+ * Conta `donation_notes` em vez de `monthly_donor_summary`: o resumo mensal só
+ * existe para doador cadastrado, então usá-lo aqui esconderia a doação de quem
+ * não está no sistema, que é justamente o que um total de plataforma precisa
+ * incluir.
+ *
+ * A separação por `is_valid` é o que a planilha da NFP marca como "não foi
+ * possível encontrar o documento" ou "não pode ser doado": linhas que existem
+ * no arquivo mas não representam doação. Contá-las junto inflaria o total e
+ * derrubaria a média por nota.
  */
 export const PLATFORM_NOTES_COUNT_SQL = `
-  SELECT coalesce(sum(notes_count), 0) AS notes_count
-  FROM monthly_donor_summary
+  SELECT
+    count(*) FILTER (WHERE is_valid = TRUE) AS notes_count,
+    count(*) FILTER (WHERE is_valid = FALSE) AS invalid_notes_count
+  FROM donation_notes
 `;
 
 /** Contadores de cadastro e de importação, do sistema inteiro. */

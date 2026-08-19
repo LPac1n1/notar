@@ -16,8 +16,15 @@ import { formatCurrency, formatInteger } from "../utils/format";
 
 const EMPTY_FILTERS = {};
 const INITIAL_DATA = {
-  credit: { spreadsheet: 0, matched: 0, unidentified: 0 },
+  credit: {
+    spreadsheet: 0,
+    matched: 0,
+    matchedWithDonor: 0,
+    unidentified: 0,
+    matchedWithoutDonor: 0,
+  },
   notesCount: 0,
+  invalidNotesCount: 0,
   totals: {
     projectCount: 0,
     donorCount: 0,
@@ -105,14 +112,14 @@ export default function PlatformDashboard() {
             helper="Tudo o que a NFP creditou nas planilhas importadas."
           />
           <Metric
-            label="Conciliado com doadores"
+            label="Conciliado com doações"
             value={formatCurrency(overview.credit.matched)}
-            helper="A parcela que casou com um doador cadastrado."
+            helper="Crédito que casou com uma nota de doação importada, de qualquer doador — cadastrado ou não."
           />
           <Metric
-            label="Não identificado"
+            label="Sem doação correspondente"
             value={formatCurrency(overview.credit.unidentified)}
-            helper="Crédito sem doador cadastrado correspondente. Não é erro — pode ser doação de quem não está no sistema."
+            helper="Crédito da planilha que não encontrou nota de doação. Costuma ser nota que ainda não foi importada."
           />
           <Metric
             label="Média por nota"
@@ -120,7 +127,7 @@ export default function PlatformDashboard() {
             helper={
               averagePerNote === null
                 ? "Nenhuma nota doada ainda."
-                : `${formatCurrency(overview.credit.matched)} conciliados em ${formatInteger(overview.notesCount)} nota(s).`
+                : `${formatCurrency(overview.credit.matched)} conciliados em ${formatInteger(overview.notesCount)} nota(s) válida(s).`
             }
           />
         </div>
@@ -143,7 +150,7 @@ export default function PlatformDashboard() {
         {/* ─── Para onde foi ───────────────────────────────────────────── */}
         <SectionCard
           title="Crédito por projeto"
-          description="Como o crédito conciliado se divide entre os projetos. O não atribuído entra na conta para o total fechar."
+          description="Como o crédito conciliado se divide. As duas últimas linhas existem para a coluna fechar com o total conciliado."
         >
           {overview.projects.length ? (
             <div className="overflow-x-auto">
@@ -191,6 +198,20 @@ export default function PlatformDashboard() {
                     </td>
                     <td className="px-3 py-2 text-[var(--muted)]">—</td>
                   </tr>
+                  {/* Sem esta linha a coluna somaria MENOS que o
+                      conciliado, e a diferença não teria explicação na
+                      tela: é crédito de quem doou sem estar cadastrado,
+                      que nenhum projeto consegue reivindicar. */}
+                  <tr>
+                    <th scope="row" className="px-3 py-2 font-medium text-[var(--muted-strong)]">
+                      Doador não cadastrado
+                    </th>
+                    <td className="numeric px-3 py-2 text-right text-[var(--muted)]">—</td>
+                    <td className="numeric px-3 py-2 text-right font-semibold text-[var(--muted-strong)]">
+                      {formatCurrency(overview.credit.matchedWithoutDonor)}
+                    </td>
+                    <td className="px-3 py-2 text-[var(--muted)]">—</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -234,7 +255,14 @@ export default function PlatformDashboard() {
             <Metric
               label="Notas doadas"
               value={formatInteger(overview.notesCount)}
-              helper="Notas encontradas nas planilhas para doadores cadastrados."
+              helper="Todas as notas válidas das planilhas importadas, de doadores cadastrados ou não."
+            />
+            {/* Linhas que a NFP marcou como documento não encontrado ou
+                não doável: existem no arquivo mas não são doação. */}
+            <Metric
+              label="Notas não encontradas"
+              value={formatInteger(overview.invalidNotesCount)}
+              helper="Linhas das planilhas com aviso de documento não encontrado ou que não pode ser doado."
             />
           </div>
         </div>

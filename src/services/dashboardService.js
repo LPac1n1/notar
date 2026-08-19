@@ -159,6 +159,13 @@ async function _fetchDashboardOverview() {
            "monthly_donor_summary.reference_month",
            projectId,
          )}) AS notes_count,
+        (SELECT coalesce(sum(monthly_donor_summary.invalid_notes_count), 0)
+         FROM monthly_donor_summary
+         WHERE ${donorBelongedToProjectAtMonth(
+           "monthly_donor_summary.donor_id",
+           "monthly_donor_summary.reference_month",
+           projectId,
+         )}) AS invalid_notes_count,
         (SELECT coalesce(sum(project_credit.total_credit), 0) FROM (
           WITH credit AS (${MATCHED_CREDIT_BY_DONOR_MONTH})
           SELECT credit.total_credit
@@ -567,6 +574,7 @@ async function _fetchDashboardOverview() {
       donorCount: toNumber(totalsRows[0]?.donor_count),
       demandCount: toNumber(totalsRows[0]?.demand_count),
       notesCount: toNumber(totalsRows[0]?.notes_count),
+      invalidNotesCount: toNumber(totalsRows[0]?.invalid_notes_count),
       totalCredit: toNumber(totalsRows[0]?.total_credit),
       totalAbated: toNumber(totalsRows[0]?.total_abated),
     },

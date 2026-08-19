@@ -24,6 +24,7 @@ const INITIAL_DATA = {
   months: [],
   donorCount: 0,
   notesCount: 0,
+  invalidNotesCount: 0,
   donorsWithoutCredit: [],
 };
 
@@ -163,6 +164,12 @@ export default function ProjectCreditDashboard({ project }) {
                   ? "Nenhuma nota doada ainda."
                   : `Em ${formatInteger(overview.notesCount)} nota(s) doada(s).`}
               </p>
+              {overview.invalidNotesCount > 0 ? (
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {formatInteger(overview.invalidNotesCount)} nota(s) não
+                  encontrada(s) fora da conta.
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
