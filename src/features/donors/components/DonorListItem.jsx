@@ -262,9 +262,14 @@ function DonorListItemBase({
         ) : null}
       </div>
 
-      {/* Desktop-only action column (md+). Mobile shows the context menu in
-          the header row instead. Hidden until row is hovered or focused. */}
-      <div className="hidden flex-col gap-2 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 md:flex md:w-40 md:self-stretch">
+      {/* Coluna de ações no desktop (md+). No mobile o menu de contexto na
+          linha do cabeçalho faz esse papel.
+
+          As ações ficam SEMPRE visíveis. Revelá-las no hover escondia do
+          usuário o que ele pode fazer até que ele passasse o mouse por cima —
+          e não havia hover nenhum no toque. Pessoas, Demandas e Lixeira já
+          mostravam as suas o tempo todo; só esta lista divergia. */}
+      <div className="hidden flex-col gap-2 md:flex md:w-40 md:self-stretch">
         <Button
           className="w-full md:flex-1"
           onClick={() => onOpenProfile(donor.id)}
