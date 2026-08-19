@@ -16,12 +16,12 @@
 // mantém o número íntegro e legível; quebrar corrompe a informação.
 const SIZE_LADDER = {
   xl: [
-    "text-[2rem] leading-tight lg:text-[2.5rem]",
-    "text-2xl leading-tight lg:text-[1.75rem]",
+    "text-[2rem] leading-tight 2xl:text-[2.5rem]",
+    "text-2xl leading-tight 2xl:text-[1.75rem]",
     "text-lg leading-tight",
   ],
   lg: [
-    "text-2xl leading-tight lg:text-[1.75rem]",
+    "text-2xl leading-tight 2xl:text-[1.75rem]",
     "text-lg leading-tight",
     "text-base leading-tight",
   ],
@@ -29,10 +29,18 @@ const SIZE_LADDER = {
   sm: ["text-sm leading-tight", "text-sm leading-tight", "text-sm leading-tight"],
 };
 
-// Limiares em caracteres, calibrados medindo largura real no navegador e
-// não por estimativa: num card de ~250px úteis, "R$ 70,00" (8) cabe a 40px,
-// "R$ 4.350,00" (11) precisa descer um degrau e "R$ 1.938.259,20" (15) só
-// cabe dois degraus abaixo.
+// O degrau MAIOR de cada nível só entra no 2xl, e não no lg.
+//
+// A calibragem original mediu um card de ~250px úteis — largura que a ficha
+// só alcança a partir de ~1536px. Abaixo disso a grade de métricas passa de
+// 2 para 3 colunas no lg e para 4 no xl, então o card ENCOLHE: 156px úteis a
+// 1024px e 167px a 1280px. A fonte fazia o contrário, subindo de 2rem para
+// 2.5rem justamente no lg — e "R$ 70,00" a 40px pede 169px, estourando a
+// ficha nos dois tamanhos. Medido no navegador, não estimado.
+//
+// Limiares em caracteres, na largura em que cada degrau vale: num card de
+// ~250px úteis, "R$ 70,00" (8) cabe a 40px, "R$ 4.350,00" (11) precisa
+// descer um degrau e "R$ 1.938.259,20" (15) só cabe dois degraus abaixo.
 const STEP_DOWN_LENGTH = 11;
 const STEP_DOWN_TWICE_LENGTH = 15;
 

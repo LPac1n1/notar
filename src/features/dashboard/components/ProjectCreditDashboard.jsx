@@ -123,7 +123,7 @@ export default function ProjectCreditDashboard({ project }) {
       ) : (
         <div className="space-y-6">
           {/* ─── Quanto este projeto gerou ───────────────────────────── */}
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <MetricCard
               label="Crédito acumulado"
               value={formatCurrency(overview.totalCredit)}

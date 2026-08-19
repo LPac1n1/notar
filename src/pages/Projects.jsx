@@ -188,7 +188,7 @@ export default function Projects() {
           description="Um projeto agrupa doadores e recebe o crédito das doações deles."
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
           {projects.map((project, index) => {
             // O projeto principal é a casa de todo doador não transferido e o
             // destino do backfill — excluí-lo deixaria a base sem chão.
