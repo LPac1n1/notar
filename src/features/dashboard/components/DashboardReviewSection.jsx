@@ -1,7 +1,7 @@
 import DataSyncSectionLoading from "../../../components/ui/DataSyncSectionLoading";
 import SectionCard from "../../../components/ui/SectionCard";
 import { formatInteger } from "../../../utils/format";
-import MetricCard from "./MetricCard";
+import MetricCard from "../../../components/ui/MetricCard";
 
 const REVIEW_ITEMS = [
   {

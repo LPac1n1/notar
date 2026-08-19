@@ -6,6 +6,7 @@ import EmptyState from "../components/ui/EmptyState";
 import Eyebrow from "../components/ui/Eyebrow";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import MetricCard from "../components/ui/MetricCard";
 import MetricValue from "../components/ui/MetricValue";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
@@ -297,38 +298,26 @@ export default function Projects() {
         description="Some da conta de todos os projetos — por isso aparece aqui, mesmo quando está zerado."
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-            <Eyebrow>Crédito não atribuído</Eyebrow>
-            <div className="mt-1.5">
-              <MetricValue size="md">
-                {formatCurrency(summary?.unattributedCredit ?? 0)}
-              </MetricValue>
-            </div>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              Notas conciliadas de doadores sem vínculo vigente no mês.
-            </p>
-          </div>
+          <MetricCard
+            compact
+            label="Crédito não atribuído"
+            value={formatCurrency(summary?.unattributedCredit ?? 0)}
+            helper="Notas conciliadas de doadores sem vínculo vigente no mês."
+          />
 
-          <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4">
-            <Eyebrow>Doadores sem projeto</Eyebrow>
-            <div className="mt-1.5">
-              <MetricValue size="md">
-                {formatInteger(donorsWithoutProject ?? 0)}
-              </MetricValue>
-            </div>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              Cadastros ativos que não aparecem na lista de nenhum projeto.
-            </p>
-            {donorsWithoutProject > 0 ? (
-              <Button
-                className="mt-3"
-                variant="subtle"
-                onClick={() => setIsUnassignedOpen(true)}
-              >
-                Ver e vincular
-              </Button>
-            ) : null}
-          </div>
+          <MetricCard
+            compact
+            label="Doadores sem projeto"
+            value={formatInteger(donorsWithoutProject ?? 0)}
+            helper="Cadastros ativos que não aparecem na lista de nenhum projeto."
+            action={
+              donorsWithoutProject > 0 ? (
+                <Button variant="subtle" onClick={() => setIsUnassignedOpen(true)}>
+                  Ver e vincular
+                </Button>
+              ) : null
+            }
+          />
         </div>
       </SectionCard>
 

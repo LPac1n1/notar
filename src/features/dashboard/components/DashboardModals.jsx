@@ -18,7 +18,7 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
 import DetailList from "./DetailList";
 import InconsistencyRow from "./InconsistencyRow";
 import { DemandFix, StartDateFix } from "./InconsistencyFixes";
-import MetricCard from "./MetricCard";
+import MetricCard from "../../../components/ui/MetricCard";
 
 /**
  * All Dashboard drill-down modals consolidated in one place.

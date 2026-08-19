@@ -3,7 +3,7 @@ import EmptyState from "../../../components/ui/EmptyState";
 import Eyebrow from "../../../components/ui/Eyebrow";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
 import LoadingScreen from "../../../components/ui/LoadingScreen";
-import MetricValue from "../../../components/ui/MetricValue";
+import MetricCard from "../../../components/ui/MetricCard";
 import PageHeader from "../../../components/ui/PageHeader";
 import SectionCard from "../../../components/ui/SectionCard";
 import CopyableCpf from "../../donors/components/CopyableCpf";
@@ -124,67 +124,47 @@ export default function ProjectCreditDashboard({ project }) {
         <div className="space-y-6">
           {/* ─── Quanto este projeto gerou ───────────────────────────── */}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
-              <Eyebrow>Crédito acumulado</Eyebrow>
-              <div className="mt-2">
-                <MetricValue size="xl">
-                  {formatCurrency(overview.totalCredit)}
-                </MetricValue>
-              </div>
-              <p className="mt-2.5 text-sm text-[var(--muted)]">
-                Somando todos os meses conciliados deste projeto.
-              </p>
-            </div>
+            <MetricCard
+              label="Crédito acumulado"
+              value={formatCurrency(overview.totalCredit)}
+              helper="Somando todos os meses conciliados deste projeto."
+            />
 
-            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
-              <Eyebrow>Último mês</Eyebrow>
-              <div className="mt-2">
-                <MetricValue size="xl">
-                  {formatCurrency(overview.latestMonth?.totalCredit ?? 0)}
-                </MetricValue>
-              </div>
-              <p className="mt-2.5 text-sm text-[var(--muted)]">
-                {overview.latestMonth
+            <MetricCard
+              label="Último mês"
+              value={formatCurrency(overview.latestMonth?.totalCredit ?? 0)}
+              helper={
+                overview.latestMonth
                   ? `${formatMonthYear(overview.latestMonth.referenceMonth)} • ${formatInteger(overview.latestMonth.donorCount)} doador(es) contribuíram`
-                  : "Nenhum mês conciliado ainda."}
-              </p>
-            </div>
+                  : "Nenhum mês conciliado ainda."
+              }
+            />
 
-            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
-              <Eyebrow>Média por nota</Eyebrow>
-              <div className="mt-2">
-                <MetricValue size="xl">
-                  {averagePerNote === null ? "—" : formatCurrency(averagePerNote)}
-                </MetricValue>
-              </div>
-              {/* Média, e não taxa: quanto a NFP credita varia por nota. O
-                  total de notas fica junto para não se ler como regra. */}
-              <p className="mt-2.5 text-sm text-[var(--muted)]">
-                {averagePerNote === null
+            {/* Média, e não taxa: quanto a NFP credita varia por nota. O
+                total de notas fica junto para não se ler como regra. */}
+            <MetricCard
+              label="Média por nota"
+              value={averagePerNote === null ? "—" : formatCurrency(averagePerNote)}
+              helper={
+                averagePerNote === null
                   ? "Nenhuma nota doada ainda."
-                  : `Em ${formatInteger(overview.notesCount)} nota(s) doada(s).`}
-              </p>
-              {overview.invalidNotesCount > 0 ? (
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {formatInteger(overview.invalidNotesCount)} nota(s) não
-                  encontrada(s) fora da conta.
-                </p>
-              ) : null}
-            </div>
+                  : `Em ${formatInteger(overview.notesCount)} nota(s) doada(s).${
+                      overview.invalidNotesCount > 0
+                        ? ` ${formatInteger(overview.invalidNotesCount)} não encontrada(s) fora da conta.`
+                        : ""
+                    }`
+              }
+            />
 
-            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
-              <Eyebrow>Doadores vinculados</Eyebrow>
-              <div className="mt-2">
-                <MetricValue size="xl">
-                  {formatInteger(overview.donorCount)}
-                </MetricValue>
-              </div>
-              <p className="mt-2.5 text-sm text-[var(--muted)]">
-                {overview.donorsWithoutCredit.length > 0
+            <MetricCard
+              label="Doadores vinculados"
+              value={formatInteger(overview.donorCount)}
+              helper={
+                overview.donorsWithoutCredit.length > 0
                   ? `${formatInteger(overview.donorsWithoutCredit.length)} ainda sem crédito gerado.`
-                  : "Todos já geraram algum crédito."}
-              </p>
-            </div>
+                  : "Todos já geraram algum crédito."
+              }
+            />
           </div>
 
           {/* ─── Está crescendo? ─────────────────────────────────────── */}

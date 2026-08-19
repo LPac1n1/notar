@@ -3,7 +3,7 @@ import EmptyState from "../components/ui/EmptyState";
 import Eyebrow from "../components/ui/Eyebrow";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import LoadingScreen from "../components/ui/LoadingScreen";
-import MetricValue from "../components/ui/MetricValue";
+import MetricCard from "../components/ui/MetricCard";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import MonthlyTrendChart from "../features/dashboard/components/MonthlyTrendChart";
@@ -38,17 +38,6 @@ const INITIAL_DATA = {
   unattributedCredit: 0,
 };
 
-function Metric({ label, value, helper }) {
-  return (
-    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-2">
-        <MetricValue size="xl">{value}</MetricValue>
-      </div>
-      <p className="mt-2.5 text-sm text-[var(--muted)]">{helper}</p>
-    </div>
-  );
-}
 
 /**
  * Painel da plataforma.
@@ -106,22 +95,22 @@ export default function PlatformDashboard() {
       <div className="space-y-6">
         {/* ─── Quanto a NFP creditou ───────────────────────────────────── */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Metric
+          <MetricCard
             label="Crédito nas planilhas"
             value={formatCurrency(overview.credit.spreadsheet)}
             helper="Tudo o que a NFP creditou nas planilhas importadas."
           />
-          <Metric
+          <MetricCard
             label="Conciliado com doações"
             value={formatCurrency(overview.credit.matched)}
             helper="Crédito que casou com uma nota de doação importada, de qualquer doador — cadastrado ou não."
           />
-          <Metric
+          <MetricCard
             label="Sem doação correspondente"
             value={formatCurrency(overview.credit.unidentified)}
             helper="Crédito da planilha que não encontrou nota de doação. Costuma ser nota que ainda não foi importada."
           />
-          <Metric
+          <MetricCard
             label="Média por nota"
             value={averagePerNote === null ? "—" : formatCurrency(averagePerNote)}
             helper={
@@ -227,39 +216,39 @@ export default function PlatformDashboard() {
         <div>
           <Eyebrow className="mb-3">Totais do sistema</Eyebrow>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Metric
+            <MetricCard
               label="Projetos ativos"
               value={formatInteger(overview.totals.projectCount)}
               helper="Ambientes de trabalho abertos no sistema."
             />
-            <Metric
+            <MetricCard
               label="Doadores ativos"
               value={formatInteger(overview.totals.donorCount)}
               helper="Cadastros ativos somando todos os projetos."
             />
-            <Metric
+            <MetricCard
               label="Demandas ativas"
               value={formatInteger(overview.totals.demandCount)}
               helper="Demandas ativas somando todos os projetos."
             />
-            <Metric
+            <MetricCard
               label="Planilhas de doações"
               value={formatInteger(overview.totals.importCount)}
               helper={`${formatInteger(overview.totals.processedImportCount)} processada(s) com sucesso.`}
             />
-            <Metric
+            <MetricCard
               label="Planilhas de créditos"
               value={formatInteger(overview.totals.creditImportCount)}
               helper="Planilhas da NFP importadas."
             />
-            <Metric
+            <MetricCard
               label="Notas doadas"
               value={formatInteger(overview.notesCount)}
               helper="Todas as notas válidas das planilhas importadas, de doadores cadastrados ou não."
             />
             {/* Linhas que a NFP marcou como documento não encontrado ou
                 não doável: existem no arquivo mas não são doação. */}
-            <Metric
+            <MetricCard
               label="Notas não encontradas"
               value={formatInteger(overview.invalidNotesCount)}
               helper="Linhas das planilhas com aviso de documento não encontrado ou que não pode ser doado."

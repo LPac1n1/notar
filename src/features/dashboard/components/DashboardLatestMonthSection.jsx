@@ -2,7 +2,7 @@ import EmptyState from "../../../components/ui/EmptyState";
 import SectionCard from "../../../components/ui/SectionCard";
 import { formatDatePtBR, formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
-import MetricCard from "./MetricCard";
+import MetricCard from "../../../components/ui/MetricCard";
 
 export default function DashboardLatestMonthSection({ latestMonth, onOpenModal }) {
   return (

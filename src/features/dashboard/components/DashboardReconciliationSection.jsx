@@ -4,7 +4,7 @@ import DataSyncSectionLoading from "../../../components/ui/DataSyncSectionLoadin
 import SectionCard from "../../../components/ui/SectionCard";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
-import MetricCard from "./MetricCard";
+import MetricCard from "../../../components/ui/MetricCard";
 import { useDataResource } from "../../../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { getReconciliationOverview } from "../../../services/reconciliation/creditReconciliationService";

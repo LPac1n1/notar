@@ -1,7 +1,7 @@
 import { SkeletonCard } from "../../../components/ui/Skeleton";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import { creditPerNote } from "../../../utils/creditAverage";
-import MetricCard from "./MetricCard";
+import MetricCard from "../../../components/ui/MetricCard";
 
 /**
  * Totais do PROJETO aberto. Importação não entra aqui: a planilha é uma só
