@@ -21,6 +21,7 @@ import Monthly from "../pages/Monthly";
 import Imports from "../pages/Imports";
 import Notes from "../pages/Notes";
 import ActionHistory from "../pages/ActionHistory";
+import PlatformDashboard from "../pages/PlatformDashboard";
 import Projects from "../pages/Projects";
 import Settings from "../pages/Settings";
 import Trash from "../pages/Trash";
@@ -63,6 +64,7 @@ function AnimatedRoutes() {
             </Route>
 
             {/* Plataforma — base compartilhada, fora de qualquer projeto. */}
+            <Route path="/plataforma" element={<PlatformDashboard />} />
             <Route path="/importacoes" element={<Imports />} />
 
             {/* Conta. */}

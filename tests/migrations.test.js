@@ -8,6 +8,7 @@ import {
 import { buildDonorInactivityStreaksSql } from "../src/services/monthly/inactivityStreaksSql.js";
 import { buildAbatementSheetSql } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
+import { PLATFORM_CREDIT_TOTALS_SQL } from "../src/services/dashboard/platformSql.js";
 import { buildTopDonorsQuery } from "../src/services/dashboard/topDonorsSql.js";
 import {
   buildProjectCreditByDonorSql,
@@ -3451,6 +3452,106 @@ test("the monthly trend keeps a transferred donor's past months in the old proje
       "2026-04-01",
       "2026-05-01",
     ]);
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Painel da plataforma: planilha, conciliado e não identificado.
+ *
+ * A soma tem de fechar em três partes — o que a planilha creditou é o que
+ * casou com doador mais o que não casou. Se as duas somas saíssem de filtros
+ * diferentes, a diferença apareceria como "não identificado" fantasma e o
+ * operador procuraria um problema que não existe.
+ */
+test("platform credit splits the spreadsheet into matched and unidentified", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedProjectCreditFixtures(conn);
+
+    // Crédito de um CNPJ que nenhum doador cadastrado enviou: fica sem dono.
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        valor_nf, credito, situacao, is_valid, created_at
+      )
+      VALUES ('cn-orfao', 'ci-p', '99999999000199', '999', 500.00, 12.00, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+    `);
+    // E uma nota inválida, que não pode entrar em soma nenhuma.
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        valor_nf, credito, situacao, is_valid, created_at
+      )
+      VALUES ('cn-invalida', 'ci-p', '88888888000188', '888', 100.00, 7.00, 'Pendente', FALSE, CURRENT_TIMESTAMP)
+    `);
+
+    await runCreditReconciliation(conn);
+
+    const rows = (await conn.query(PLATFORM_CREDIT_TOTALS_SQL)).toArray();
+    const planilha = Number(rows[0].spreadsheet_credit);
+    const conciliado = Number(rows[0].matched_credit);
+
+    // Fixture: 7 + 2 + 3 = 12 conciliados, mais 12 órfãos = 24 na planilha.
+    // A nota inválida (7) fica de fora dos dois.
+    assert.equal(planilha, 24);
+    assert.equal(conciliado, 12);
+    assert.equal(planilha - conciliado, 12);
+  } finally {
+    await conn.close();
+  }
+});
+
+test("the sum per project plus unattributed equals the reconciled credit", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedProjectCreditFixtures(conn);
+
+    // Doador sem vínculo nenhum: o crédito dele não pertence a projeto algum
+    // e precisa aparecer como não atribuído, senão some da conta.
+    await conn.query(`
+      INSERT INTO donors (id, name, cpf, demand, donor_type, is_active, created_at, updated_at)
+      VALUES ('donor-solto', 'Doador Sem Projeto', '66677788899', NULL, 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, created_at, updated_at)
+      VALUES ('lk-solto', 'donor-solto', 'Doador Sem Projeto', '66677788899', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO donation_notes (
+        id, import_id, cpf, numero_nota, valor_nota, reference_month,
+        cnpj_estabelecimento, is_valid, created_at
+      )
+      VALUES ('dn-solto', 'imp-p', '66677788899', '777', 40.00, DATE '2026-03-01', '77777777000177', TRUE, CURRENT_TIMESTAMP)
+    `);
+    await conn.query(`
+      INSERT INTO credit_notes (
+        id, credit_import_id, cnpj_estabelecimento, numero_nota,
+        valor_nf, credito, situacao, is_valid, created_at
+      )
+      VALUES ('cn-solto', 'ci-p', '77777777000177', '777', 40.00, 4.00, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+    `);
+
+    await runCreditReconciliation(conn);
+
+    const byProject = (await conn.query(CREDIT_BY_PROJECT_SQL)).toArray();
+    const comProjeto = byProject
+      .filter((row) => row.project_id)
+      .reduce((sum, row) => sum + Number(row.total_credit), 0);
+    const semProjeto = byProject
+      .filter((row) => !row.project_id)
+      .reduce((sum, row) => sum + Number(row.total_credit), 0);
+
+    const totals = (await conn.query(PLATFORM_CREDIT_TOTALS_SQL)).toArray();
+    const conciliado = Number(totals[0].matched_credit);
+
+    // 12 dos doadores com projeto + 4 do doador solto.
+    assert.equal(comProjeto, 12);
+    assert.equal(semProjeto, 4);
+    assert.equal(comProjeto + semProjeto, conciliado);
   } finally {
     await conn.close();
   }

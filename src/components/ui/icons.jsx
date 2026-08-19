@@ -17,6 +17,7 @@ export {
   Cloud as CloudIcon,
   CloudOff as CloudOffIcon,
   Copy as CopyIcon,
+  ChartColumnBig as PlatformIcon,
   Database as StorageIcon,
   Download as DownloadIcon,
   FileSpreadsheet as ImportIcon,

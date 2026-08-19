@@ -6,6 +6,7 @@ import {
   ImportIcon,
   MonthlyIcon,
   NotesIcon,
+  PlatformIcon,
   SettingsIcon,
   TrashIcon,
   UserIcon,
@@ -74,6 +75,12 @@ export const PROJECT_NAV_ITEMS = [
 
 // Base compartilhada — fora de qualquer projeto.
 export const PLATFORM_NAV_ITEMS = [
+  {
+    to: "/plataforma",
+    label: "Painel",
+    description: "O movimento do sistema inteiro, acima dos projetos",
+    icon: PlatformIcon,
+  },
   {
     to: "/importacoes",
     label: "Importações",
