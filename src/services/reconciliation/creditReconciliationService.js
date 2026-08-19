@@ -367,6 +367,36 @@ export const getReconciliationStats = withCache(
 );
 
 /**
+ * O rollup de conciliação e o do mês mais recente, juntos.
+ *
+ * A seção que consome isto saiu do dashboard e foi para Importações, onde
+ * não existe o payload do dashboard. Reunir as duas leituras aqui evita que
+ * a tela precise orquestrar duas consultas e descobrir sozinha qual é o mês
+ * mais recente.
+ *
+ * A conciliação é da PLATAFORMA: a planilha da NFP é uma só, e casar nota com
+ * crédito não depende de projeto. Por isso não há recorte aqui.
+ */
+export async function getReconciliationOverview() {
+  const overall = await getReconciliationStats();
+
+  const monthRows = await query(`
+    SELECT strftime(max(reference_month), '%Y-%m-%d') AS reference_month
+    FROM donation_notes
+    WHERE reference_month IS NOT NULL
+  `);
+  const latestMonthLabel = monthRows[0]?.reference_month ?? "";
+
+  const latestMonth = latestMonthLabel
+    ? await getReconciliationStats({ referenceMonth: latestMonthLabel }).catch(
+        () => null,
+      )
+    : null;
+
+  return { overall, latestMonth, latestMonthLabel };
+}
+
+/**
  * Per-donor matched totals — drives the donor profile credit panel and the
  * comparison "abatido (sistema) × crédito real (NFP)".
  *

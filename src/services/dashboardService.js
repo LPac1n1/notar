@@ -2,7 +2,9 @@ import { query, queryPrepared } from "./db";
 import { getActiveProjectId } from "./activeProject.js";
 import {
   cpfLinkBelongsToProject,
+  donorBelongedToProjectAtMonth,
   donorBelongsToProject,
+  MATCHED_CREDIT_BY_DONOR_MONTH,
 } from "./project/projectAssignmentSql.js";
 import { buildMonthlyTrendSql } from "./dashboard/monthlyTrendSql.js";
 import {
@@ -150,8 +152,23 @@ async function _fetchDashboardOverview() {
       SELECT
         (SELECT count(*) FROM donors WHERE is_active = TRUE AND ${donorScope}) AS donor_count,
         (SELECT count(*) FROM demands WHERE is_active = TRUE AND project_id = '${projectId}') AS demand_count,
-        (SELECT count(*) FROM imports) AS import_count,
-        (SELECT count(*) FROM imports WHERE status = 'processed') AS processed_import_count
+        (SELECT coalesce(sum(monthly_donor_summary.notes_count), 0)
+         FROM monthly_donor_summary
+         WHERE ${donorBelongedToProjectAtMonth(
+           "monthly_donor_summary.donor_id",
+           "monthly_donor_summary.reference_month",
+           projectId,
+         )}) AS notes_count,
+        (SELECT coalesce(sum(project_credit.total_credit), 0) FROM (
+          WITH credit AS (${MATCHED_CREDIT_BY_DONOR_MONTH})
+          SELECT credit.total_credit
+          FROM credit
+          WHERE ${donorBelongedToProjectAtMonth(
+            "credit.donor_id",
+            "CAST(credit.reference_month AS DATE)",
+            projectId,
+          )}
+        ) AS project_credit) AS total_credit
     `),
     query(`
       SELECT
@@ -541,8 +558,8 @@ async function _fetchDashboardOverview() {
     totals: {
       donorCount: toNumber(totalsRows[0]?.donor_count),
       demandCount: toNumber(totalsRows[0]?.demand_count),
-      importCount: toNumber(totalsRows[0]?.import_count),
-      processedImportCount: toNumber(totalsRows[0]?.processed_import_count),
+      notesCount: toNumber(totalsRows[0]?.notes_count),
+      totalCredit: toNumber(totalsRows[0]?.total_credit),
     },
     latestMonth,
     latestMonthPendingSummaries,
@@ -558,15 +575,6 @@ async function _fetchDashboardOverview() {
       demandId: row.id,
       demandName: row.name,
       donorCount: toNumber(row.donor_count),
-    })),
-    recentImports: recentImportsRows.map((row) => ({
-      id: row.id,
-      referenceMonth: row.reference_month,
-      fileName: row.file_name,
-      valuePerNote: toNumber(row.value_per_note),
-      matchedRows: toNumber(row.matched_rows),
-      matchedDonors: toNumber(row.matched_donors),
-      importedAt: row.imported_at,
     })),
     demandBreakdown,
     // O ranking de maiores doadores NÃO vem daqui: é filtrável por mês e

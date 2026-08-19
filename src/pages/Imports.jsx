@@ -8,6 +8,7 @@ import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
 import { DownloadIcon, PlusIcon } from "../components/ui/icons";
 import CpfListSearchSection from "../features/imports/components/CpfListSearchSection";
+import DashboardReconciliationSection from "../features/dashboard/components/DashboardReconciliationSection";
 import ImportUploadModal from "../features/imports/components/ImportUploadModal";
 import MonthlyImportsOverviewSection from "../features/imports/components/MonthlyImportsOverviewSection";
 import ReimportModal from "../features/imports/components/ReimportModal";
@@ -244,6 +245,12 @@ export default function Imports() {
         deletingDonationId={donations.deletingId}
         deletingCreditId={credits.deletingId}
       />
+
+      {/* A conciliação vive aqui, e não no dashboard de um projeto: ela
+          compara a planilha de doações com a de créditos, que são da
+          plataforma. No dashboard de um projeto ela sugeria que o número
+          era daquele projeto. */}
+      <DashboardReconciliationSection />
 
       <CpfListSearchSection onOpenDonorProfile={openDonorProfile} />
 

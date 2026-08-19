@@ -10,9 +10,6 @@ import DashboardCurrentMonthBanner from "../features/dashboard/components/Dashbo
 import DashboardLatestMonthSection from "../features/dashboard/components/DashboardLatestMonthSection";
 import DashboardModals from "../features/dashboard/components/DashboardModals";
 import DashboardOverviewCards from "../features/dashboard/components/DashboardOverviewCards";
-import DashboardDemandBreakdownSection from "../features/dashboard/components/DashboardDemandBreakdownSection";
-import DashboardReconciliationSection from "../features/dashboard/components/DashboardReconciliationSection";
-import DashboardRecentImportsSection from "../features/dashboard/components/DashboardRecentImportsSection";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
 import DashboardTrendSection from "../features/dashboard/components/DashboardTrendSection";
 import ProjectCreditDashboard from "../features/dashboard/components/ProjectCreditDashboard";
@@ -230,27 +227,15 @@ function FullDashboard() {
             latestMonth={latestMonth}
             onOpenModal={setActiveModal}
           />
-          <DashboardDemandBreakdownSection
-            demandBreakdown={dashboard?.demandBreakdown ?? []}
-            latestMonth={latestMonth}
-          />
 
           {/* ─── Zona 4 — Consulta ───────────────────────────────────── */}
           <Eyebrow as="rule">Consulta</Eyebrow>
           <TopDonorsSection onOpenDonor={openDonorProfile} />
-          <DashboardReconciliationSection
-            reconciliation={dashboard?.reconciliation}
-            reconciliationLatestMonth={dashboard?.reconciliationLatestMonth}
-            latestMonthLabel={latestMonth?.referenceMonth ?? ""}
-          />
-          <DashboardRecentImportsSection
-            imports={dashboard?.recentImports ?? []}
-          />
 
           {/* Totais globais como rodapé compacto — informativo, não
               acionável a partir daqui. */}
           <div>
-            <Eyebrow className="mb-3">Totais do sistema</Eyebrow>
+            <Eyebrow className="mb-3">Totais do projeto</Eyebrow>
             <DashboardOverviewCards
               compact
               isRefreshing={showRefreshing}

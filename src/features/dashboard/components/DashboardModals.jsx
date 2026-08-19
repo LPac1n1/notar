@@ -180,40 +180,6 @@ export default function DashboardModals({
     );
   }
 
-  if (activeModal === "imports") {
-    return (
-      <Modal
-        title="Importações processadas"
-        description={`${formatInteger(totals.importCount)} importação(ões) no total, com ${formatInteger(totals.processedImportCount)} processada(s).`}
-        icon={<ImportIcon className="h-5 w-5" />}
-        onClose={onClose}
-        size="lg"
-      >
-        <DetailList emptyMessage="Nenhuma importação processada ainda.">
-          {dashboard?.recentImports?.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-            >
-              <p className="font-medium text-[var(--text-main)]">
-                {formatMonthYear(item.referenceMonth)}
-              </p>
-              <p className="mt-1 break-all text-sm text-[var(--muted)]">
-                {item.fileName}
-              </p>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                {formatInteger(item.matchedRows)} linha(s) compatíveis • {formatInteger(item.matchedDonors)} doador(es) que doaram
-              </p>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Valor por nota: {formatCurrency(item.valuePerNote)}
-              </p>
-            </div>
-          ))}
-        </DetailList>
-      </Modal>
-    );
-  }
-
   if (activeModal === "latest-month" && latestMonth) {
     return (
       <Modal

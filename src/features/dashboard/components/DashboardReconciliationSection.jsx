@@ -1,9 +1,13 @@
+import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import DataSyncSectionLoading from "../../../components/ui/DataSyncSectionLoading";
 import SectionCard from "../../../components/ui/SectionCard";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricCard from "./MetricCard";
+import { useDataResource } from "../../../hooks/useDataResource";
+import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
+import { getReconciliationOverview } from "../../../services/reconciliation/creditReconciliationService";
 
 // Renders the headline percentage and short summary for a single
 // reconciliation snapshot (global or month-scoped). Reused by the
@@ -48,14 +52,28 @@ function ReconciliationLine({ label, stats, hint }) {
  * the global rollup plus an optional latest-month KPI so the user sees
  * the most recent import's reconciliation health at a glance.
  */
+const EMPTY_FILTERS = {};
+
 export default function DashboardReconciliationSection({
   dataSyncLabel = "Atualizando conciliação",
-  isRefreshing = false,
-  reconciliation,
-  reconciliationLatestMonth,
-  latestMonthLabel = "",
 }) {
   const navigate = useNavigate();
+
+  const loader = useCallback(() => getReconciliationOverview(), []);
+  const filters = useMemo(() => EMPTY_FILTERS, []);
+  const { data, isLoading } = useDataResource({
+    loader,
+    filters,
+    errorMessage: "Não foi possível carregar a conciliação de créditos.",
+    scope: "Imports.reconciliation",
+  });
+
+  useDatabaseChangeEffect(() => {}, { domains: ["credits", "imports"] });
+
+  const reconciliation = data?.overall;
+  const reconciliationLatestMonth = data?.latestMonth;
+  const latestMonthLabel = data?.latestMonthLabel ?? "";
+  const isRefreshing = isLoading;
 
   if (isRefreshing) {
     return (

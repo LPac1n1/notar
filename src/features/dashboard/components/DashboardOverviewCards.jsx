@@ -1,10 +1,14 @@
 import { SkeletonCard } from "../../../components/ui/Skeleton";
-import { formatInteger } from "../../../utils/format";
+import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricCard from "./MetricCard";
 
 /**
- * Contadores globais do sistema (doadores, demandas, importações). Renderiza
- * em dois modos:
+ * Totais do PROJETO aberto. Importação não entra aqui: a planilha é uma só
+ * para a plataforma inteira, então contá-la dentro de um projeto daria a
+ * cada projeto o mesmo número e sugeriria que ele é dono do arquivo. Esses
+ * contadores vivem no painel da plataforma.
+ *
+ * Renderiza em dois modos:
  *
  *   - default: métricas em destaque.
  *   - compact: variante menor e discreta, usada no rodapé do Dashboard, onde
@@ -42,22 +46,27 @@ export default function DashboardOverviewCards({
         compact={compact}
         label="Doadores ativos"
         value={formatInteger(totals.donorCount)}
-        helper="Cadastros ativos no sistema."
+        helper="Cadastros ativos neste projeto."
         onClick={() => onOpenModal("active-donors")}
       />
       <MetricCard
         compact={compact}
         label="Demandas ativas"
         value={formatInteger(totals.demandCount)}
-        helper="Demandas com cadastro ativo."
+        helper="Demandas ativas deste projeto."
         onClick={() => onOpenModal("active-demands")}
       />
       <MetricCard
         compact={compact}
-        label="Importações"
-        value={formatInteger(totals.importCount)}
-        helper={`${formatInteger(totals.processedImportCount)} processada(s) com sucesso.`}
-        onClick={() => onOpenModal("imports")}
+        label="Notas doadas"
+        value={formatInteger(totals.notesCount)}
+        helper="Notas encontradas nas planilhas para os doadores deste projeto."
+      />
+      <MetricCard
+        compact={compact}
+        label="Crédito gerado"
+        value={formatCurrency(totals.totalCredit)}
+        helper="Crédito da NFP conciliado com os doadores deste projeto."
       />
       {/* Não há card "Último mês importado" aqui: o banner do topo da página
           já abre com esse mês em destaque, e a seção "Resumo do último mês"
