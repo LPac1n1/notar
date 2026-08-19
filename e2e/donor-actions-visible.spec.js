@@ -3,9 +3,10 @@ import { expect, test } from "@playwright/test";
 /**
  * As ações do card de doador ficam sempre visíveis.
  *
- * Elas eram reveladas no hover. Isso escondia do usuário o que ele pode fazer
- * até que passasse o mouse por cima — e no toque não há hover nenhum. Pessoas,
- * Demandas e Lixeira já mostravam as suas o tempo todo; só esta lista divergia.
+ * Elas eram reveladas no hover no desktop e escondidas atrás de um menu de
+ * contexto no mobile. O hover escondia o que dá para fazer até o mouse passar
+ * por cima, e no toque não existe hover; o menu cobrava um toque a mais. A
+ * coluna agora é a mesma da lista de Pessoas, nos dois tamanhos de tela.
  *
  * ATENÇÃO: o e2e roda com `VITE_NOTAR_AUTH_MODE=local`, em que o DuckDB é só
  * memória. Um `page.goto()` no meio do teste APAGA tudo — navegue por clique.
@@ -51,7 +52,7 @@ test("as ações do doador aparecem sem precisar do mouse em cima", async ({
   // "visíveis" para o teste e invisíveis para o usuário.
   const opacidade = await page.evaluate(() => {
     const coluna = [...document.querySelectorAll("li > div")].find((node) =>
-      node.className.includes("w-40"),
+      node.className.includes("w-44"),
     );
     return coluna ? getComputedStyle(coluna).opacity : "";
   });

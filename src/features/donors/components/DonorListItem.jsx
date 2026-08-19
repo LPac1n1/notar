@@ -1,137 +1,16 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo } from "react";
 import { useProjectModules } from "../../../hooks/useProject";
 import Button from "../../../components/ui/Button";
 import CopyableValue from "../../../components/ui/CopyableValue";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import {
   EditIcon,
-  MoreIcon,
   TrashIcon,
   UserIcon,
 } from "../../../components/ui/icons";
 import { formatDateTimePtBR, formatMonthYear } from "../../../utils/date";
 import { formatInteger } from "../../../utils/format";
 
-function DonorActionMenu({
-  donor,
-  onDeactivate,
-  onEdit,
-  onOpenProfile,
-  onReactivate,
-  onRemove,
-}) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef(null);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-
-    const handlePointerDown = (event) => {
-      if (
-        triggerRef.current?.contains(event.target) ||
-        menuRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      setOpen(false);
-    };
-
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
-  const runAction = (callback) => {
-    setOpen(false);
-    callback();
-  };
-
-  return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="Mais ações"
-        className="flex h-11 w-11 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface-strong)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
-      >
-        <MoreIcon className="h-5 w-5" />
-      </button>
-
-      {open ? (
-        <div
-          ref={menuRef}
-          role="menu"
-          className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface-elevated)]"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => runAction(() => onOpenProfile(donor.id))}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-main)] transition-colors hover:bg-[var(--surface-muted)]"
-          >
-            <UserIcon className="h-4 w-4 text-[var(--muted)]" />
-            Ver perfil
-          </button>
-          {donor.isActive ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => runAction(() => onEdit(donor))}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-main)] transition-colors hover:bg-[var(--surface-muted)]"
-            >
-              <EditIcon className="h-4 w-4 text-[var(--muted)]" />
-              Editar
-            </button>
-          ) : null}
-          {donor.isActive ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => runAction(() => onDeactivate(donor))}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-main)] transition-colors hover:bg-[var(--surface-muted)]"
-            >
-              Desativar
-            </button>
-          ) : (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => runAction(() => onReactivate(donor))}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-main)] transition-colors hover:bg-[var(--surface-muted)]"
-            >
-              Reativar
-            </button>
-          )}
-          <div className="border-t border-[var(--line)]" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => runAction(() => onRemove(donor))}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)]"
-          >
-            <TrashIcon className="h-4 w-4" />
-            Remover
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function DonorListItemBase({
   donor,
@@ -170,18 +49,6 @@ function DonorListItemBase({
             ) : null}
           </div>
 
-          {/* Mobile-only context menu trigger (≤ md). Desktop renders the
-              column of action buttons below instead. */}
-          <div className="shrink-0 md:hidden">
-            <DonorActionMenu
-              donor={donor}
-              onDeactivate={onDeactivate}
-              onEdit={onEdit}
-              onOpenProfile={onOpenProfile}
-              onReactivate={onReactivate}
-              onRemove={onRemove}
-            />
-          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -262,14 +129,15 @@ function DonorListItemBase({
         ) : null}
       </div>
 
-      {/* Coluna de ações no desktop (md+). No mobile o menu de contexto na
-          linha do cabeçalho faz esse papel.
+      {/* Mesma coluna de ações da lista de Pessoas: sempre visível, em
+          largura total no mobile e fixa no desktop.
 
-          As ações ficam SEMPRE visíveis. Revelá-las no hover escondia do
-          usuário o que ele pode fazer até que ele passasse o mouse por cima —
-          e não havia hover nenhum no toque. Pessoas, Demandas e Lixeira já
-          mostravam as suas o tempo todo; só esta lista divergia. */}
-      <div className="hidden flex-col gap-2 md:flex md:w-40 md:self-stretch">
+          Antes saíam daqui DOIS desenhos diferentes — menu de contexto no
+          mobile e coluna revelada no hover no desktop. O hover escondia o
+          que dá para fazer até o mouse passar por cima, e no toque não
+          existe hover; o menu cobrava um toque a mais para chegar em
+          qualquer ação. Nenhuma outra lista do sistema fazia isso. */}
+      <div className="flex w-full flex-col gap-2 md:w-44 md:self-stretch">
         <Button
           className="w-full md:flex-1"
           onClick={() => onOpenProfile(donor.id)}
