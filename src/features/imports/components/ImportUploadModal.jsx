@@ -21,6 +21,9 @@ const DONATION_COLUMN_FIELDS = [
   { key: "cnpjEntidadeSocial", label: "CNPJ Entidade Social" },
   { key: "dataPedido", label: "Data do Pedido" },
   { key: "tipoDoacao", label: "Tipo da Doação" },
+  // Não é obrigatória para importar, mas sem ela o sistema não consegue
+  // separar nota encontrada de não encontrada.
+  { key: "orderStatus", label: "Status do Pedido" },
 ];
 
 function hasMissingRequiredColumns(previewData) {
@@ -108,9 +111,19 @@ export default function ImportUploadModal({
             title="Colunas detectadas (doações)"
             fields={DONATION_COLUMN_FIELDS.map((field) => ({
               ...field,
-              detectedColumn: previewData.donationColumns?.[field.key] ?? "",
+              detectedColumn:
+                field.key === "orderStatus"
+                  ? (previewData.orderStatusColumn ?? "")
+                  : (previewData.donationColumns?.[field.key] ?? ""),
             }))}
           />
+          {!previewData.orderStatusColumn ? (
+            <p className="mt-2 text-xs text-[var(--warning)]">
+              Sem a coluna de status do pedido, todas as linhas contam como
+              doação — as notas com aviso de documento não encontrado não serão
+              separadas.
+            </p>
+          ) : null}
           {hasMissingRequiredColumns(previewData) ? (
             <p className="mt-2 text-xs text-[var(--danger)]">
               Faltam colunas obrigatórias para o match com a planilha de

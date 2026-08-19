@@ -38,11 +38,31 @@ export function detectCpfColumn(columnNames = []) {
   );
 }
 
+/**
+ * Coluna de status do pedido — a que diz se a nota foi encontrada.
+ *
+ * Sem ela o sistema não tem como saber que uma linha não virou doação, e
+ * trata TODAS como válidas: a contagem de "notas não encontradas" fica zero
+ * e o total de notas fica inflado. Como isso acontecia em silêncio, o
+ * detector aceita as grafias que aparecem nas exportações da NFP, e o
+ * preview passou a listar esta coluna para o operador ver se foi encontrada.
+ *
+ * "status" sozinho entra na lista porque algumas exportações usam só isso.
+ * Não há risco de colidir com outra coluna da planilha de doações — nenhuma
+ * outra tem "status" no nome.
+ */
 export function detectOrderStatusColumn(columnNames = []) {
   return (
     columnNames.find((columnName) => {
       const normalized = normalizeColumnName(columnName);
-      return normalized.includes("statusdopedido");
+      return (
+        normalized.includes("statusdopedido") ||
+        normalized.includes("statuspedido") ||
+        normalized.includes("situacaodopedido") ||
+        normalized.includes("situacaopedido") ||
+        normalized === "status" ||
+        normalized === "situacao"
+      );
     }) ?? ""
   );
 }
