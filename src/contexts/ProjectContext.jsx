@@ -5,6 +5,7 @@ import { useDataResource } from "../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import {
   getLastVisitedProjectSlug,
+  clearLastVisitedProjectSlug,
   setActiveProjectId,
   setLastVisitedProjectSlug,
 } from "../services/activeProject";
@@ -57,10 +58,19 @@ export function ProjectProvider({ children }) {
   useDatabaseChangeEffect(reload, { domains: ["projects"] });
 
   const slug = readProjectSlug(location.pathname);
-  // Registrado a partir da URL, antes de qualquer dado carregar: é o que
-  // permite a barra lateral manter o projeto mesmo se o usuário sair da rota
-  // antes de a lista de projetos chegar.
-  setLastVisitedProjectSlug(slug);
+  const isProjectChooser = location.pathname === "/";
+
+  if (isProjectChooser) {
+    // Passar pela escolha é FECHAR o projeto. Sem esquecer aqui, ir dali
+    // para Importações ou para o Painel ressuscitava a navegação do projeto
+    // que o usuário acabara de deixar.
+    clearLastVisitedProjectSlug();
+  } else {
+    // Registrado a partir da URL, antes de qualquer dado carregar: é o que
+    // permite a barra lateral manter o projeto mesmo se o usuário sair da
+    // rota antes de a lista de projetos chegar.
+    setLastVisitedProjectSlug(slug);
+  }
 
   const activeProject =
     (projects ?? NO_PROJECTS).find((item) => item.slug === slug) ?? null;
@@ -84,15 +94,13 @@ export function ProjectProvider({ children }) {
   // volta — e o rótulo "Plataforma" já comunica que aquela tela é
   // compartilhada.
   //
-  // A tela de ESCOLHA é a exceção: ali o trabalho é justamente escolher, e
-  // mostrar a navegação de um projeto contradiz a própria tela. A memória não
-  // é apagada, só não é exibida — ir de `/` direto para Importações continua
-  // trazendo o projeto de volta.
+  // Na tela de ESCOLHA a memória é APAGADA, e não só escondida: ali o
+  // trabalho é justamente escolher, e quem passou por ela fechou o projeto
+  // anterior.
   //
   // A memória vem do módulo, não de estado React: restaurar um backup remonta
   // a árvore, e um `useState` voltaria ao inicial — a barra lateral perderia
   // o projeto depois de uma operação que não tem nada a ver com projeto.
-  const isProjectChooser = location.pathname === "/";
   const lastProject = isProjectChooser
     ? null
     : (activeProject ??

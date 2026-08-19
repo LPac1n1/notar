@@ -68,9 +68,15 @@ test("a tela de escolha não mostra a navegação de projeto nenhum", async ({ p
     .poll(async () => (await sidebarText()).includes("Neste projeto"))
     .toBe(false);
 
-  // Mas a memória não é apagada: sair da escolha para uma tela de plataforma
-  // traz o projeto de volta, senão o usuário fica sem caminho de retorno.
+  // E a memória é APAGADA junto: quem passou pela escolha fechou o projeto,
+  // então nenhuma tela de plataforma pode trazê-lo de volta sozinha.
+  //
+  // Este teste afirmava o CONTRÁRIO até o commit que corrigiu o defeito —
+  // ir da escolha para Importações ou para o Painel ressuscitava na barra
+  // lateral um projeto que o usuário tinha acabado de fechar.
   await page.getByRole("link", { name: "Importações" }).click();
   await expect(page).toHaveURL(/\/importacoes$/);
-  await expect(page.locator("aside").first()).toContainText("Neste projeto");
+  await expect(page.locator("aside").first()).not.toContainText(
+    "Neste projeto",
+  );
 });

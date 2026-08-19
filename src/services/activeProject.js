@@ -61,3 +61,16 @@ export function setLastVisitedProjectSlug(slug) {
 export function getLastVisitedProjectSlug() {
   return lastVisitedProjectSlug;
 }
+
+/**
+ * Esquece o último projeto aberto.
+ *
+ * Chegar à tela de escolha é um ato explícito de SAIR do projeto. Antes a
+ * memória sobrevivia a essa passagem, e ir de lá para Importações ou para o
+ * Painel trazia a navegação do projeto de volta na barra lateral — o
+ * usuário via de novo um projeto que tinha acabado de fechar, sem ter
+ * pedido.
+ */
+export function clearLastVisitedProjectSlug() {
+  lastVisitedProjectSlug = "";
+}
