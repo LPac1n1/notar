@@ -168,7 +168,15 @@ async function _fetchDashboardOverview() {
             "CAST(credit.reference_month AS DATE)",
             projectId,
           )}
-        ) AS project_credit) AS total_credit
+        ) AS project_credit) AS total_credit,
+        (SELECT coalesce(sum(monthly_donor_summary.abatement_amount), 0)
+         FROM monthly_donor_summary
+         WHERE monthly_donor_summary.abatement_status = 'applied'
+           AND ${donorBelongedToProjectAtMonth(
+             "monthly_donor_summary.donor_id",
+             "monthly_donor_summary.reference_month",
+             projectId,
+           )}) AS total_abated
     `),
     query(`
       SELECT
@@ -560,6 +568,7 @@ async function _fetchDashboardOverview() {
       demandCount: toNumber(totalsRows[0]?.demand_count),
       notesCount: toNumber(totalsRows[0]?.notes_count),
       totalCredit: toNumber(totalsRows[0]?.total_credit),
+      totalAbated: toNumber(totalsRows[0]?.total_abated),
     },
     latestMonth,
     latestMonthPendingSummaries,

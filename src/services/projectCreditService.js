@@ -4,6 +4,7 @@ import {
   buildProjectCreditByDonorSql,
   buildProjectCreditByMonthSql,
   buildProjectDonorsWithoutCreditSql,
+  buildProjectNotesCountSql,
 } from "./dashboard/projectCreditSql.js";
 import { ASSIGNMENT_OPEN_END } from "./project/projectAssignmentSql.js";
 
@@ -22,7 +23,7 @@ import { ASSIGNMENT_OPEN_END } from "./project/projectAssignmentSql.js";
 export async function getProjectCreditOverview() {
   const projectId = getActiveProjectId();
 
-  const [monthRows, withoutCreditRows, donorCountRows] =
+  const [monthRows, withoutCreditRows, donorCountRows, notesRows] =
     await Promise.all([
       query(buildProjectCreditByMonthSql(projectId)),
       query(buildProjectDonorsWithoutCreditSql(projectId)),
@@ -38,6 +39,7 @@ export async function getProjectCreditOverview() {
       `,
         [projectId, ASSIGNMENT_OPEN_END],
       ),
+      query(buildProjectNotesCountSql(projectId)),
     ]);
 
   // A query devolve do mês mais recente para o mais antigo; o gráfico precisa
@@ -57,6 +59,7 @@ export async function getProjectCreditOverview() {
     latestMonth,
     months,
     donorCount: Number(donorCountRows[0]?.total ?? 0),
+    notesCount: Number(notesRows[0]?.notes_count ?? 0),
     // Doador cadastrado que nunca gerou crédito. Num projeto de crédito é a
     // pergunta mais frequente, e a causa costuma ser CPF não informado no
     // estabelecimento — não erro do sistema.

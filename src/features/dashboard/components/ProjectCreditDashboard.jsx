@@ -15,6 +15,7 @@ import { useDataResource } from "../../../hooks/useDataResource";
 import { getProjectCreditOverview } from "../../../services/projectCreditService";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
+import { creditPerNote } from "../../../utils/creditAverage";
 
 const EMPTY_FILTERS = {};
 const INITIAL_DATA = {
@@ -22,6 +23,7 @@ const INITIAL_DATA = {
   latestMonth: null,
   months: [],
   donorCount: 0,
+  notesCount: 0,
   donorsWithoutCredit: [],
 };
 
@@ -84,6 +86,7 @@ export default function ProjectCreditDashboard({ project }) {
   const overview = data ?? INITIAL_DATA;
   const hasDonors = overview.donorCount > 0;
   const hasCredit = overview.months.length > 0;
+  const averagePerNote = creditPerNote(overview.totalCredit, overview.notesCount);
 
   // O gráfico é o mesmo componente do projeto principal; o que muda é a
   // série. Aqui só existe uma métrica que faça sentido — crédito em reais.
@@ -119,7 +122,7 @@ export default function ProjectCreditDashboard({ project }) {
       ) : (
         <div className="space-y-6">
           {/* ─── Quanto este projeto gerou ───────────────────────────── */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
               <Eyebrow>Crédito acumulado</Eyebrow>
               <div className="mt-2">
@@ -143,6 +146,22 @@ export default function ProjectCreditDashboard({ project }) {
                 {overview.latestMonth
                   ? `${formatMonthYear(overview.latestMonth.referenceMonth)} • ${formatInteger(overview.latestMonth.donorCount)} doador(es) contribuíram`
                   : "Nenhum mês conciliado ainda."}
+              </p>
+            </div>
+
+            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5">
+              <Eyebrow>Média por nota</Eyebrow>
+              <div className="mt-2">
+                <MetricValue size="xl">
+                  {averagePerNote === null ? "—" : formatCurrency(averagePerNote)}
+                </MetricValue>
+              </div>
+              {/* Média, e não taxa: quanto a NFP credita varia por nota. O
+                  total de notas fica junto para não se ler como regra. */}
+              <p className="mt-2.5 text-sm text-[var(--muted)]">
+                {averagePerNote === null
+                  ? "Nenhuma nota doada ainda."
+                  : `Em ${formatInteger(overview.notesCount)} nota(s) doada(s).`}
               </p>
             </div>
 

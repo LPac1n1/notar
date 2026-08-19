@@ -1,5 +1,6 @@
 import { SkeletonCard } from "../../../components/ui/Skeleton";
 import { formatCurrency, formatInteger } from "../../../utils/format";
+import { creditPerNote } from "../../../utils/creditAverage";
 import MetricCard from "./MetricCard";
 
 /**
@@ -21,6 +22,8 @@ export default function DashboardOverviewCards({
   totals,
   compact = false,
 }) {
+  const averagePerNote = creditPerNote(totals.totalCredit, totals.notesCount);
+
   if (isRefreshing) {
     return (
       <div
@@ -41,7 +44,7 @@ export default function DashboardOverviewCards({
   }
 
   return (
-    <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <MetricCard
         compact={compact}
         label="Doadores ativos"
@@ -67,6 +70,28 @@ export default function DashboardOverviewCards({
         label="Crédito gerado"
         value={formatCurrency(totals.totalCredit)}
         helper="Crédito da NFP conciliado com os doadores deste projeto."
+      />
+      <MetricCard
+        compact={compact}
+        label="Total já abatido"
+        value={formatCurrency(totals.totalAbated)}
+        helper="Somente o abatimento marcado como realizado."
+      />
+      {/* Média, não taxa: quanto a NFP credita varia por nota. O total de
+          notas fica ao lado justamente para não se ler como regra fixa. */}
+      <MetricCard
+        compact={compact}
+        label="Média por nota"
+        value={
+          averagePerNote === null
+            ? "—"
+            : formatCurrency(averagePerNote)
+        }
+        helper={
+          averagePerNote === null
+            ? "Nenhuma nota doada ainda."
+            : `${formatCurrency(totals.totalCredit)} em ${formatInteger(totals.notesCount)} nota(s).`
+        }
       />
       {/* Não há card "Último mês importado" aqui: o banner do topo da página
           já abre com esse mês em destaque, e a seção "Resumo do último mês"

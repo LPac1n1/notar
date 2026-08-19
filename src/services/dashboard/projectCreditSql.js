@@ -1,5 +1,6 @@
 import {
   assignmentJoin,
+  donorBelongedToProjectAtMonth,
   MATCHED_CREDIT_BY_DONOR_MONTH,
 } from "../project/projectAssignmentSql.js";
 
@@ -17,6 +18,25 @@ import {
 
 function safeProjectId(projectId) {
   return String(projectId ?? "").replaceAll("'", "");
+}
+
+/**
+ * Notas doadas pelos doadores do projeto, pelo mês da apuração.
+ *
+ * Serve de denominador da média por nota. Usa `monthly_donor_summary`, a
+ * mesma origem do contador de notas do projeto principal — tirar de outra
+ * tabela faria as duas telas divergirem no mesmo número.
+ */
+export function buildProjectNotesCountSql(projectId) {
+  return `
+    SELECT coalesce(sum(monthly_donor_summary.notes_count), 0) AS notes_count
+    FROM monthly_donor_summary
+    WHERE ${donorBelongedToProjectAtMonth(
+      "monthly_donor_summary.donor_id",
+      "monthly_donor_summary.reference_month",
+      projectId,
+    )}
+  `;
 }
 
 /** Crédito conciliado por mês, só deste projeto. */
