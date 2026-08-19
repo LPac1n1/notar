@@ -19,6 +19,7 @@ import { serializeSqlValue } from "./sql.js";
 export const RESTORE_TABLE_COLUMNS = {
   projects: [
     "id",
+    "display_order",
     "name",
     "slug",
     "modules",
@@ -232,6 +233,7 @@ export async function exportDatabaseSnapshot() {
   const projects = await query(`
     SELECT
       id,
+      display_order,
       name,
       slug,
       modules,

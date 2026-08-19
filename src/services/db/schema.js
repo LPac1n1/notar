@@ -4,6 +4,7 @@ import {
   BACKFILL_DEMAND_PROJECT_SQL,
   BACKFILL_NOTE_PROJECT_SQL,
   BACKFILL_PERSON_PROJECT_SQL,
+  BACKFILL_PROJECT_ORDER_SQL,
   ENSURE_DEFAULT_PROJECT_SQL,
 } from "../project/projectAssignmentSql.js";
 import { DEFAULT_DEMAND_COLOR } from "../../utils/demandColor.js";
@@ -537,6 +538,7 @@ export async function runSchemaBootstrap(conn, { structural = true } = {}) {
   await conn.query(BACKFILL_DEMAND_PROJECT_SQL);
   await conn.query(BACKFILL_NOTE_PROJECT_SQL);
   await conn.query(BACKFILL_PERSON_PROJECT_SQL);
+  await conn.query(BACKFILL_PROJECT_ORDER_SQL);
   await conn.query(BACKFILL_ASSIGNMENTS_SQL);
 
   return migrationResult;

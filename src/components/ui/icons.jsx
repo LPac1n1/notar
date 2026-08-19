@@ -10,6 +10,7 @@ export {
   Check as CheckIcon,
   CheckSquare as ChecklistIcon,
   ChevronDown as ChevronDownIcon,
+  ChevronUp as ChevronUpIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   CircleAlert as DisconnectedIcon,

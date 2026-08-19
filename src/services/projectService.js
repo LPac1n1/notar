@@ -51,6 +51,7 @@ function mapProjectRow(row) {
     slug: row.slug,
     modules: parseModules(row.modules),
     color: row.color ?? "",
+    displayOrder: Number(row.display_order ?? 0),
     isActive: Boolean(row.is_active),
     createdAt: row.created_at ?? "",
   };
@@ -119,16 +120,22 @@ export async function createProject({ name, color = DEFAULT_PROJECT_COLOR }) {
 
   const id = nanoid();
   const slug = await resolveAvailableSlug(buildProjectSlug(trimmedName));
+  // No fim da lista: inserir no meio moveria os cards que o usuário já tinha
+  // posicionado, e ele não pediu isso.
+  const orderRows = await query(
+    `SELECT coalesce(max(display_order), 0) + 1 AS proxima FROM projects`,
+  );
+  const displayOrder = Number(orderRows[0]?.proxima ?? 1);
 
   // Projeto novo nasce com o conjunto mínimo: ver o crédito gerado pelos
   // doadores dele, e ter onde registrar contexto. Os demais módulos são
   // ligados depois, se fizerem falta.
   await executePrepared(
     `
-    INSERT INTO projects (id, name, slug, modules, color, is_active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    INSERT INTO projects (id, name, slug, modules, color, display_order, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `,
-    [id, trimmedName, slug, JSON.stringify(NEW_PROJECT_MODULES), color],
+    [id, trimmedName, slug, JSON.stringify(NEW_PROJECT_MODULES), color, displayOrder],
     { source: "projects", domains: ["projects"] },
   );
 
@@ -300,11 +307,14 @@ export async function listProjects({ activeStatus = "active" } = {}) {
 
   const rows = await queryPrepared(
     `
-    SELECT id, name, slug, modules, color, is_active,
+    SELECT id, name, slug, modules, color, is_active, display_order,
            CAST(created_at AS VARCHAR) AS created_at
     FROM projects
     ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
-    ORDER BY name ASC
+    -- Ordem escolhida pelo usuário. O nome entra como desempate para que uma
+    -- ordem ausente (projeto recém-criado) não deixe a lista instável entre
+    -- carregamentos.
+    ORDER BY coalesce(display_order, 999999) ASC, name ASC
   `,
     params,
   );
@@ -671,4 +681,44 @@ export async function listOverlappingAssignments() {
     leftId: row.left_id,
     rightId: row.right_id,
   }));
+}
+
+/**
+ * Troca de posição um projeto com o vizinho.
+ *
+ * A troca é de PARES, e não uma renumeração da lista inteira: mexer só nas
+ * duas linhas envolvidas mantém a operação barata e evita reescrever a
+ * ordem de projetos que o usuário não tocou.
+ *
+ * As duas escritas vão na mesma transação — se a segunda falhasse sozinha,
+ * os dois projetos ficariam com a mesma posição e a lista passaria a
+ * depender do desempate por nome, mudando de ordem sem o usuário pedir.
+ */
+export async function moveProject(projectId, direction) {
+  const ordered = await listProjects({ activeStatus: "active" });
+  const index = ordered.findIndex((project) => project.id === projectId);
+
+  if (index === -1) return;
+
+  const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+  // Já está na ponta: nada a fazer, e a interface desabilita o botão.
+  if (targetIndex < 0 || targetIndex >= ordered.length) return;
+
+  const current = ordered[index];
+  const neighbour = ordered[targetIndex];
+
+  await runInTransaction(
+    async () => {
+      await executePrepared(
+        `UPDATE projects SET display_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [targetIndex + 1, current.id],
+      );
+      await executePrepared(
+        `UPDATE projects SET display_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [index + 1, neighbour.id],
+      );
+    },
+    { source: "projects", domains: ["projects"] },
+  );
 }

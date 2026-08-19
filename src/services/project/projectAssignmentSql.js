@@ -136,6 +136,24 @@ export const BACKFILL_ASSIGNMENTS_SQL = `
  * projeto precisa ser uma coluna, como em demandas e anotações, e não uma
  * dedução a partir do doador.
  */
+/**
+ * Ordem inicial dos projetos: a alfabética que a tela já usava.
+ *
+ * Numerar a partir da ordem vigente evita que a primeira abertura depois
+ * da migration embaralhe os cards — o usuário veria a lista trocar de
+ * posição sozinha e concluiria que perdeu a configuração.
+ */
+export const BACKFILL_PROJECT_ORDER_SQL = `
+  UPDATE projects
+  SET display_order = ordenados.posicao
+  FROM (
+    SELECT id, row_number() OVER (ORDER BY name ASC, id ASC) AS posicao
+    FROM projects
+  ) AS ordenados
+  WHERE projects.id = ordenados.id
+    AND (projects.display_order IS NULL OR projects.display_order = 0)
+`;
+
 export const BACKFILL_PERSON_PROJECT_SQL = `
   UPDATE people
   SET project_id = '${DEFAULT_PROJECT_ID}'

@@ -9,7 +9,12 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import MetricValue from "../components/ui/MetricValue";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
-import { PlusIcon, TrashIcon } from "../components/ui/icons";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  PlusIcon,
+  TrashIcon,
+} from "../components/ui/icons";
 import ProjectFormModal from "../features/projects/components/ProjectFormModal";
 import UnassignedDonorsModal from "../features/projects/components/UnassignedDonorsModal";
 import { useDataResource } from "../hooks/useDataResource";
@@ -20,10 +25,13 @@ import {
   countDonorsWithoutProject,
   createProject,
   deleteProject,
+  moveProject,
   listProjectSummaries,
   updateProject,
 } from "../services/projectService";
 import { restoreTrashItem } from "../services/trashService";
+import { logError } from "../services/logger";
+import { getErrorMessage } from "../utils/error";
 import { formatMonthYear } from "../utils/date";
 import { formatCurrency, formatInteger } from "../utils/format";
 
@@ -74,6 +82,17 @@ export default function Projects() {
   });
 
   const [isUnassignedOpen, setIsUnassignedOpen] = useState(false);
+
+  const handleMoveProject = async (projectId, direction) => {
+    try {
+      setActionError("");
+      await moveProject(projectId, direction);
+      reloadAll();
+    } catch (moveError) {
+      logError("Projects.move", moveError);
+      setActionError(getErrorMessage(moveError));
+    }
+  };
   const [formProject, setFormProject] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -169,7 +188,7 @@ export default function Projects() {
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {projects.map((project) => {
+          {projects.map((project, index) => {
             // O projeto principal é a casa de todo doador não transferido e o
             // destino do backfill — excluí-lo deixaria a base sem chão.
             const isDefault = project.id === DEFAULT_PROJECT_ID;
@@ -177,7 +196,7 @@ export default function Projects() {
             return (
               <div
                 key={project.id}
-                className="flex flex-col rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5"
+                className="group flex flex-col rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5 transition-colors duration-150 hover:border-[var(--line-strong)] hover:bg-[var(--surface-muted)]"
               >
                 <button
                   type="button"
@@ -213,6 +232,27 @@ export default function Projects() {
                 </button>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
+                  {/* Setas em vez de arrastar: o alvo é explícito, funciona
+                      no teclado e no toque, e não exige precisão de mouse
+                      sobre um card que também é um link. */}
+                  <Button
+                    variant="subtle"
+                    className="px-2 py-1.5 text-xs"
+                    disabled={index === 0 || isBusy}
+                    aria-label={`Mover ${project.name} para cima`}
+                    onClick={() => handleMoveProject(project.id, "up")}
+                  >
+                    <ChevronUpIcon className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="subtle"
+                    className="px-2 py-1.5 text-xs"
+                    disabled={index === projects.length - 1 || isBusy}
+                    aria-label={`Mover ${project.name} para baixo`}
+                    onClick={() => handleMoveProject(project.id, "down")}
+                  >
+                    <ChevronDownIcon className="h-3.5 w-3.5" />
+                  </Button>
                   <Button
                     variant="subtle"
                     className="px-3 py-1.5 text-xs"
