@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
 import Eyebrow from "../components/ui/Eyebrow";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
@@ -13,6 +14,13 @@ import { getPlatformOverview } from "../services/platformDashboardService";
 import { creditPerNote } from "../utils/creditAverage";
 import { formatMonthYear } from "../utils/date";
 import { formatCurrency, formatInteger } from "../utils/format";
+
+const CREDIT_BY_PROJECT_COLUMNS = [
+  { label: "Projeto" },
+  { label: "Doadores", align: "right" },
+  { label: "Crédito", align: "right" },
+  { label: "Último crédito" },
+];
 
 const EMPTY_FILTERS = {};
 const INITIAL_DATA = {
@@ -142,68 +150,55 @@ export default function PlatformDashboard() {
           description="Como o crédito conciliado se divide. As duas últimas linhas existem para a coluna fechar com o total conciliado."
         >
           {overview.projects.length ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-[var(--line)] text-left text-sm">
-                <caption className="sr-only">
-                  Crédito conciliado atribuído a cada projeto, mais a parcela
-                  sem projeto vigente.
-                </caption>
-                <thead className="bg-[var(--surface-strong)] text-xs uppercase tracking-wide text-[var(--muted)]">
-                  <tr>
-                    <th scope="col" className="px-3 py-2">Projeto</th>
-                    <th scope="col" className="px-3 py-2 text-right">Doadores</th>
-                    <th scope="col" className="px-3 py-2 text-right">Crédito</th>
-                    <th scope="col" className="px-3 py-2">Último crédito</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--line)]">
-                  {overview.projects.map((project) => (
-                    <tr key={project.id}>
-                      <th scope="row" className="px-3 py-2 font-medium text-[var(--text-main)]">
-                        {project.name}
-                      </th>
-                      <td className="numeric px-3 py-2 text-right text-[var(--text-soft)]">
-                        {formatInteger(project.donorCount)}
-                      </td>
-                      <td className="numeric px-3 py-2 text-right font-semibold text-[var(--text-main)]">
-                        {formatCurrency(project.totalCredit)}
-                      </td>
-                      <td className="px-3 py-2 text-[var(--muted)]">
-                        {project.latestCreditMonth
-                          ? formatMonthYear(project.latestCreditMonth)
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Fora de projeto vem sempre, mesmo zerado: é a linha que
-                      explica a diferença entre a soma acima e o conciliado. */}
-                  <tr>
-                    <th scope="row" className="px-3 py-2 font-medium text-[var(--muted-strong)]">
-                      Fora de qualquer projeto
-                    </th>
-                    <td className="numeric px-3 py-2 text-right text-[var(--muted)]">—</td>
-                    <td className="numeric px-3 py-2 text-right font-semibold text-[var(--muted-strong)]">
-                      {formatCurrency(overview.unattributedCredit)}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--muted)]">—</td>
-                  </tr>
-                  {/* Sem esta linha a coluna somaria MENOS que o
-                      conciliado, e a diferença não teria explicação na
-                      tela: é crédito de quem doou sem estar cadastrado,
-                      que nenhum projeto consegue reivindicar. */}
-                  <tr>
-                    <th scope="row" className="px-3 py-2 font-medium text-[var(--muted-strong)]">
-                      Doador não cadastrado
-                    </th>
-                    <td className="numeric px-3 py-2 text-right text-[var(--muted)]">—</td>
-                    <td className="numeric px-3 py-2 text-right font-semibold text-[var(--muted-strong)]">
-                      {formatCurrency(overview.credit.matchedWithoutDonor)}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--muted)]">—</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              caption="Crédito conciliado atribuído a cada projeto, mais a parcela sem projeto vigente."
+              columns={CREDIT_BY_PROJECT_COLUMNS}
+            >
+              {overview.projects.map((project) => (
+                <tr key={project.id}>
+                  <th scope="row" className="px-3 py-2 font-medium text-[var(--text-main)]">
+                    {project.name}
+                  </th>
+                  <td className="numeric px-3 py-2 text-right text-[var(--text-soft)]">
+                    {formatInteger(project.donorCount)}
+                  </td>
+                  <td className="numeric px-3 py-2 text-right font-semibold text-[var(--text-main)]">
+                    {formatCurrency(project.totalCredit)}
+                  </td>
+                  <td className="px-3 py-2 text-[var(--muted)]">
+                    {project.latestCreditMonth
+                      ? formatMonthYear(project.latestCreditMonth)
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+              {/* Fora de projeto vem sempre, mesmo zerado: é a linha que
+                  explica a diferença entre a soma acima e o conciliado. */}
+              <tr>
+                <th scope="row" className="px-3 py-2 font-medium text-[var(--muted-strong)]">
+                  Fora de qualquer projeto
+                </th>
+                <td className="numeric px-3 py-2 text-right text-[var(--muted)]">—</td>
+                <td className="numeric px-3 py-2 text-right font-semibold text-[var(--muted-strong)]">
+                  {formatCurrency(overview.unattributedCredit)}
+                </td>
+                <td className="px-3 py-2 text-[var(--muted)]">—</td>
+              </tr>
+              {/* Sem esta linha a coluna somaria MENOS que o
+                  conciliado, e a diferença não teria explicação na
+                  tela: é crédito de quem doou sem estar cadastrado,
+                  que nenhum projeto consegue reivindicar. */}
+              <tr>
+                <th scope="row" className="px-3 py-2 font-medium text-[var(--muted-strong)]">
+                  Doador não cadastrado
+                </th>
+                <td className="numeric px-3 py-2 text-right text-[var(--muted)]">—</td>
+                <td className="numeric px-3 py-2 text-right font-semibold text-[var(--muted-strong)]">
+                  {formatCurrency(overview.credit.matchedWithoutDonor)}
+                </td>
+                <td className="px-3 py-2 text-[var(--muted)]">—</td>
+              </tr>
+            </DataTable>
           ) : (
             <EmptyState
               title="Nenhum projeto ativo"

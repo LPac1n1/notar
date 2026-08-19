@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import Button from "../../../components/ui/Button";
+import DataTable from "../../../components/ui/DataTable";
 import EmptyState from "../../../components/ui/EmptyState";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
 import SectionCard from "../../../components/ui/SectionCard";
@@ -225,6 +226,15 @@ function ReconciliationCell({ reconciliation, abatement }) {
 // after years of use, but rendering 100+ rows in a single table with
 // inline actions starts to feel heavy on lower-end machines. Show the
 // most recent N by default and let the user expand from there.
+// A largura mínima nas três últimas colunas evita que os blocos de status
+// se espremam quando a janela é estreita — a tabela rola em vez de quebrar.
+const MONTHLY_OVERVIEW_COLUMNS = [
+  { label: "Mês" },
+  { label: "Planilha de doações", className: "min-w-[260px]" },
+  { label: "Planilha de créditos", className: "min-w-[260px]" },
+  { label: "Conciliação", className: "min-w-[260px]" },
+];
+
 const INITIAL_VISIBLE_MONTHS = 24;
 const VISIBLE_INCREMENT = 24;
 
@@ -369,100 +379,85 @@ export default function MonthlyImportsOverviewSection({
           description="Tente outro filtro acima para ver mais resultados."
         />
       ) : (
-        <div aria-busy={isRefreshing} className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[var(--line)] text-left text-sm">
-            <caption className="sr-only">
-              Visão por mês de planilhas de doações, planilhas de créditos e
-              estado da conciliação para cada mês importado.
-            </caption>
-            <thead className="bg-[var(--surface-strong)] text-xs uppercase tracking-wide text-[var(--muted)]">
-              <tr>
-                <th scope="col" className="px-3 py-2">Mês</th>
-                <th scope="col" className="px-3 py-2 min-w-[260px]">
-                  Planilha de doações
-                </th>
-                <th scope="col" className="px-3 py-2 min-w-[260px]">
-                  Planilha de créditos
-                </th>
-                <th scope="col" className="px-3 py-2 min-w-[260px]">
-                  Conciliação
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)] bg-[var(--surface-elevated)]">
-              {visibleRows.map((row) => {
-                const isCurrent = row.referenceMonth === currentMonth;
-                return (
-                <tr
-                  key={row.referenceMonth}
-                  className={`align-top ${
+        <>
+          <DataTable
+            ariaBusy={isRefreshing}
+            caption="Visão por mês de planilhas de doações, planilhas de créditos e estado da conciliação para cada mês importado."
+            columns={MONTHLY_OVERVIEW_COLUMNS}
+            bodyClassName="bg-[var(--surface-elevated)]"
+          >
+            {visibleRows.map((row) => {
+              const isCurrent = row.referenceMonth === currentMonth;
+              return (
+              <tr
+                key={row.referenceMonth}
+                className={`align-top ${
+                  isCurrent
+                    ? "bg-[var(--accent-selected)]"
+                    : ""
+                }`}
+              >
+                <td
+                  className={`px-3 py-3 ${
                     isCurrent
-                      ? "bg-[var(--accent-selected)]"
+                      ? "border-l-2 border-[var(--accent)]"
                       : ""
                   }`}
                 >
-                  <td
-                    className={`px-3 py-3 ${
-                      isCurrent
-                        ? "border-l-2 border-[var(--accent)]"
-                        : ""
-                    }`}
-                  >
-                    <p className="font-semibold text-[var(--text-main)]">
-                      {formatMonthYear(row.referenceMonth)}
+                  <p className="font-semibold text-[var(--text-main)]">
+                    {formatMonthYear(row.referenceMonth)}
+                  </p>
+                  <p className="mt-1 text-[10px] text-[var(--muted)]">
+                    {row.referenceMonth}
+                  </p>
+                  {isCurrent ? (
+                    <p className="mt-2 inline-block rounded-full border border-[var(--accent)] bg-[var(--surface)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
+                      Atual
                     </p>
-                    <p className="mt-1 text-[10px] text-[var(--muted)]">
-                      {row.referenceMonth}
-                    </p>
-                    {isCurrent ? (
-                      <p className="mt-2 inline-block rounded-full border border-[var(--accent)] bg-[var(--surface)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
-                        Atual
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-3">
-                    <PresenceCell
-                      importItem={row.donationImport}
-                      emptyLabel="Planilha de doações não importada."
-                      emptyActionLabel="Importar doações"
-                      totalLabel={`${formatInteger(row.donationImport?.totalNotes ?? 0)} nota(s)`}
-                      countSecondary={`${formatInteger(row.donationImport?.validNotes ?? 0)} válida(s)`}
-                      isDeleting={
-                        Boolean(deletingDonationId) &&
-                        deletingDonationId === row.donationImport?.id
-                      }
-                      onReimport={onReimportDonation}
-                      onDelete={onDeleteDonation}
-                      onImportNew={onImportNewDonation}
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <PresenceCell
-                      importItem={row.creditImport}
-                      emptyLabel="Planilha de créditos não importada."
-                      emptyActionLabel="Importar créditos"
-                      totalLabel={`${formatInteger(row.creditImport?.totalRows ?? 0)} linha(s)`}
-                      countSecondary={`${formatInteger(row.creditImport?.validRows ?? 0)} calculada(s)`}
-                      isDeleting={
-                        Boolean(deletingCreditId) &&
-                        deletingCreditId === row.creditImport?.id
-                      }
-                      onReimport={onReimportCredit}
-                      onDelete={onDeleteCredit}
-                      onImportNew={onImportNewCredit}
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <ReconciliationCell
-                      reconciliation={row.reconciliation}
-                      abatement={row.abatement}
-                    />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  ) : null}
+                </td>
+                <td className="px-3 py-3">
+                  <PresenceCell
+                    importItem={row.donationImport}
+                    emptyLabel="Planilha de doações não importada."
+                    emptyActionLabel="Importar doações"
+                    totalLabel={`${formatInteger(row.donationImport?.totalNotes ?? 0)} nota(s)`}
+                    countSecondary={`${formatInteger(row.donationImport?.validNotes ?? 0)} válida(s)`}
+                    isDeleting={
+                      Boolean(deletingDonationId) &&
+                      deletingDonationId === row.donationImport?.id
+                    }
+                    onReimport={onReimportDonation}
+                    onDelete={onDeleteDonation}
+                    onImportNew={onImportNewDonation}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <PresenceCell
+                    importItem={row.creditImport}
+                    emptyLabel="Planilha de créditos não importada."
+                    emptyActionLabel="Importar créditos"
+                    totalLabel={`${formatInteger(row.creditImport?.totalRows ?? 0)} linha(s)`}
+                    countSecondary={`${formatInteger(row.creditImport?.validRows ?? 0)} calculada(s)`}
+                    isDeleting={
+                      Boolean(deletingCreditId) &&
+                      deletingCreditId === row.creditImport?.id
+                    }
+                    onReimport={onReimportCredit}
+                    onDelete={onDeleteCredit}
+                    onImportNew={onImportNewCredit}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <ReconciliationCell
+                    reconciliation={row.reconciliation}
+                    abatement={row.abatement}
+                  />
+                </td>
+              </tr>
+              );
+            })}
+          </DataTable>
           {hasMore ? (
             <div className="mt-3 flex items-center justify-center">
               <Button
@@ -474,7 +469,7 @@ export default function MonthlyImportsOverviewSection({
               </Button>
             </div>
           ) : null}
-        </div>
+        </>
       )}
     </SectionCard>
   );

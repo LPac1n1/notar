@@ -1,5 +1,17 @@
 import EmptyState from "../../../components/ui/EmptyState";
 
+/**
+ * Amostra da planilha antes de importar.
+ *
+ * Não usa o `DataTable` das outras tabelas por um motivo: ali o cabeçalho é
+ * rótulo de interface e vai em versalete, enquanto aqui ele é DADO — são os
+ * nomes das colunas do arquivo do usuário. Passá-los por uppercase mostraria
+ * um nome diferente do que está no arquivo, justamente na tela em que ele
+ * confere se o sistema leu o cabeçalho certo.
+ *
+ * O resto (moldura, divisórias, células) segue os mesmos tokens.
+ */
+
 export default function ImportPreviewTable({ previewData }) {
   if (previewData.previewRows.length === 0) {
     return (
@@ -13,7 +25,7 @@ export default function ImportPreviewTable({ previewData }) {
   return (
     <div className="overflow-auto rounded-md border border-[var(--line)] bg-[var(--surface-elevated)]">
       <table className="min-w-full text-sm">
-        <thead className="bg-[color:var(--surface-muted)]">
+        <thead className="bg-[var(--surface-strong)]">
           <tr>
             {previewData.columns.map((column) => (
               <th
@@ -29,7 +41,7 @@ export default function ImportPreviewTable({ previewData }) {
           {previewData.previewRows.map((row, index) => (
             <tr
               key={index}
-              className="border-b border-[rgba(255,255,255,0.05)]"
+              className="border-b border-[var(--line)]"
             >
               {previewData.columns.map((column) => (
                 <td

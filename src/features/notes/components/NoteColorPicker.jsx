@@ -28,7 +28,7 @@ export default function NoteColorPicker({ value, onChange }) {
               aria-pressed={isSelected}
               className={`h-8 w-8 rounded-md border transition ${
                 isSelected
-                  ? "border-[var(--text-main)] shadow-[0_0_0_3px_rgba(255,255,255,0.12)]"
+                  ? "border-[var(--text-main)] shadow-[0_0_0_3px_var(--line-strong)]"
                   : "border-[var(--line)] hover:border-[var(--line-strong)]"
               }`}
               style={{ backgroundColor: option.value }}
