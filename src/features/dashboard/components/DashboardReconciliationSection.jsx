@@ -5,6 +5,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import MetricCard from "../../../components/ui/MetricCard";
+import DetailList from "./DetailList";
 import { useDataResource } from "../../../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { getReconciliationOverview } from "../../../services/reconciliation/creditReconciliationService";
@@ -101,10 +102,7 @@ export default function DashboardReconciliationSection({
       description="Cruzamento entre planilhas de doações e créditos da NFP por (CNPJ, número da nota, valor)."
     >
       {!hasAnyData ? (
-        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
-          Importe planilhas de doações e créditos do mesmo período para ver o
-          cruzamento aqui.
-        </div>
+        <DetailList emptyMessage="Importe planilhas de doações e créditos do mesmo período para ver o cruzamento aqui." />
       ) : (
         <>
           <div className="mb-4 grid gap-3 md:grid-cols-2">

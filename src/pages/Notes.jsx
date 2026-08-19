@@ -594,7 +594,7 @@ export default function Notes() {
           description="Crie uma anotação para registrar informações rápidas do dia a dia."
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {notes.map((note) => (
             <NoteCard
               key={note.id}

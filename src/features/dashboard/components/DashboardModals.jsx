@@ -206,9 +206,9 @@ export default function DashboardModals({
           </p>
         </div>
 
-        <div className="mt-4 space-y-3">
-          {dashboard?.demandBreakdown?.length ? (
-            dashboard.demandBreakdown.map((item) => (
+        <div className="mt-4">
+          <DetailList emptyMessage="Nenhuma consolidação por demanda disponível para este mês.">
+            {(dashboard?.demandBreakdown ?? []).map((item) => (
               <div
                 key={item.demand}
                 className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
@@ -225,12 +225,8 @@ export default function DashboardModals({
                   </p>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--muted)]">
-              Nenhuma consolidação por demanda disponível para este mês.
-            </div>
-          )}
+            ))}
+          </DetailList>
         </div>
       </Modal>
     );

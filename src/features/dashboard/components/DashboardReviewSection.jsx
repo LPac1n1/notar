@@ -2,6 +2,7 @@ import DataSyncSectionLoading from "../../../components/ui/DataSyncSectionLoadin
 import SectionCard from "../../../components/ui/SectionCard";
 import { formatInteger } from "../../../utils/format";
 import MetricCard from "../../../components/ui/MetricCard";
+import DetailList from "./DetailList";
 
 const REVIEW_ITEMS = [
   {
@@ -72,11 +73,9 @@ export default function DashboardReviewSection({
   return (
     <SectionCard title="Pontos para revisar">
       {totalInconsistencyCount === 0 || visibleItems.length === 0 ? (
-        <div className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
-          Nenhum ponto importante de revisão foi encontrado com os dados atuais.
-        </div>
+        <DetailList emptyMessage="Nenhum ponto importante de revisão foi encontrado com os dados atuais." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {visibleItems.map((item) => (
             <MetricCard
               key={item.countKey}
