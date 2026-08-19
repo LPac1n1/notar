@@ -21,7 +21,7 @@ export default function ProjectSwitcher() {
         onClick={() => navigate("/")}
         className="flex w-full items-center justify-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3 text-left transition-colors hover:border-[var(--line-strong)] lg:justify-start"
       >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[var(--on-accent)]">
           <span className="font-display text-2xl font-semibold">N</span>
         </div>
         <div className="hidden min-w-0 lg:block">
@@ -48,7 +48,7 @@ export default function ProjectSwitcher() {
       className="flex w-full items-center justify-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-3 text-left transition-colors hover:border-[var(--accent)] lg:justify-start"
     >
       <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[#12151c]"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--on-accent)]"
         style={{ background: navProject.color || "var(--accent)" }}
       >
         <span className="font-display text-xl font-semibold">

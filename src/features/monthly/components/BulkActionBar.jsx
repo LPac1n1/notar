@@ -40,7 +40,7 @@ export default function BulkActionBar({
       <div className="flex items-center gap-3">
         <div
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[#12151c]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[var(--on-accent)]"
         >
           <CheckIcon className="h-4 w-4" />
         </div>

@@ -78,6 +78,14 @@
   /* Barra abaixo do zero no gráfico de evolução. Não reusa --danger: ali é
      alerta (algo a corrigir), e um mês de ganho negativo é leitura, não
      defeito. Vermelho dessaturado o suficiente para ler como direção. */
+  /* Texto e ícone POR CIMA do acento.
+     Precisa variar com o tema, e é justamente isso que um hexadecimal
+     cravado no componente não faz: no escuro o acento é claro e pede
+     texto quase-preto (6,3:1); no claro o acento é escuro e pede branco
+     (6,3:1). Com o valor fixo em quase-preto, o tema claro media 3,0:1 —
+     abaixo do mínimo AA de 4,5:1 — no botão primário, no item ativo da
+     barra lateral e em mais cinco pontos. */
+  --on-accent: #101113;
   --data-negative: #e06c6c;
   --data-grid: rgba(255, 255, 255, 0.06);
 
@@ -410,6 +418,7 @@ textarea {
   --data-3: #0284c7;
   --data-4: #c2410c;
   --data-5: #7c3aed;
+  --on-accent: #ffffff;
   --data-negative: #b91c1c;
   --data-grid: rgba(0, 0, 0, 0.06);
   --shadow-elevated: 0 20px 48px -28px rgba(0, 0, 0, 0.16);

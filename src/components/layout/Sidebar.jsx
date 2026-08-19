@@ -74,7 +74,7 @@ function NavItem({ item, compact = false, badgeCount = 0, badgeTitle = "" }) {
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
               isActive
-                ? "bg-[var(--accent)] text-[#12151c]"
+                ? "bg-[var(--accent)] text-[var(--on-accent)]"
                 : "bg-[var(--surface-elevated)] text-[var(--muted)] group-hover:bg-[var(--surface-muted)] group-hover:text-[var(--text-main)]"
             }`}
           >
@@ -207,7 +207,7 @@ export default function Sidebar() {
   return (
     <>
       <div className="flex items-center gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 md:hidden">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[#12151c]">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--accent)] text-[var(--on-accent)]">
           <span className="font-display text-lg font-semibold">
             N
           </span>

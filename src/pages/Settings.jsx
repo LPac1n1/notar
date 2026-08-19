@@ -311,7 +311,7 @@ export default function Settings() {
                 aria-pressed={isActive}
                 className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-[var(--accent)] text-[#12151c] shadow-sm"
+                    ? "bg-[var(--accent)] text-[var(--on-accent)] shadow-sm"
                     : "text-[var(--muted-strong)] hover:text-[var(--text-main)]"
                 }`}
               >

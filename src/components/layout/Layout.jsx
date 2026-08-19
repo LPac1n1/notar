@@ -8,7 +8,7 @@ export default function Layout({ children }) {
     <div className="h-dvh overflow-hidden">
       <a
         href={`#${APP_SCROLL_CONTAINER_ID}`}
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--accent)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#101113]"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--accent)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[var(--on-accent)]"
       >
         Pular para o conteúdo principal
       </a>

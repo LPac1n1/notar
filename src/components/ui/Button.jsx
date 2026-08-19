@@ -6,7 +6,7 @@ import Loader from "./Loader";
 // "secondary accent": só índigo.
 const VARIANTS = {
   primary:
-    "border border-[color:var(--accent-strong)] bg-[color:var(--accent)] text-[#101113] hover:bg-[color:var(--accent-strong)] hover:-translate-y-px active:translate-y-0 active:bg-[color:var(--accent-deep)]",
+    "border border-[color:var(--accent-strong)] bg-[color:var(--accent)] text-[var(--on-accent)] hover:bg-[color:var(--accent-strong)] hover:-translate-y-px active:translate-y-0 active:bg-[color:var(--accent-deep)]",
   danger:
     "border border-[color:var(--danger)] bg-[color:var(--danger)] text-[#fbf9f5] hover:border-[color:var(--danger-strong)] hover:bg-[color:var(--danger-strong)] hover:-translate-y-px active:translate-y-0",
   subtle:

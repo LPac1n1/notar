@@ -863,7 +863,7 @@ export default function Monthly() {
             />
             Filtros
             {activeFilterCount > 0 ? (
-              <span className="rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-[#12151c]">
+              <span className="rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-[var(--on-accent)]">
                 {activeFilterCount}
               </span>
             ) : null}
