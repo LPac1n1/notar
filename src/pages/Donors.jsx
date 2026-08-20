@@ -22,6 +22,10 @@ import {
   DONOR_TYPE_OPTIONS,
 } from "../constants/filterOptions";
 import DonorForm from "../features/donors/components/DonorForm";
+import {
+  describeDonationStartDiscovery,
+  useDonationStartDiscovery,
+} from "../features/donors/hooks/useDonationStartDiscovery";
 import DonorListItem from "../features/donors/components/DonorListItem";
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
 import ReactivateDonorModal from "../features/donors/components/ReactivateDonorModal";
@@ -325,6 +329,25 @@ export default function Donors() {
       scrollAppTo(scrollTop);
     });
   }, [isLoading]);
+
+  // O início das doações se descobre sozinho a partir do CPF: a data já
+  // está nas planilhas importadas. Só no cadastro — para um doador que já
+  // existe, quem cuida disso é o preenchimento pós-importação, que nunca
+  // sobrescreve o que foi digitado.
+  const handleDiscoveredDonationStart = useCallback((month) => {
+    setCreateForm((current) =>
+      current.donationStartDate
+        ? current
+        : { ...current, donationStartDate: month },
+    );
+  }, []);
+
+  const { status: donationStartDiscoveryStatus } = useDonationStartDiscovery({
+    cpf: createForm.cpf,
+    currentStartDate: createForm.donationStartDate,
+    enabled: isCreateModalOpen,
+    onDiscover: handleDiscoveredDonationStart,
+  });
 
   const handleFormChange = (setter, setFormErrors) => (event) => {
     const { name, value } = event.target;
@@ -758,6 +781,9 @@ export default function Donors() {
           >
             <DonorForm
               demandOptions={donorFormDemandOptions}
+              donationStartDescription={describeDonationStartDiscovery(
+                donationStartDiscoveryStatus,
+              )}
               showDemand={hasDemands}
               showDonorRoles={hasDonorRoles}
               errors={createFormErrors}

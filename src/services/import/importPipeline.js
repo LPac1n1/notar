@@ -14,6 +14,7 @@ import {
 import { createActionHistoryEntry } from "../actionHistoryService";
 import { reconcileCredits } from "../reconciliation/creditReconciliationService";
 import { reconcileImport } from "./importReconcile";
+import { backfillDonationStartDates } from "../donor/donationStart";
 import {
   brOrUsDoubleSqlExpression,
   buildCsvSource,
@@ -606,6 +607,11 @@ export async function processImportedFile({
         });
         await reconcileCredits({ emitChange: false });
 
+        // A planilha que acabou de entrar pode ser a primeira aparição de um
+        // doador cadastrado sem data de início. Preencher aqui é o que evita
+        // que alguém tenha de procurar isso à mão a cada competência.
+        await backfillDonationStartDates({ emitChange: false });
+
         reportProgress({
           step: "finalizing",
           label: "Salvando histórico da importação...",
@@ -1154,6 +1160,11 @@ export async function applyReimport(previewData, { onProgress } = {}) {
           label: "Conciliando doações com créditos...",
         });
         await reconcileCredits({ emitChange: false });
+
+        // A planilha que acabou de entrar pode ser a primeira aparição de um
+        // doador cadastrado sem data de início. Preencher aqui é o que evita
+        // que alguém tenha de procurar isso à mão a cada competência.
+        await backfillDonationStartDates({ emitChange: false });
 
         reportProgress({
           step: "finalizing",

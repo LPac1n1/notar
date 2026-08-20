@@ -16,6 +16,7 @@ import TextInput from "../../../components/ui/TextInput";
  */
 export default function DonorForm({
   demandOptions,
+  donationStartDescription = "",
   errors = {},
   form,
   holderOptions,
@@ -111,6 +112,7 @@ export default function DonorForm({
         value={form.donationStartDate}
         onChange={onChange}
         error={errors.donationStartDate}
+        description={donationStartDescription}
       />
     </div>
   );
