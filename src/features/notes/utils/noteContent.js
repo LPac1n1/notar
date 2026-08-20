@@ -187,3 +187,23 @@ export function isNoteContentEmpty(value) {
   const documentNode = new DOMParser().parseFromString(html, "text/html");
   return !documentNode.body.textContent?.trim();
 }
+
+/**
+ * Texto puro de uma anotação, para busca.
+ *
+ * O conteúdo é HTML do editor: procurar direto nele acharia "strong" dentro de
+ * uma marcação de negrito e devolveria anotações que não contêm a palavra.
+ * O acento sai dos DOIS lados porque quem digita "reuniao" espera achar
+ * "reunião" — mesmo critério da busca por texto no banco, que compara com
+ * `strip_accents` nas duas pontas.
+ */
+export function toSearchableText(value) {
+  return String(value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}

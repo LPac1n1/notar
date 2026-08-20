@@ -28,7 +28,7 @@ async function excluirPrimeira(page) {
 
 test("desfazer traz a anotação de volta", async ({ page }) => {
   await page.goto("/p/demandas-de-moradia");
-  await page.getByRole("link", { name: "Anotações" }).click();
+  await page.getByRole("link", { name: "Anotações", exact: true }).click();
   await criarNota(page, "Lembrete importante");
 
   await excluirPrimeira(page);
@@ -42,7 +42,7 @@ test("desfazer traz a anotação de volta", async ({ page }) => {
 
 test("a anotação excluída pode ser restaurada pela lixeira", async ({ page }) => {
   await page.goto("/p/demandas-de-moradia");
-  await page.getByRole("link", { name: "Anotações" }).click();
+  await page.getByRole("link", { name: "Anotações", exact: true }).click();
   await criarNota(page, "Texto que nao pode sumir");
 
   await excluirPrimeira(page);
@@ -52,6 +52,6 @@ test("a anotação excluída pode ser restaurada pela lixeira", async ({ page })
   await expect(page.getByText("Texto que nao pode sumir")).toBeVisible();
   await page.getByRole("button", { name: "Restaurar" }).first().click();
 
-  await page.locator("aside").first().getByRole("link", { name: "Anotações" }).click();
+  await page.locator("aside").first().getByRole("link", { name: "Anotações", exact: true }).click();
   await expect(page.getByText("Texto que nao pode sumir")).toBeVisible();
 });

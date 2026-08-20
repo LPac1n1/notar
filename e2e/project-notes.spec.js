@@ -22,7 +22,9 @@ async function createNote(page, title) {
 test("cada projeto vê apenas as próprias anotações", async ({ page }) => {
   await page.goto("/p/demandas-de-moradia");
 
-  await page.getByRole("link", { name: "Anotações" }).click();
+  await page
+    .getByRole("link", { name: "Anotações", exact: true })
+    .click();
   await createNote(page, "Lembrete de Moradia");
 
   // Projeto novo começa sem anotação nenhuma.
@@ -34,7 +36,9 @@ test("cada projeto vê apenas as próprias anotações", async ({ page }) => {
   await expect(page.getByText('Projeto "Capoeira" criado.')).toBeVisible();
   await page.getByRole("button", { name: /Capoeira/ }).first().click();
 
-  await page.getByRole("link", { name: "Anotações" }).click();
+  await page
+    .getByRole("link", { name: "Anotações", exact: true })
+    .click();
   await expect(page.getByText("Nenhuma anotação cadastrada")).toBeVisible();
   await expect(page.getByText("Lembrete de Moradia")).toHaveCount(0);
 
@@ -43,7 +47,9 @@ test("cada projeto vê apenas as próprias anotações", async ({ page }) => {
 
   await page.locator("aside").first().getByRole("button").first().click();
   await page.getByRole("button", { name: /Demandas de Moradia/ }).first().click();
-  await page.getByRole("link", { name: "Anotações" }).click();
+  await page
+    .getByRole("link", { name: "Anotações", exact: true })
+    .click();
 
   await expect(page.getByText("Lembrete de Moradia")).toBeVisible();
   await expect(page.getByText("Lembrete de Capoeira")).toHaveCount(0);

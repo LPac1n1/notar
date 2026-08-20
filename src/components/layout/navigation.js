@@ -80,12 +80,24 @@ export const PLATFORM_NAV_ITEMS = [
     label: "Painel",
     description: "O movimento do sistema inteiro, acima dos projetos",
     icon: PlatformIcon,
+    // Sem `end`, o Painel ficaria marcado como ativo também em
+    // /plataforma/anotacoes, que é um irmão e não um filho dele.
+    end: true,
   },
   {
     to: "/importacoes",
     label: "Importações",
     description: "Planilha única de doações e créditos, para todos os projetos",
     icon: ImportIcon,
+  },
+  {
+    to: "/plataforma/anotacoes",
+    // Não pode se chamar só "Anotações": dentro de um projeto os dois
+    // blocos aparecem juntos na barra lateral, e dois itens com o mesmo
+    // nome só se distinguiriam pelo cabeçalho acima deles.
+    label: "Anotações gerais",
+    description: "Registros que valem para o sistema inteiro",
+    icon: NotesIcon,
   },
 ];
 

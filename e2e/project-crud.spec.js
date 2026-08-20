@@ -73,7 +73,7 @@ test("projeto novo nasce mínimo e com base de doadores própria", async ({ page
   const sidebar = page.locator("aside").first();
   await expect(sidebar.getByRole("link", { name: "Dashboard" })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: "Doadores" })).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: "Anotações" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "Anotações", exact: true })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: "Gestão Mensal" })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: "Pessoas" })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: "Demandas" })).toHaveCount(0);

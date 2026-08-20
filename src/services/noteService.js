@@ -6,6 +6,25 @@ import { createTrashItem } from "./trashService";
 import { executePrepared, queryPrepared } from "./db";
 import { getActiveProjectId } from "./activeProject.js";
 
+/**
+ * Escopo das anotações que não pertencem a projeto nenhum.
+ *
+ * É gravado na mesma coluna `project_id`, com um valor que nenhum projeto
+ * pode ter — os ids de projeto são gerados por nanoid ou são o id do
+ * projeto padrão. Assim a consulta de listagem continua sendo uma
+ * igualdade simples, e não ganha um ramo para NULL que teria de ser
+ * lembrado em cada função nova.
+ *
+ * Anotação de plataforma serve ao que vale para o sistema inteiro; a de
+ * projeto continua isolada no contexto dele.
+ */
+export const PLATFORM_NOTES_SCOPE = "__plataforma__";
+
+/** O escopo pedido, ou o projeto aberto no momento. */
+function resolveScope(scope) {
+  return scope || getActiveProjectId();
+}
+
 function mapNoteRow(row) {
   return {
     id: row.id,
@@ -31,7 +50,7 @@ function normalizeNotePayload({ title = "", content = "", color = DEFAULT_NOTE_C
  * O filtro por projeto é o que separa os contextos: sem ele, quem abre um
  * projeto novo encontra os lembretes do projeto principal.
  */
-export async function listNotes() {
+export async function listNotes({ scope = "" } = {}) {
   const rows = await queryPrepared(
     `
     SELECT
@@ -45,7 +64,7 @@ export async function listNotes() {
     WHERE project_id = ?
     ORDER BY updated_at DESC, created_at DESC, id ASC
   `,
-    [getActiveProjectId()],
+    [resolveScope(scope)],
   );
 
   return rows.map(mapNoteRow);
@@ -56,7 +75,7 @@ export async function createNote({
   title,
   content,
   color = DEFAULT_NOTE_COLOR,
-}, { recordHistory = true } = {}) {
+}, { recordHistory = true, scope = "" } = {}) {
   const normalizedNote = normalizeNotePayload({ title, content, color });
 
   if (!normalizedNote.title) {
@@ -75,7 +94,7 @@ export async function createNote({
     `,
     [
       id,
-      getActiveProjectId(),
+      resolveScope(scope),
       normalizedNote.title,
       normalizedNote.content,
       normalizedNote.color,

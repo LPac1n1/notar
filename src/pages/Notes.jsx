@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Button from "../components/ui/Button";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -8,8 +8,10 @@ import FeedbackMessage from "../components/ui/FeedbackMessage";
 import FormModal from "../components/ui/FormModal";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
+import TextInput from "../components/ui/TextInput";
 import { PlusIcon } from "../components/ui/icons";
 import AutoSaveStatus from "../features/notes/components/AutoSaveStatus";
+import { toSearchableText } from "../features/notes/utils/noteContent";
 import NoteCard from "../features/notes/components/NoteCard";
 import NoteFormFields from "../features/notes/components/NoteFormFields";
 import {
@@ -24,6 +26,7 @@ import {
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import {
+  PLATFORM_NOTES_SCOPE,
   createNote,
   deleteNote,
   listNotes,
@@ -33,8 +36,15 @@ import { restoreTrashItem } from "../services/trashService";
 import { getErrorMessage } from "../utils/error";
 import { formatInteger } from "../utils/format";
 
-export default function Notes() {
+/**
+ * `scope` vazio significa o projeto aberto — é o comportamento de sempre.
+ * A rota da plataforma passa `PLATFORM_NOTES_SCOPE`, e é só isso que separa
+ * os dois espaços: a mesma tela, o mesmo editor, listas diferentes.
+ */
+export default function Notes({ scope = "" }) {
+  const isPlatformScope = scope === PLATFORM_NOTES_SCOPE;
   const [notes, setNotes] = useState([]);
+  const [search, setSearch] = useState("");
   const [createForm, setCreateForm] = useState({ ...EMPTY_NOTE_FORM });
   const [editForm, setEditForm] = useState({ ...EMPTY_NOTE_FORM });
   const [editingNote, setEditingNote] = useState(null);
@@ -78,7 +88,7 @@ export default function Notes() {
       }
 
       setError("");
-      const noteRows = await listNotes();
+      const noteRows = await listNotes({ scope });
 
       if (requestId !== notesRequestIdRef.current) {
         return;
@@ -97,7 +107,7 @@ export default function Notes() {
         setIsRefreshing(false);
       }
     }
-  }, []);
+  }, [scope]);
 
   const updateCreateAutoSaveStatus = useCallback((status) => {
     if (isMountedRef.current) {
@@ -165,7 +175,7 @@ export default function Notes() {
             { recordHistory: false },
           );
         } else {
-          noteId = await createNote(draft, { recordHistory: true });
+          noteId = await createNote(draft, { recordHistory: true, scope });
           createAutoNoteIdRef.current = noteId;
         }
 
@@ -196,7 +206,7 @@ export default function Notes() {
         createSavePromiseRef.current = null;
       }
     }
-  }, [updateCreateAutoSaveStatus, upsertSavedNote]);
+  }, [scope, updateCreateAutoSaveStatus, upsertSavedNote]);
 
   const saveEditDraft = useCallback(
     async ({ recordHistory = false } = {}) => {
@@ -539,6 +549,18 @@ export default function Notes() {
     }
   };
 
+  const searchTerm = toSearchableText(search);
+  const visibleNotes = useMemo(() => {
+    if (!searchTerm) {
+      return notes;
+    }
+
+    return notes.filter((note) =>
+      `${toSearchableText(note.title)} ${toSearchableText(note.content)}`.includes(
+        searchTerm,
+      ),
+    );
+  }, [notes, searchTerm]);
   if (isLoading && !notes.length && !error) {
     return (
       <div>
@@ -555,21 +577,34 @@ export default function Notes() {
     );
   }
 
+
   return (
     <div>
       <PageHeader
         title="Anotações"
-        subtitle={`${formatInteger(notes.length)} anotação(ões) cadastrada(s).`}
+        subtitle={`${formatInteger(visibleNotes.length)} anotação(ões) ${
+          isPlatformScope
+            ? "da plataforma, visíveis em qualquer projeto"
+            : "deste projeto"
+        }.`}
         className="mb-6"
       />
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <Button
           onClick={handleOpenCreateModal}
           leftIcon={<PlusIcon className="h-4 w-4" />}
         >
           Nova anotação
         </Button>
+        <TextInput
+          label="Busca"
+          name="search"
+          placeholder="Procure por qualquer texto"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          wrapperClassName="md:w-80"
+        />
       </div>
 
       <FeedbackMessage
@@ -593,9 +628,22 @@ export default function Notes() {
           title="Nenhuma anotação cadastrada"
           description="Crie uma anotação para registrar informações rápidas do dia a dia."
         />
+      ) : visibleNotes.length === 0 ? (
+        // Distinto do vazio acima de propósito: aqui existem anotações, o
+        // que falta é resultado para a busca — sugerir "crie a primeira"
+        // mandaria a pessoa cadastrar quando ela só precisa limpar o campo.
+        <EmptyState
+          title="Nenhuma anotação encontrada"
+          description="Nenhuma anotação tem esse texto no título ou no conteúdo."
+          action={
+            <Button variant="subtle" onClick={() => setSearch("")}>
+              Limpar busca
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {notes.map((note) => (
+          {visibleNotes.map((note) => (
             <NoteCard
               key={note.id}
               note={note}

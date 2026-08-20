@@ -38,7 +38,7 @@ test("copy buttons and notes flow", async ({ page }) => {
   await expect(copyNameButton).toHaveAttribute("data-copy-state", "copied");
   await expect(copyNameButton).toHaveAttribute("title", "Copiado");
 
-  await page.getByRole("link", { name: "Anotações" }).click();
+  await page.getByRole("link", { name: "Anotações", exact: true }).click();
   await page.getByRole("button", { name: "Nova anotação" }).click();
   const noteDialog = page.getByRole("dialog", { name: "Nova anotação" });
   await noteDialog.getByPlaceholder("Título da anotação").fill("Nota de teste");
