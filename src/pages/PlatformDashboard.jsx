@@ -7,6 +7,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 import MetricCard from "../components/ui/MetricCard";
 import PageHeader from "../components/ui/PageHeader";
 import SectionCard from "../components/ui/SectionCard";
+import EstablishmentIntelligenceSection from "../features/dashboard/components/EstablishmentIntelligenceSection";
 import MonthlyTrendChart from "../features/dashboard/components/MonthlyTrendChart";
 import { useDataResource } from "../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
@@ -206,6 +207,10 @@ export default function PlatformDashboard() {
             />
           )}
         </SectionCard>
+
+        {/* ─── Onde vale a pena comprar ────────────────────────────────── */}
+        {/* Sem recorte de projeto: aqui a leitura é do sistema inteiro. */}
+        <EstablishmentIntelligenceSection />
 
         {/* ─── Totais do sistema ───────────────────────────────────────── */}
         <div>

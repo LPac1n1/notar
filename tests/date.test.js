@@ -39,3 +39,18 @@ test("hasDonationStartConflict detects donations before donor start month", () =
   assert.equal(hasDonationStartConflict("2026-02-01", "2026-02-01"), false);
   assert.equal(hasDonationStartConflict("", "2026-02-01"), false);
 });
+
+test("formatDatePtBR não desloca data sem hora por causa do fuso", () => {
+  // `new Date("2026-03-01")` é meia-noite em UTC pela especificação; em UTC-3
+  // isso volta um dia e a data da nota aparecia no mês anterior ao da própria
+  // competência. A formatação de data pura sai do texto, sem passar por `Date`.
+  assert.equal(formatDatePtBR("2026-03-01"), "01/03/2026");
+  assert.equal(formatDatePtBR("2026-01-01"), "01/01/2026");
+  assert.equal(formatDatePtBR("2025-12-31"), "31/12/2025");
+
+  // Com hora, continua pelo caminho que converte para o fuso local.
+  assert.equal(formatDatePtBR("2026-03-01 10:00:00"), "01/03/2026");
+
+  assert.equal(formatDatePtBR(""), "");
+  assert.equal(formatDatePtBR("nada disso"), "nada disso");
+});

@@ -10,6 +10,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import CopyableCpf from "../../donors/components/CopyableCpf";
 import CopyableDonorName from "../../donors/components/CopyableDonorName";
 import MonthlyTrendChart from "./MonthlyTrendChart";
+import EstablishmentIntelligenceSection from "./EstablishmentIntelligenceSection";
 import ProjectDonorCreditSection from "./ProjectDonorCreditSection";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { useDataResource } from "../../../hooks/useDataResource";
@@ -251,6 +252,11 @@ export default function ProjectCreditDashboard({ project }) {
 
           {/* ─── Quem sustenta ───────────────────────────────────────── */}
           <ProjectDonorCreditSection months={overview.months} />
+
+          {/* ─── Onde vale a pena comprar ────────────────────────────── */}
+          {/* Recortado pelo projeto: conta só as compras de quem pertencia
+              a ele no mês da nota. */}
+          <EstablishmentIntelligenceSection projectId={project.id} />
 
           {/* ─── Falta alguma coisa? ─────────────────────────────────── */}
           {overview.donorsWithoutCredit.length > 0 ? (

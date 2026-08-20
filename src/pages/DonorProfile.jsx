@@ -15,6 +15,7 @@ import CatchUpAdjustmentModal from "../features/donors/components/CatchUpAdjustm
 import DeactivateDonorModal from "../features/donors/components/DeactivateDonorModal";
 import DonorAbatementAdjustmentsSection from "../features/donors/components/DonorAbatementAdjustmentsSection";
 import DonorCpfSourcesSection from "../features/donors/components/DonorCpfSourcesSection";
+import DonorDonationHistorySection from "../features/donors/components/DonorDonationHistorySection";
 import DonorCreditReconciliationSection from "../features/donors/components/DonorCreditReconciliationSection";
 import DonorLinkedSection from "../features/donors/components/DonorLinkedSection";
 import DonorMonthlyHistorySection from "../features/donors/components/DonorMonthlyHistorySection";
@@ -421,6 +422,8 @@ export default function DonorProfile() {
       </div>
 
       <DonorCpfSourcesSection sources={profile.sources} />
+
+      <DonorDonationHistorySection donorId={donor.id} />
 
       {profile.activityHistory.length > 0 ? (
         <SectionCard

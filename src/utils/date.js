@@ -101,9 +101,32 @@ export function formatMonthAbbrev(value) {
   return `${MONTH_ABBREVIATIONS[monthIndex]}/${year}`;
 }
 
+/**
+ * "2026-03-01" → "01/03/2026".
+ *
+ * A data sem hora é formatada a partir do TEXTO, sem passar por `Date`.
+ * `new Date("2026-03-01")` é interpretado como meia-noite em UTC pela
+ * especificação; formatado em UTC-3, volta um dia e vira "28/02/2026" — a data
+ * da nota aparecia no mês anterior ao da própria competência.
+ *
+ * O defeito ficou latente por muito tempo porque todos os usos anteriores
+ * passavam data COM hora ("2026-03-01 10:00:00"), que o mesmo construtor lê
+ * como horário local e por isso não desloca. A primeira tela a exibir uma data
+ * pura — o histórico de compras do doador — foi a que revelou.
+ *
+ * Valor com hora continua pelo caminho antigo de propósito: ali a conversão
+ * para o fuso local é o comportamento certo.
+ */
 export function formatDatePtBR(value) {
   if (!value) {
     return "";
+  }
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value).trim());
+
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return `${day}/${month}/${year}`;
   }
 
   const date = new Date(value);
