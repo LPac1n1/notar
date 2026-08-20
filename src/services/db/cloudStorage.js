@@ -1,5 +1,4 @@
 import {
-  createSnapshotPayload,
   normalizeSnapshotPayload,
   snapshotHasData,
 } from "../../utils/backup.js";
@@ -12,7 +11,7 @@ import {
   supabaseAnonKey,
   supabaseUrl,
 } from "../supabaseClient.js";
-import { exportDatabaseSnapshot, restoreDatabaseSnapshot } from "./backup.js";
+import { exportSnapshotText, restoreDatabaseSnapshot } from "./backup.js";
 import {
   initDB,
   setOnAfterTransaction,
@@ -29,7 +28,6 @@ import {
 import {
   compressSnapshot,
   readSnapshotBlob,
-  serializeSnapshot,
 } from "./snapshotCodec.js";
 import { logError } from "../logger.js";
 
@@ -297,14 +295,16 @@ async function performUpload(userId) {
 
   pendingPromise = (async () => {
     try {
-      const snapshot = await exportDatabaseSnapshot();
-      const payload = createSnapshotPayload(snapshot);
+      // O texto vem pronto do DuckDB. Montá-lo em JavaScript travava a
+      // interface por meio segundo a cada gravação — ver `exportSnapshotText`.
+      const snapshot = await exportSnapshotText();
+
+      if (!snapshot) {
+        throw new Error("O banco de dados ainda não está disponível.");
+      }
+
       const path = getUserStorageObjectPath(userId);
-      // BIGINT columns (e.g. `valor_cents`) come back as JS BigInt from
-      // DuckDB-WASM, which `JSON.stringify` refuses to serialize. Convert
-      // them to Number here — cents always fit comfortably under
-      // Number.MAX_SAFE_INTEGER, so the precision loss is non-existent.
-      const { blob: body, contentType } = await compressSnapshot(serializeSnapshot(payload));
+      const { blob: body, contentType } = await compressSnapshot(snapshot.text);
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(path, body, {
@@ -395,9 +395,9 @@ async function flushBeforeUnload(userId) {
   if (!isSupabaseConfigured || !userId) return;
   cancelPendingTimer();
   try {
-    const snapshot = await exportDatabaseSnapshot();
-    const payload = createSnapshotPayload(snapshot);
-    const { blob } = await compressSnapshot(serializeSnapshot(payload));
+    const snapshot = await exportSnapshotText();
+    if (!snapshot) return;
+    const { blob } = await compressSnapshot(snapshot.text);
     const delivered = await tryKeepaliveUpload(userId, blob);
     if (delivered) return;
   } catch (error) {

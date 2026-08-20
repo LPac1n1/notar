@@ -1,9 +1,13 @@
 import {
+  SNAPSHOT_PAYLOAD_VERSION,
   buildSnapshotStats,
-  createSnapshotPayload,
   normalizeSnapshotPayload,
   snapshotHasData,
 } from "../../utils/backup.js";
+import {
+  SNAPSHOT_SOURCES,
+  buildSnapshotJsonQuery,
+} from "./snapshotSources.js";
 import {
   execute,
   flushAfterTransaction,
@@ -225,309 +229,56 @@ export const RESTORE_TABLE_COLUMNS = {
   ],
 };
 
-export async function exportDatabaseSnapshot() {
+
+/**
+ * Monta o snapshot como TEXTO, com o JSON gerado pelo próprio DuckDB.
+ *
+ * O caminho anterior trazia cada linha para o JavaScript (`.toArray()`) e
+ * depois passava tudo por `JSON.stringify`. Com um ano de uso — 30 mil notas
+ * de doação e outras tantas de crédito — isso media 552ms de thread
+ * principal TRAVADA, medido com PerformanceObserver. E não acontecia uma vez:
+ * a nuvem regrava o snapshot a cada alteração, então a interface engasgava a
+ * cada gravação.
+ *
+ * `json_group_array` faz o mesmo trabalho dentro do worker do DuckDB, que é
+ * outra thread. O que volta é uma string pronta por tabela; o envelope sai de
+ * concatenação, que o V8 resolve por referência em vez de copiar.
+ *
+ * A fidelidade foi conferida campo a campo contra a saída do `JSON.stringify`
+ * (acento, aspas, barra invertida, null, booleano, BIGINT e tabela vazia). A
+ * única diferença é textual — o DuckDB escreve `2.0` onde o JS escreve `2` —
+ * e some no parse, porque os dois viram o mesmo número.
+ *
+ * O `count(*)` sai na MESMA consulta de propósito: contar à parte significaria
+ * varrer a tabela duas vezes e abriria a chance de o número não bater com o
+ * conteúdo, caso alguma gravação caísse entre as duas.
+ */
+export async function exportSnapshotText() {
   if (!getConnection()) {
     return null;
   }
 
-  const projects = await query(`
-    SELECT
-      id,
-      display_order,
-      name,
-      slug,
-      modules,
-      color,
-      is_active,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM projects
-    ORDER BY name ASC, id ASC
-  `);
+  const parts = [];
+  const counts = {};
 
-  const donorProjectAssignments = await query(`
-    SELECT
-      id,
-      donor_id,
-      project_id,
-      CAST(valid_from AS VARCHAR) AS valid_from,
-      CAST(valid_to AS VARCHAR) AS valid_to,
-      reason,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM donor_project_assignments
-    ORDER BY donor_id ASC, valid_from ASC
-  `);
+  for (const source of SNAPSHOT_SOURCES) {
+    const rows = await query(buildSnapshotJsonQuery(source.sql));
 
-  const demands = await query(`
-    SELECT
-      id,
-      project_id,
-      name,
-      color,
-      is_active,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM demands
-    ORDER BY name ASC, id ASC
-  `);
+    const row = rows[0] ?? {};
+    parts.push(JSON.stringify(source.key) + ":" + (row.json_text ?? "[]"));
+    counts[source.key] = Number(row.total ?? 0);
+  }
 
-  const people = await query(`
-    SELECT
-      id,
-      project_id,
-      name,
-      cpf,
-      is_active,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM people
-    ORDER BY name ASC, id ASC
-  `);
+  const exportedAt = new Date().toISOString();
+  const text =
+    "{" +
+    JSON.stringify("version") + ":" + JSON.stringify(SNAPSHOT_PAYLOAD_VERSION) + "," +
+    JSON.stringify("exportedAt") + ":" + JSON.stringify(exportedAt) + "," +
+    JSON.stringify("data") + ":{" + parts.join(",") + "}" +
+    "}";
 
-  const donors = await query(`
-    SELECT
-      id,
-      person_id,
-      name,
-      cpf,
-      demand,
-      donor_type,
-      holder_donor_id,
-      holder_person_id,
-      CAST(donation_start_date AS VARCHAR) AS donation_start_date,
-      is_active,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM donors
-    ORDER BY name ASC, id ASC
-  `);
-
-  const donorCpfLinks = await query(`
-    SELECT
-      id,
-      donor_id,
-      name,
-      cpf,
-      CAST(donation_start_date AS VARCHAR) AS donation_start_date,
-      link_type,
-      is_active,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM donor_cpf_links
-    ORDER BY donor_id ASC, link_type ASC, name ASC, id ASC
-  `);
-
-  const imports = await query(`
-    SELECT
-      id,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      file_name,
-      value_per_note,
-      total_rows,
-      matched_rows,
-      matched_donors,
-      status,
-      notes,
-      cnpj_entidade_social,
-      CAST(imported_at AS VARCHAR) AS imported_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM imports
-    ORDER BY reference_month ASC, id ASC
-  `);
-
-  const importCpfSummary = await query(`
-    SELECT
-      id,
-      import_id,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      cpf,
-      notes_count,
-      matched_donor_id,
-      matched_source_id,
-      is_registered_donor,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM import_cpf_summary
-    ORDER BY reference_month ASC, cpf ASC, id ASC
-  `);
-
-  const monthlyDonorSummary = await query(`
-    SELECT
-      id,
-      import_id,
-      donor_id,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      cpf,
-      donor_name,
-      demand,
-      notes_count,
-      value_per_note,
-      abatement_amount,
-      abatement_status,
-      CAST(abatement_marked_at AS VARCHAR) AS abatement_marked_at,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM monthly_donor_summary
-    ORDER BY reference_month ASC, donor_name ASC, id ASC
-  `);
-
-  const trashItems = await query(`
-    SELECT
-      id,
-      entity_type,
-      entity_id,
-      label,
-      payload_json,
-      CAST(deleted_at AS VARCHAR) AS deleted_at
-    FROM trash_items
-    ORDER BY deleted_at DESC, id ASC
-  `);
-
-  const notes = await query(`
-    SELECT
-      id,
-      project_id,
-      title,
-      content,
-      color,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM notes
-    ORDER BY updated_at DESC, created_at DESC, id ASC
-  `);
-
-  const actionHistory = await query(`
-    SELECT
-      id,
-      action_type,
-      entity_type,
-      entity_id,
-      label,
-      description,
-      payload_json,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM action_history
-    ORDER BY created_at DESC, id ASC
-  `);
-
-  const donorActivityHistory = await query(`
-    SELECT
-      id,
-      donor_id,
-      event_type,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM donor_activity_history
-    ORDER BY reference_month ASC, created_at ASC, id ASC
-  `);
-
-  const abatementAdjustments = await query(`
-    SELECT
-      id,
-      donor_id,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      CAST(range_start_month AS VARCHAR) AS range_start_month,
-      CAST(range_end_month AS VARCHAR) AS range_end_month,
-      notes_count,
-      abatement_amount,
-      description,
-      abatement_status,
-      CAST(abatement_marked_at AS VARCHAR) AS abatement_marked_at,
-      CAST(created_at AS VARCHAR) AS created_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM abatement_adjustments
-    ORDER BY reference_month ASC, donor_id ASC, id ASC
-  `);
-
-  const donationNotes = await query(`
-    SELECT
-      id,
-      import_id,
-      cpf,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      numero_nota,
-      valor_nota,
-      CAST(data_nota AS VARCHAR) AS data_nota,
-      CAST(data_pedido AS VARCHAR) AS data_pedido,
-      cnpj_estabelecimento,
-      status_pedido,
-      tipo_doacao,
-      is_valid,
-      match_key,
-      valor_cents,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM donation_notes
-    ORDER BY import_id ASC, id ASC
-  `);
-
-  const creditImports = await query(`
-    SELECT
-      id,
-      CAST(reference_month AS VARCHAR) AS reference_month,
-      file_name,
-      total_rows,
-      valid_rows,
-      status,
-      notes,
-      CAST(imported_at AS VARCHAR) AS imported_at,
-      CAST(updated_at AS VARCHAR) AS updated_at
-    FROM credit_imports
-    ORDER BY reference_month ASC, id ASC
-  `);
-
-  const creditNotes = await query(`
-    SELECT
-      id,
-      credit_import_id,
-      cnpj_estabelecimento,
-      emitente,
-      numero_nota,
-      CAST(data_emissao AS VARCHAR) AS data_emissao,
-      valor_nf,
-      CAST(data_registro AS VARCHAR) AS data_registro,
-      credito,
-      situacao,
-      is_valid,
-      match_key,
-      valor_cents,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM credit_notes
-    ORDER BY credit_import_id ASC, id ASC
-  `);
-
-  const creditReconciliation = await query(`
-    SELECT
-      id,
-      credit_note_id,
-      donation_note_id,
-      match_status,
-      CAST(created_at AS VARCHAR) AS created_at
-    FROM credit_reconciliation
-    ORDER BY match_status ASC, id ASC
-  `);
-
-  return {
-    projects,
-    donorProjectAssignments,
-    demands,
-    people,
-    donors,
-    donorCpfLinks,
-    imports,
-    importCpfSummary,
-    monthlyDonorSummary,
-    notes,
-    actionHistory,
-    donorActivityHistory,
-    abatementAdjustments,
-    trashItems,
-    donationNotes,
-    creditImports,
-    creditNotes,
-    creditReconciliation,
-  };
+  return { text, exportedAt, counts };
 }
-
 export async function restoreDatabaseSnapshot(
   snapshot,
   { allowEmpty = false, emitChange = true, onProgress } = {},
@@ -692,25 +443,28 @@ function createBackupFileName() {
   return `notar-backup-${year}-${month}-${day}-${hours}${minutes}.json`;
 }
 
-// `JSON.stringify` replacer mirrored from `cloudStorage` — BIGINT columns
-// (e.g. `valor_cents`) come back as JS BigInt from DuckDB-WASM, which the
-// default serializer refuses. Cents fit safely in Number, so coercion is
-// loss-free.
-function bigintToNumberReplacer(_key, value) {
-  return typeof value === "bigint" ? Number(value) : value;
-}
 
+/**
+ * Arquivo de backup para download.
+ *
+ * Sai sem indentação: são dezenas de MB, e recuar cada linha triplicaria o
+ * arquivo para agradar uma leitura humana que ninguém faz — o destino dele é
+ * voltar pelo próprio importador.
+ */
 export async function exportDatabaseBackup() {
   await initDB();
 
-  const snapshot = await exportDatabaseSnapshot();
-  const payload = createSnapshotPayload(snapshot);
+  const snapshot = await exportSnapshotText();
+
+  if (!snapshot) {
+    throw new Error("O banco de dados ainda não está disponível.");
+  }
 
   return {
     fileName: createBackupFileName(),
-    text: JSON.stringify(payload, bigintToNumberReplacer, 2),
-    exportedAt: payload.exportedAt,
-    stats: buildSnapshotStats(payload.data),
+    text: snapshot.text,
+    exportedAt: snapshot.exportedAt,
+    stats: snapshot.counts,
   };
 }
 

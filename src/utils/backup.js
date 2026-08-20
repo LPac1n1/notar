@@ -96,11 +96,18 @@ export function buildSnapshotStats(snapshot) {
   }, {});
 }
 
+/**
+ * Versão do envelope do backup. Exportada porque o snapshot da nuvem monta
+ * o mesmo envelope por concatenação de texto, sem passar por aqui — e um
+ * número solto nos dois lugares acabaria divergindo.
+ */
+export const SNAPSHOT_PAYLOAD_VERSION = 1;
+
 export function createSnapshotPayload(snapshot, exportedAt = new Date().toISOString()) {
   const normalizedSnapshot = normalizeSnapshotPayload(snapshot) ?? createEmptySnapshot();
 
   return {
-    version: 1,
+    version: SNAPSHOT_PAYLOAD_VERSION,
     exportedAt,
     data: normalizedSnapshot,
   };
