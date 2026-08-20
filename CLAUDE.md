@@ -483,9 +483,51 @@ Consequência: nenhuma tabela de importação/doação/conciliação recebe `pro
 
 **Estado:** 161 testes, 24 e2e, lint 0, build OK. Fases 3 (segundo projeto utilizável) e 4 (reinvestimento) pendentes.
 
+## Auditoria de consistência — itens 7 a 11 (commits 261-263)
+
+Cinco itens de uma auditoria anterior. **Dois não sobreviveram à remedição**: paddings (7) e espaçamentos (8) pareciam divergentes num `grep` cru, mas por papel do container formam uma escala coerente — `p-3` linha compacta, `p-4` bloco aninhado, `p-5` card (via `SectionCard`/`MetricCard`), `p-6` painel de tela cheia. Nada mudado. O item 11 (~32 estados vazios à mão) estava muito inflado: quase tudo já passa por `EmptyState` ou `DetailList`; os reais eram 3.
+
+- **Zona morta de breakpoint** (commit 261): 6 grades iam de `md:grid-cols-2` direto para `xl:`, ficando em 2 colunas até 1279px. Medido no navegador antes e depois.
+- **Bug maior encontrado ao medir**: a escada de tamanho do `MetricValue` AUMENTAVA a fonte no `lg` — exatamente onde a grade ganha coluna e o card encolhe. Card com 156px úteis a 1024px e 167px a 1280px, contra 169px que "R$ 70,00" pede a 40px. **Já estourava em 1280 antes da minha mudança.** O degrau maior passou para `2xl`. `e2e/metric-card-fit.spec.js` MEDE em vez de inspecionar classe — a falha nasce da relação entre a largura que a grade concede e o tamanho que a escada escolhe, e nenhum lado sozinho a denuncia. Verificado que falha com o bug reintroduzido.
+- **`DataTable`** (commit 262): 3 tabelas idênticas caractere por caractere viraram um primitivo. A divergência já tinha custado: a quarta tabela (pré-visualização de planilha) usava `border-[rgba(255,255,255,0.05)]` fixo — branco a 5% sobre `#ffffff`, ou seja, **sem nenhuma separação de linhas no tema claro**. Mesmo padrão no seletor de cor das anotações. Os dois agora usam token. A tabela de pré-visualização NÃO foi unificada de propósito: o cabeçalho dela é dado (nomes das colunas do arquivo do usuário) e o versalete do `DataTable` mostraria um nome diferente do que está no arquivo.
+
+## Evolução da plataforma — 6 frentes (commits 264-267)
+
+### Sincronização sem travar (commit 264)
+
+Medido antes de mexer: exportar 60 mil linhas dava **552ms de thread principal travada**, em um bloco, a cada gravação (a nuvem regrava o snapshot inteiro a cada 2s de atividade). A causa não era o que parecia — as 16 consultas sequenciais não bloqueiam, quem bloqueia é `JSON.stringify` sobre o resultado materializado.
+
+- O snapshot passou a ser serializado pelo **próprio DuckDB** (`json_group_array`), dentro do worker. **552ms → 0ms** de bloqueio, mesma medição.
+- Fidelidade verificada campo a campo contra `JSON.stringify` — acento, aspas, barra, nulo, booleano, BIGINT e tabela vazia. Única diferença é textual (`2.0` vs `2`) e some no parse.
+- `snapshotSources.js` isola o SQL (módulo puro) para o teste rodar a consulta real. `e2e/backup-roundtrip.spec.js` prova que o arquivo gerado volta pelo importador — comparando o que o arquivo DECLARA conter com o que é restaurado, porque o restore deriva resumos mensais e grava histórico, então comparar com a fixture original falharia por motivo legítimo.
+- Duplicata removida: `bigintToNumberReplacer` existia em dois arquivos, com um comentário admitindo a cópia.
+- Medida a contenção do worker (427ms livre × 479ms ocupado): desprezível, ao contrário do que eu supunha.
+
+### Descoberta do início das doações (commit 265)
+
+- `donationStartSql.js`: primeiro mês de um CPF, e preenchimento em massa. Ignora importação com `status='error'` e linha só com nota inválida — sem esses filtros, uma importação que falhou viraria data de início.
+- `useDonationStartDiscovery`: busca ao digitar o CPF no cadastro. Preenche uma vez por CPF (apagar não faz voltar), nunca sobrescreve, descarta resposta atrasada. Estado DERIVADO do CPF atual, não zerado por efeito.
+- Ao fim de cada importação, `backfillDonationStartDates` preenche quem ficou sem data. Roda sobre todos os nulos, não só sobre os CPFs da planilha nova: mesmo resultado no caso alvo e ainda recupera quem ficou para trás.
+
+### Histórico do doador e estabelecimentos (commit 266)
+
+- `credit_notes.emitente` é a ÚNICA fonte do nome do estabelecimento; a compra vem de `donation_notes`. A ligação é `credit_reconciliation`. O nome é resolvido por CNPJ (`mode()` para a grafia mais comum), não nota a nota, para a compra ter nome mesmo antes de o crédito dela chegar.
+- Ranking ordenado por CRÉDITO, não por número de compras — a rede mais frequentada costuma não ser a que mais rende, e essa diferença é o ponto. Participação sai por função de janela na mesma consulta, senão dois números que precisam somar 100% viriam de varreduras diferentes.
+- Recorte por projeto usa o vínculo VIGENTE NO MÊS DA NOTA. Contagem parte da compra e não do crédito: só a compra carrega o CPF.
+- **Exceção do Moradia sai de graça**: `Dashboard.jsx` já escolhe o painel por `modules.monthly`, e a seção só entra no painel de crédito e no da plataforma.
+- **Bug antigo revelado**: `formatDatePtBR` passava data sem hora por `new Date("2026-03-01")`, lido como meia-noite UTC — em UTC-3 voltava um dia e a nota de março aparecia como 28/02. Ficou latente porque todo uso anterior passava data COM hora, que é lida como local.
+- Armadilha de teste registrada: a tabela acessível `sr-only` do gráfico responde a `tbody tr`. Mirar a tabela pelo NOME ACESSÍVEL (a legenda).
+
+### Anotações da plataforma (commit 267)
+
+- As do projeto continuam como estavam; o que nasceu é um espaço acima delas. Mesma tela, escopo diferente: `project_id` recebe `PLATFORM_NOTES_SCOPE`, um valor que nenhum projeto pode ter — assim a listagem continua uma igualdade simples, sem ramo de NULL.
+- Rota `/plataforma/anotacoes`, e não `/anotacoes`: esse caminho redireciona favoritos anteriores ao multiprojeto para as anotações do PROJETO.
+- Item de menu chamado **"Anotações gerais"**: dentro de um projeto os dois blocos aparecem juntos, e dois itens com o mesmo nome só se distinguiriam pelo cabeçalho acima deles.
+- Busca por texto em título e conteúdo, sem acento e com as tags do editor removidas. Vazio de busca distinto do vazio de lista.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 235**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 267**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
