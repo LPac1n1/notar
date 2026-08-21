@@ -158,21 +158,35 @@ textarea {
 
 /* Modo de valores ocultos dos painéis.
  *
- * O desfoque é aplicado pelo CONTÊINER, e não por cada número: `.numeric` já
+ * A regra é aplicada pelo CONTÊINER, e não por cada número: `.numeric` já
  * marca todo dado que o usuário lê como valor, então esconder vira uma regra
  * só em vez de uma condição em dezenas de componentes. `.sensitive` cobre o
  * que carrega valor mas não é número puro — o texto de apoio de uma ficha,
  * por exemplo.
  *
- * `filter` não altera o layout, então a página não se mexe ao alternar.
+ * `-webkit-text-security` troca cada caractere por uma bolinha, como um campo
+ * de senha. Nenhuma das duas formas altera o layout, então a página não se
+ * mexe ao alternar.
+ *
+ * O desfoque fica como retaguarda para navegador sem suporte à propriedade.
+ * Ele é pior — deixa adivinhar a forma do número —, mas cair para texto
+ * legível seria uma falha de privacidade silenciosa.
  *
  * A seleção é bloqueada para o valor não sair por cópia acidental enquanto
  * está oculto; o clique continua passando, senão uma ficha inteira deixaria
- * de abrir só porque o número dela está borrado. */
+ * de abrir só porque o número dela está coberto. */
 [data-values-hidden="true"] .numeric,
 [data-values-hidden="true"] .sensitive {
   filter: blur(7px);
   user-select: none;
+}
+
+@supports (-webkit-text-security: disc) {
+  [data-values-hidden="true"] .numeric,
+  [data-values-hidden="true"] .sensitive {
+    filter: none;
+    -webkit-text-security: disc;
+  }
 }
 
 /* Divisor — traço que continua após o label da seção.

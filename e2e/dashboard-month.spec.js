@@ -107,7 +107,9 @@ test("os valores começam ocultos e a escolha é lembrada", async ({ page }) => 
   ).toBeVisible();
 });
 
-test("o desfoque cobre os valores e poupa os rótulos", async ({ page }) => {
+test("os valores viram bolinhas e os rótulos continuam legíveis", async ({
+  page,
+}) => {
   await semear(page);
   await abrirPainel(page);
 
@@ -117,18 +119,56 @@ test("o desfoque cobre os valores e poupa os rótulos", async ({ page }) => {
   );
 
   const medido = await page.evaluate(() => {
-    const valor = document.querySelector("[data-values-hidden] .numeric");
-    const rotulo = document.querySelector("[data-values-hidden] .eyebrow");
+    const ler = (seletor) => {
+      const el = document.querySelector(seletor);
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return {
+        textSecurity: cs.webkitTextSecurity ?? null,
+        filtro: cs.filter,
+      };
+    };
 
     return {
-      valor: valor ? getComputedStyle(valor).filter : null,
-      rotulo: rotulo ? getComputedStyle(rotulo).filter : null,
+      valor: ler("[data-values-hidden] .numeric"),
+      rotulo: ler("[data-values-hidden] .eyebrow"),
     };
   });
 
-  // O valor sai borrado; o rótulo ao lado dele continua legível, senão a tela
-  // viraria um bloco indistinguível em vez de uma estrutura com os números
-  // cobertos.
-  expect(medido.valor).toContain("blur");
-  expect(medido.rotulo).toBe("none");
+  // Cada caractere do valor vira uma bolinha, como num campo de senha. O
+  // desfoque só entra como retaguarda em navegador sem a propriedade — em
+  // Chromium, que é onde este teste roda, o esperado é o mascaramento.
+  expect(medido.valor.textSecurity).toBe("disc");
+  expect(medido.valor.filtro).toBe("none");
+
+  // O rótulo ao lado continua legível, senão a tela viraria um bloco
+  // indistinguível em vez de uma estrutura com os números cobertos.
+  expect(medido.rotulo.textSecurity).toBe("none");
+  expect(medido.rotulo.filtro).toBe("none");
+});
+
+test("no texto de apoio, só os números somem", async ({ page }) => {
+  await semear(page);
+  await abrirPainel(page);
+
+  // "2 de 2 doador(es) cadastrado(s) doaram." precisa continuar dizendo o que
+  // descreve. Cobrir a frase inteira transformaria o apoio numa fileira de
+  // pontinhos e o cartão perderia o significado junto com o valor.
+  const apoio = page
+    .getByText("doador(es) cadastrado(s) doaram", { exact: false })
+    .first();
+  await expect(apoio).toBeVisible();
+
+  const partes = await apoio.evaluate((el) => ({
+    mascarados: [...el.querySelectorAll(".numeric")].map((n) => n.textContent),
+    // O parágrafo em si não pode estar mascarado — só os pedaços numéricos.
+    textSecurityDoParagrafo: getComputedStyle(el).webkitTextSecurity,
+  }));
+
+  expect(partes.textSecurityDoParagrafo).toBe("none");
+  expect(partes.mascarados.length).toBeGreaterThan(0);
+  // O que foi marcado como valor é numérico, e não palavra solta.
+  for (const trecho of partes.mascarados) {
+    expect(trecho).toMatch(/\d/);
+  }
 });

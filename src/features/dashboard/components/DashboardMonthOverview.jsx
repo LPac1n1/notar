@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../../components/ui/Button";
 import Eyebrow from "../../../components/ui/Eyebrow";
+import TextWithValues from "../../../components/ui/TextWithValues";
 import { useProjectPath } from "../../../hooks/useProjectPath";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -83,7 +84,7 @@ function Figure({ label, value, current, previous }) {
       <p className="numeric mt-1 text-xl font-semibold text-[var(--text-strong)]">
         {value}
       </p>
-      <p className="sensitive mt-0.5 text-xs">
+      <p className="mt-0.5 text-xs">
         <Delta current={current} previous={previous} />
       </p>
     </div>
@@ -187,9 +188,10 @@ export default function DashboardMonthOverview({
                   style={{ width: `${percentageApplied}%` }}
                 />
               </div>
-              <p className="sensitive mt-2 text-sm text-[var(--muted)]">
-                {formatInteger(appliedCount)} de {formatInteger(totalCount)}{" "}
-                doador(es) já marcados.
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                <TextWithValues
+                  text={`${formatInteger(appliedCount)} de ${formatInteger(totalCount)} doador(es) já marcados.`}
+                />
               </p>
               {pendingCount > 0 ? (
                 <button
@@ -197,7 +199,7 @@ export default function DashboardMonthOverview({
                   onClick={() => onOpenModal?.("latest-pending")}
                   className="mt-1 text-sm text-[var(--accent)] underline-offset-2 hover:underline"
                 >
-                  Ver os <span className="sensitive">{formatInteger(pendingCount)}</span> pendentes
+                  Ver os <span className="numeric">{formatInteger(pendingCount)}</span> pendentes
                 </button>
               ) : (
                 <p className="mt-1 text-sm text-[var(--muted)]">Mês fechado.</p>

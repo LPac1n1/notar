@@ -1,4 +1,5 @@
 import Eyebrow from "./Eyebrow";
+import TextWithValues from "./TextWithValues";
 import MetricValue from "./MetricValue";
 
 /**
@@ -25,8 +26,8 @@ export default function MetricCard({
     : "rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5 text-left transition-colors duration-150";
 
   const helperClass = compact
-    ? "sensitive mt-1 text-xs leading-5 text-[var(--muted)]"
-    : "sensitive mt-2.5 text-sm leading-6 text-[var(--muted)]";
+    ? "mt-1 text-xs leading-5 text-[var(--muted)]"
+    : "mt-2.5 text-sm leading-6 text-[var(--muted)]";
 
   const content = (
     <>
@@ -34,7 +35,14 @@ export default function MetricCard({
       <div className={compact ? "mt-1.5" : "mt-3"}>
         <MetricValue size={compact ? "md" : "xl"}>{value}</MetricValue>
       </div>
-      {helper ? <p className={helperClass}>{helper}</p> : null}
+      {helper ? (
+        <p className={helperClass}>
+          {/* Só os números do apoio somem no modo oculto — a frase
+              inteira coberta viraria uma fileira de pontinhos sem
+              significado. */}
+          <TextWithValues text={helper} />
+        </p>
+      ) : null}
       {action ? <div className="mt-3">{action}</div> : null}
     </>
   );

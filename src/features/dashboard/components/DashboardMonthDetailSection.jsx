@@ -121,7 +121,7 @@ export default function DashboardMonthDetailSection({
           </p>
         )}
 
-        <p className="sensitive text-sm text-[var(--muted)]">
+        <p className="text-sm text-[var(--muted)]">
           Planilha <span className="text-[var(--text-soft)]">{month.fileName}</span>
           , importada em {formatDatePtBR(month.importedAt)}.
         </p>
