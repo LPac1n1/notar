@@ -20,6 +20,7 @@ import People from "../pages/People";
 import Monthly from "../pages/Monthly";
 import Imports from "../pages/Imports";
 import Notes from "../pages/Notes";
+import PlatformNotes from "../pages/PlatformNotes";
 import { PLATFORM_NOTES_SCOPE } from "../services/noteService";
 import ActionHistory from "../pages/ActionHistory";
 import PlatformDashboard from "../pages/PlatformDashboard";
@@ -66,6 +67,7 @@ function AnimatedRoutes() {
 
             {/* Plataforma — base compartilhada, fora de qualquer projeto. */}
             <Route path="/plataforma" element={<PlatformDashboard />} />
+            <Route path="/plataforma/notas" element={<PlatformNotes />} />
             {/* Anotações da plataforma são a MESMA tela das do projeto, só
                 com outro escopo. Vive sob /plataforma para não colidir com
                 /anotacoes, que redireciona favoritos anteriores ao

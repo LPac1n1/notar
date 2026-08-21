@@ -6,6 +6,7 @@ import {
   ImportIcon,
   MonthlyIcon,
   NotesIcon,
+  ReceiptIcon,
   PlatformIcon,
   SettingsIcon,
   TrashIcon,
@@ -89,6 +90,12 @@ export const PLATFORM_NAV_ITEMS = [
     label: "Importações",
     description: "Planilha única de doações e créditos, para todos os projetos",
     icon: ImportIcon,
+  },
+  {
+    to: "/plataforma/notas",
+    label: "Notas fiscais",
+    description: "Todas as notas importadas, com filtros e exportação",
+    icon: ReceiptIcon,
   },
   {
     to: "/plataforma/anotacoes",

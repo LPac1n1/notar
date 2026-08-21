@@ -1,5 +1,6 @@
 export {
   ArrowLeft as BackIcon,
+  ArrowUpDown as SortIcon,
   Bold as BoldIcon,
   Bug as BugIcon,
   Keyboard as KeyboardIcon,
@@ -23,6 +24,7 @@ export {
   Download as DownloadIcon,
   FileSpreadsheet as ImportIcon,
   Receipt as CreditIcon,
+  ReceiptText as ReceiptIcon,
   FileText as FileIcon,
   FolderOpen as FolderOpenIcon,
   HardDriveDownload as BackupExportIcon,

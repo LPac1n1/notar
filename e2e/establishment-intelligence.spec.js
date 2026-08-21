@@ -117,16 +117,22 @@ test("o perfil do doador conta o histórico inteiro de compras", async ({
   // A tabela é buscada pelo NOME ACESSÍVEL, que vem da legenda. Um
   // `tbody tr` solto pegaria a tabela alternativa do gráfico — ela é
   // `sr-only`, mas continua no DOM e vem antes desta.
-  const tabela = secao.getByRole("table", { name: /Compras registradas/ });
-  const primeira = tabela.locator("tbody tr").first();
-  await expect(primeira).toContainText("R$ ");
+  const tabela = secao.getByRole("table", {
+    name: /Notas fiscais do recorte atual/,
+  });
+  await expect(tabela.locator("tbody tr").first()).toContainText("R$ ");
 
   // A data da nota tem de cair DENTRO da própria competência. Enquanto a
   // formatação passava por `new Date("2026-03-01")`, a data era lida como
-  // meia-noite em UTC e voltava um dia no fuso local: a linha de março
+  // meia-noite em UTC e voltava um dia no fuso local: a nota de março
   // aparecia como 28/02/2026, um mês antes da competência dela.
-  await expect(primeira).toContainText("01/03/2026");
-  await expect(primeira).toContainText("Março de 2026");
+  //
+  // A verificação é sobre a TABELA e não sobre a primeira linha porque a
+  // ordenação padrão é por crédito, não por data — amarrar o teste à ordem
+  // faria ele quebrar em toda mudança de ordenação padrão, sem relação
+  // nenhuma com o defeito que ele existe para travar.
+  await expect(tabela).toContainText("01/03/2026");
+  await expect(tabela).not.toContainText("28/02/2026");
 });
 
 test("o painel de Demandas de Moradia não mostra o ranking", async ({

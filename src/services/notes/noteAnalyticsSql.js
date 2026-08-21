@@ -156,6 +156,41 @@ function statusCondition(status) {
   return "note_base.is_valid = TRUE";
 }
 
+/**
+ * Aceita mês (AAAA-MM) ou data completa (AAAA-MM-DD) no período.
+ *
+ * O campo da tela é de mês, porque o sistema inteiro raciocina em
+ * competências — mas o filtro compara com a DATA da compra, e um mês não é
+ * uma data. Sem esta conversão, `CAST('2025-03' AS DATE)` falharia.
+ *
+ * `edge` define para que lado o mês se abre: o começo do período vira o dia
+ * 1º e o fim vira o último dia, senão filtrar 'até março' descartaria o mês
+ * de março inteiro menos o primeiro dia.
+ */
+function toBoundaryDate(value, edge) {
+  const text = String(value ?? "").trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const month = /^(\d{4})-(\d{2})$/.exec(text);
+
+  if (!month) {
+    return "";
+  }
+
+  const [, year, monthNumber] = month;
+
+  if (edge === "start") {
+    return `${year}-${monthNumber}-01`;
+  }
+
+  // Dia 0 do mês SEGUINTE é o último dia deste — evita a tabela de dias por
+  // mês e acerta fevereiro bissexto sozinho.
+  const lastDay = new Date(Number(year), Number(monthNumber), 0).getDate();
+  return `${year}-${monthNumber}-${String(lastDay).padStart(2, "0")}`;
+}
 function pushRange(conditions, params, column, min, max) {
   if (min !== "" && min !== null && min !== undefined && Number.isFinite(Number(min))) {
     conditions.push(`${column} >= ?`);
@@ -210,13 +245,16 @@ export function buildNoteFilters(filters = {}) {
   // Período personalizado sobre a DATA DA COMPRA, não sobre a competência: são
   // coisas diferentes, e uma compra do fim do mês costuma cair na competência
   // seguinte.
-  if (filters.dateFrom) {
+  const dateFrom = toBoundaryDate(filters.dateFrom, "start");
+  const dateTo = toBoundaryDate(filters.dateTo, "end");
+
+  if (dateFrom) {
     conditions.push("note_base.data_nota >= CAST(? AS DATE)");
-    params.push(filters.dateFrom);
+    params.push(dateFrom);
   }
-  if (filters.dateTo) {
+  if (dateTo) {
     conditions.push("note_base.data_nota <= CAST(? AS DATE)");
-    params.push(filters.dateTo);
+    params.push(dateTo);
   }
 
   if (filters.cnpj) {
@@ -378,11 +416,11 @@ export function buildNoteTotalsSql({ filters = {} } = {}) {
  * dado impede comparar duas leituras.
  */
 export const NOTE_VALUE_BANDS = [
-  { key: "ate-50", label: "Até R$ 50", min: 0, max: 50 },
+  { key: "ate-50", label: "Menos de R$ 50", min: 0, max: 50 },
   { key: "50-100", label: "R$ 50 a R$ 100", min: 50, max: 100 },
   { key: "100-200", label: "R$ 100 a R$ 200", min: 100, max: 200 },
   { key: "200-500", label: "R$ 200 a R$ 500", min: 200, max: 500 },
-  { key: "acima-500", label: "Acima de R$ 500", min: 500, max: null },
+  { key: "acima-500", label: "R$ 500 ou mais", min: 500, max: null },
 ];
 
 export function buildNoteValueBandsSql({ filters = {} } = {}) {

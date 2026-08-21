@@ -1,8 +1,6 @@
 import { queryPrepared } from "../db";
 import {
   DONOR_DONATION_BY_MONTH_SQL,
-  DONOR_DONATION_COUNT_SQL,
-  DONOR_DONATION_HISTORY_SQL,
   DONOR_DONATION_TOTALS_SQL,
   DONOR_TOP_ESTABLISHMENTS_SQL,
 } from "./donationHistorySql.js";
@@ -22,47 +20,7 @@ const toNumber = (value) => Number(value ?? 0);
 const toNullableNumber = (value) =>
   value === null || value === undefined ? null : Number(value);
 
-function mapRow(row) {
-  return {
-    id: row.id,
-    cpf: row.cpf,
-    referenceMonth: row.reference_month,
-    numeroNota: row.numero_nota,
-    valor: toNumber(row.valor_nota),
-    dataNota: row.data_nota,
-    cnpj: row.cnpj,
-    establishment: row.estabelecimento,
-    tipoDoacao: row.tipo_doacao,
-    // Nulo, e não zero: a nota pode simplesmente ainda não ter crédito
-    // importado, e mostrar R$ 0,00 afirmaria que ela não rendeu nada.
-    credito: toNullableNumber(row.credito),
-    project: row.projeto,
-  };
-}
 
-export async function listDonorDonations(donorId, { limit = 25, offset = 0 } = {}) {
-  if (!donorId) {
-    return [];
-  }
-
-  const rows = await queryPrepared(DONOR_DONATION_HISTORY_SQL, [
-    donorId,
-    donorId,
-    Math.max(1, Math.floor(Number(limit) || 25)),
-    Math.max(0, Math.floor(Number(offset) || 0)),
-  ]);
-
-  return rows.map(mapRow);
-}
-
-export async function countDonorDonations(donorId) {
-  if (!donorId) {
-    return 0;
-  }
-
-  const rows = await queryPrepared(DONOR_DONATION_COUNT_SQL, [donorId]);
-  return toNumber(rows[0]?.total);
-}
 
 /**
  * Os indicadores e as duas séries do histórico.

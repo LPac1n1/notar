@@ -372,3 +372,20 @@ test("a busca por texto gera as cláusulas e os parâmetros esperados", () => {
   assert.ok(comDigitos.conditions.at(-1).includes("note_base.cpf"));
   assert.equal(comDigitos.params.at(-1), "529982");
 });
+
+test("o período aceita mês ou data e abre o mês para o lado certo", () => {
+  // O campo da tela é de mês, mas o filtro compara com a DATA da compra.
+  assert.deepEqual(buildNoteFilters({ dateFrom: "2025-03" }).params, ["2025-03-01"]);
+
+  // O fim do período tem de incluir o mês INTEIRO: sem isso, "até fevereiro"
+  // descartaria fevereiro menos o primeiro dia.
+  assert.deepEqual(buildNoteFilters({ dateTo: "2025-02" }).params, ["2025-02-28"]);
+  assert.deepEqual(buildNoteFilters({ dateTo: "2024-02" }).params, ["2024-02-29"]);
+
+  // Data completa passa direto.
+  assert.deepEqual(buildNoteFilters({ dateFrom: "2025-03-15" }).params, ["2025-03-15"]);
+
+  // Texto que não é mês nem data não vira condição nenhuma.
+  assert.deepEqual(buildNoteFilters({ dateFrom: "qualquer coisa" }).params, []);
+  assert.equal(buildNoteFilters({ dateFrom: "qualquer coisa" }).conditions.length, 1);
+});

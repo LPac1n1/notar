@@ -1,21 +1,15 @@
 import { useCallback, useMemo } from "react";
-import DataTable from "../../../components/ui/DataTable";
 import EmptyState from "../../../components/ui/EmptyState";
 import Eyebrow from "../../../components/ui/Eyebrow";
 import MetricValue from "../../../components/ui/MetricValue";
-import PaginationControls from "../../../components/ui/PaginationControls";
 import SectionCard from "../../../components/ui/SectionCard";
 import { SkeletonRows } from "../../../components/ui/Skeleton";
 import MonthlyTrendChart from "../../dashboard/components/MonthlyTrendChart";
+import NoteAnalyticsExplorer from "../../notesAnalytics/components/NoteAnalyticsExplorer";
 import { useDataResource } from "../../../hooks/useDataResource";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
-import { usePaginatedResource } from "../../../hooks/usePaginatedResource";
-import {
-  countDonorDonations,
-  getDonorDonationSummary,
-  listDonorDonations,
-} from "../../../services/donor/donationHistory";
-import { formatDatePtBR, formatMonthYear } from "../../../utils/date";
+import { getDonorDonationSummary } from "../../../services/donor/donationHistory";
+import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 
 /**
@@ -30,17 +24,6 @@ import { formatCurrency, formatInteger } from "../../../utils/format";
  * responsividade conquistada na sincronização.
  */
 
-const COLUMNS = [
-  { label: "Data" },
-  { label: "Competência" },
-  { label: "Estabelecimento" },
-  { label: "Nota" },
-  { label: "Valor", align: "right" },
-  { label: "Crédito", align: "right" },
-  { label: "Projeto" },
-];
-
-const PAGE_SIZE = 10;
 
 function Indicator({ label, value, helper = "" }) {
   return (
@@ -59,35 +42,19 @@ function Indicator({ label, value, helper = "" }) {
 export default function DonorDonationHistorySection({ donorId }) {
   const filters = useMemo(() => ({ donorId }), [donorId]);
 
-  const loadRows = useCallback(
-    ({ donorId: id, limit, offset }) =>
-      listDonorDonations(id, { limit, offset }),
-    [],
-  );
-  const loadCount = useCallback(({ donorId: id }) => countDonorDonations(id), []);
+  // Travado no explorador: o perfil não pode listar nota de outro doador,
+  // por mais que alguém mexa nos filtros da barra.
+  const lockedFilters = useMemo(() => ({ donorId }), [donorId]);
+
   const loadSummary = useCallback(
     ({ donorId: id }) => getDonorDonationSummary(id),
     [],
   );
 
   const {
-    data: rows,
-    isLoading: isLoadingRows,
-    pagination,
-    reload: reloadRows,
-  } = usePaginatedResource({
-    loader: loadRows,
-    countLoader: loadCount,
-    filters,
-    initialPageSize: PAGE_SIZE,
-    errorMessage: "Não foi possível carregar o histórico de doações.",
-    scope: "DonorDonationHistory",
-  });
-
-  const {
     data: summary,
-    isLoading: isLoadingSummary,
-    reload: reloadSummary,
+    isLoading,
+    reload,
   } = useDataResource({
     loader: loadSummary,
     filters,
@@ -95,11 +62,6 @@ export default function DonorDonationHistorySection({ donorId }) {
     errorMessage: "Não foi possível carregar os indicadores do histórico.",
     scope: "DonorDonationSummary",
   });
-
-  const reload = useCallback(() => {
-    reloadRows();
-    reloadSummary();
-  }, [reloadRows, reloadSummary]);
 
   useDatabaseChangeEffect(reload, { domains: ["imports", "credits", "donors"] });
 
@@ -116,7 +78,6 @@ export default function DonorDonationHistorySection({ donorId }) {
     [summary],
   );
 
-  const isLoading = isLoadingRows || isLoadingSummary;
   const hasPurchases = (summary?.purchases ?? 0) > 0;
 
   return (
@@ -195,54 +156,16 @@ export default function DonorDonationHistorySection({ donorId }) {
             </div>
           ) : null}
 
-          <div>
-            <PaginationControls
-              endItem={pagination.endItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.handlePageSizeChange}
-              page={pagination.page}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              totalPages={pagination.totalPages}
-            />
-
-            <DataTable
-              caption="Compras registradas por este doador, da mais recente para a mais antiga."
-              columns={COLUMNS}
-            >
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td className="px-3 py-2 text-[var(--text-main)]">
-                    {row.dataNota ? formatDatePtBR(row.dataNota) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--muted)]">
-                    {formatMonthYear(row.referenceMonth)}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--text-main)]">
-                    {row.establishment}
-                  </td>
-                  <td className="numeric px-3 py-2 text-[var(--muted)]">
-                    {row.numeroNota || "—"}
-                  </td>
-                  <td className="numeric px-3 py-2 text-right text-[var(--text-main)]">
-                    {formatCurrency(row.valor)}
-                  </td>
-                  <td className="numeric px-3 py-2 text-right font-semibold text-[var(--text-main)]">
-                    {/* Traço, e não R$ 0,00: a nota pode apenas não ter crédito
-                        importado ainda, e zero afirmaria que ela nada rendeu. */}
-                    {row.credito === null ? (
-                      <span className="text-[var(--muted)]">—</span>
-                    ) : (
-                      formatCurrency(row.credito)
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--muted)]">
-                    {row.project ?? "—"}
-                  </td>
-                </tr>
-              ))}
-            </DataTable>
-          </div>
+          {/* A tabela é a mesma do painel da plataforma, com o doador
+              travado. Antes daqui saía uma segunda listagem quase igual, e
+              cada coluna nova precisaria ser lembrada nos dois lugares. */}
+          <NoteAnalyticsExplorer
+            exportPrefix={`notas-${donorId}`}
+            hiddenColumns={["doador"]}
+            hiddenFilters={["donorId", "cpf"]}
+            lockedFilters={lockedFilters}
+            showSummary={false}
+          />
         </div>
       )}
     </SectionCard>

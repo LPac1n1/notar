@@ -77,51 +77,8 @@ export const DONOR_NOTES_CTE = `
   )
 `;
 
-/**
- * Uma linha por compra, da mais recente para a mais antiga.
- *
- * O projeto sai do vínculo VIGENTE NO MÊS DA NOTA, e não do vínculo atual: um
- * doador que mudou de projeto em junho tem as compras de março pertencendo ao
- * projeto antigo, e mostrar o atual reescreveria a história dele.
- */
-export const DONOR_DONATION_HISTORY_SQL = `
-  WITH ${ESTABLISHMENT_NAMES_CTE},
-  ${DONOR_NOTES_CTE}
-  SELECT
-    donor_notes.id AS id,
-    donor_notes.cpf AS cpf,
-    CAST(donor_notes.reference_month AS VARCHAR) AS reference_month,
-    donor_notes.numero_nota AS numero_nota,
-    donor_notes.valor_nota AS valor_nota,
-    CAST(donor_notes.data_nota AS VARCHAR) AS data_nota,
-    donor_notes.cnpj AS cnpj,
-    coalesce(establishment_names.nome, donor_notes.cnpj) AS estabelecimento,
-    donor_notes.tipo_doacao AS tipo_doacao,
-    donor_notes.credito AS credito,
-    (
-      SELECT projects.name
-      FROM donor_project_assignments
-      INNER JOIN projects
-        ON projects.id = donor_project_assignments.project_id
-      WHERE donor_project_assignments.donor_id = ?
-        AND donor_notes.reference_month
-            BETWEEN donor_project_assignments.valid_from
-            AND donor_project_assignments.valid_to
-      LIMIT 1
-    ) AS projeto
-  FROM donor_notes
-  LEFT JOIN establishment_names
-    ON establishment_names.cnpj = donor_notes.cnpj
-  ORDER BY donor_notes.data_nota DESC NULLS LAST, donor_notes.id DESC
-  LIMIT ?
-  OFFSET ?
-`;
 
 /** Quantas compras o doador tem, para a paginação da tabela. */
-export const DONOR_DONATION_COUNT_SQL = `
-  WITH ${DONOR_NOTES_CTE}
-  SELECT count(*) AS total FROM donor_notes
-`;
 
 /**
  * Os indicadores do histórico, todos numa consulta.
