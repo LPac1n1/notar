@@ -74,12 +74,25 @@ test("o arquivo baixado tem o cabeçalho do modelo e uma linha por doador", asyn
 
   const primeira = planilha.getRow(7);
   expect(primeira.getCell(4).value).toBeTruthy();
-  // VALOR é a quantidade de doações — número, para o destino somar.
+  // VALOR é a quantidade de doações — número, para o destino somar, com
+  // formato de moeda na exibição.
   expect(typeof primeira.getCell(2).value).toBe("number");
   expect(primeira.getCell(2).value).toBeGreaterThan(0);
-  // A data é a competência escolhida, não o dia da geração.
+  expect(primeira.getCell(2).numFmt).toBe("[$R$-416] #,##0.00");
+
+  // As linhas de dado saem emolduradas como o cabeçalho. Faltava borda na
+  // primeira versão, porque o modelo de referência é um gabarito vazio.
+  expect(Object.keys(primeira.getCell(1).border ?? {}).sort()).toEqual([
+    "bottom",
+    "left",
+    "right",
+    "top",
+  ]);
+  // A data é derivada da competência, não do dia da geração: último dia do
+  // terceiro mês seguinte. Janeiro lança em 30/04 — abril tem 30 dias, o que
+  // distingue "último dia do mês" de um dia 31 fixo.
   expect(primeira.getCell(1).value instanceof Date).toBe(true);
-  expect(primeira.getCell(1).value.toISOString().slice(0, 10)).toBe("2026-01-01");
+  expect(primeira.getCell(1).value.toISOString().slice(0, 10)).toBe("2026-04-30");
   // A descrição já sai pronta no texto que o destino espera.
   expect(String(primeira.getCell(3).value)).toContain("Doações NFP");
 });

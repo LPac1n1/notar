@@ -10,10 +10,10 @@
  * A chave única do destino é `Agencia, Conta, Cod. Banco, Data, Valor, Nome`
  * (está escrita na própria nota do modelo). Como os três primeiros são
  * constantes, o que de fato distingue uma linha é (Data, Valor, Nome) — e é
- * por isso que a data precisa ser do MÊS DE COMPETÊNCIA e não do dia em que o
+ * por isso que a data tem de ser derivada da COMPETÊNCIA e não do dia em que o
  * arquivo foi gerado: gerar a mesma planilha duas vezes tem de produzir a
  * mesma chave, senão o destino trataria a segunda importação como lançamentos
- * novos em vez de reconhecer os mesmos.
+ * novos em vez de reconhecer os mesmos. Ver `toAbatementDate`.
  *
  * Não importa banco nem DuckDB: recebe as linhas prontas. Assim o teste
  * consegue gerar o arquivo e lê-lo de volta, comparando com o modelo real.
@@ -45,7 +45,28 @@ export const ABATEMENT_TEMPLATE = {
   fontName: "Arial",
   fontSize: 12,
   dateFormat: "dd/mm/yyyy",
+  /**
+   * Formato de moeda da coluna VALOR.
+   *
+   * O modelo de referência não traz exemplo — ele é um gabarito sem linha de
+   * dado —, então o formato veio de como o sistema de baixa trata a coluna.
+   *
+   * `[$R$-416]` fixa a região brasileira (416 é o identificador do pt-BR). Sem
+   * ela, os separadores do código `#,##0.00` seguem a configuração de quem
+   * abre o arquivo, e o mesmo valor sai `R$ 1.234,00` numa máquina e
+   * `R$ 1,234.00` em outra — verificado ao renderizar a planilha num ambiente
+   * de locale inglês.
+   */
+  currencyFormat: "[$R$-416] #,##0.00",
 };
+
+/**
+ * Quantos meses separam a competência da data que vai na planilha.
+ *
+ * A nota de abril é lançada em julho; a de maio, em agosto. É o intervalo do
+ * ciclo de crédito da NFP, não uma escolha nossa.
+ */
+export const ABATEMENT_MONTHS_AHEAD = 3;
 
 const BORDER = {
   top: { style: "thin" },
@@ -77,14 +98,41 @@ function applyValueStyle(cell) {
 }
 
 /**
- * A data que representa a competência.
+ * Estilo das linhas de doador.
+ *
+ * A borda é a mesma do cabeçalho. O modelo de referência não tem linha de dado
+ * para copiar — ele é um gabarito vazio —, então a primeira versão saiu sem
+ * borda alguma e a tabela ficava solta na tela abaixo de um cabeçalho
+ * emoldurado.
+ */
+function applyRowStyle(cell) {
+  cell.font = {
+    name: ABATEMENT_TEMPLATE.fontName,
+    size: ABATEMENT_TEMPLATE.fontSize,
+  };
+  cell.border = BORDER;
+}
+
+/**
+ * A data que vai na planilha, a partir da competência.
+ *
+ * É o ÚLTIMO DIA do mês três meses à frente da competência: a nota de abril
+ * sai com 31/07, a de maio com 31/08. Não é o dia da geração — se fosse,
+ * reexportar o mesmo mês produziria uma chave única diferente e o sistema de
+ * baixa trataria os mesmos lançamentos como novos.
+ *
+ * O último dia sai de `Date.UTC(ano, mêsAlvo, 0)`: o dia 0 de um mês é o
+ * último do anterior. Assim fevereiro fecha em 28 ou 29 conforme o ano, e
+ * abril em 30, sem tabela de dias por mês. Os dois exemplos conhecidos caem em
+ * meses de 31 dias e não distinguem "último dia" de "dia 31" — vale conferir
+ * uma competência de novembro, que cai em fevereiro.
  *
  * Construída em UTC de propósito. O ExcelJS converte `Date` para o serial do
- * Excel pelo valor UTC; um `new Date(ano, mês, 1)` local, em UTC-3, viraria as
- * 03:00 do dia anterior e a planilha mostraria o último dia do mês anterior —
- * o mesmo defeito de fuso que já apareceu na formatação de datas da interface.
+ * Excel pelo valor UTC; uma data local, em UTC-3, viraria as 21:00 do dia
+ * anterior e a planilha mostraria o dia errado — o mesmo defeito de fuso que
+ * já apareceu na formatação de datas da interface.
  */
-export function toCompetenceDate(referenceMonth) {
+export function toAbatementDate(referenceMonth) {
   const match = /^(\d{4})-(\d{2})/.exec(String(referenceMonth ?? ""));
 
   if (!match) {
@@ -92,7 +140,10 @@ export function toCompetenceDate(referenceMonth) {
   }
 
   const [, year, month] = match;
-  return new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+
+  return new Date(
+    Date.UTC(Number(year), Number(month) + ABATEMENT_MONTHS_AHEAD, 0),
+  );
 }
 
 /**
@@ -162,18 +213,22 @@ export async function buildAbatementWorkbookBytes({ rows = [], referenceMonth })
     applyLabelStyle(cell);
   });
 
-  const competenceDate = toCompetenceDate(referenceMonth);
+  const abatementDate = toAbatementDate(referenceMonth);
 
   rows.forEach((row, index) => {
     const rowNumber = ABATEMENT_TEMPLATE.headerRow + 1 + index;
 
     const dateCell = sheet.getCell(rowNumber, 1);
-    dateCell.value = competenceDate;
+    dateCell.value = abatementDate;
     dateCell.numFmt = ABATEMENT_TEMPLATE.dateFormat;
 
     // "Quantidade de doações" é o VALOR do modelo — número, não texto, para o
-    // destino somar sem depender de conversão.
-    sheet.getCell(rowNumber, 2).value = Number(row.notesCount ?? 0);
+    // destino somar sem depender de conversão, e em formato de moeda porque é
+    // como o sistema de baixa trata a coluna.
+    const valueCell = sheet.getCell(rowNumber, 2);
+    valueCell.value = Number(row.notesCount ?? 0);
+    valueCell.numFmt = ABATEMENT_TEMPLATE.currencyFormat;
+
     sheet.getCell(rowNumber, 3).value = row.description ?? "";
     sheet.getCell(rowNumber, 4).value = row.donorName ?? "";
     // CPF como TEXTO: como número perderia o zero à esquerda de quem tem CPF
@@ -181,10 +236,7 @@ export async function buildAbatementWorkbookBytes({ rows = [], referenceMonth })
     sheet.getCell(rowNumber, 5).value = row.cpf ?? "";
 
     for (let column = 1; column <= ABATEMENT_TEMPLATE.columns.length; column += 1) {
-      sheet.getCell(rowNumber, column).font = {
-        name: ABATEMENT_TEMPLATE.fontName,
-        size: ABATEMENT_TEMPLATE.fontSize,
-      };
+      applyRowStyle(sheet.getCell(rowNumber, column));
     }
   });
 

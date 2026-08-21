@@ -6,7 +6,7 @@ import ExcelJS from "exceljs";
 import {
   ABATEMENT_TEMPLATE,
   buildAbatementWorkbookBytes,
-  toCompetenceDate,
+  toAbatementDate,
 } from "../src/services/monthly/abatementSheetWorkbook.js";
 
 /**
@@ -21,6 +21,11 @@ import {
  * mesclada em D1:E3, duas linhas em branco e só então o cabeçalho das colunas
  * na linha 6. Errar qualquer uma dessas posições faz o destino ler a planilha
  * inteira deslocada.
+ *
+ * O modelo é um gabarito VAZIO: não tem nenhuma linha de dado. Tudo que diz
+ * respeito às linhas de doador — borda, formato de moeda, data — veio de como o
+ * sistema de destino trata a planilha, e não de cópia. É justamente onde a
+ * primeira versão errou, e por isso esses pontos têm teste próprio.
  */
 
 const MODELO = path.join(
@@ -67,6 +72,10 @@ function textoDe(valor) {
   }
 
   return valor;
+}
+
+function ladosDaBorda(cell) {
+  return Object.keys(cell.border ?? {}).sort().join(",");
 }
 
 test("o bloco de cabeçalho reproduz o modelo célula a célula", async () => {
@@ -152,31 +161,79 @@ test("cada doador vira uma linha a partir da 7", async () => {
   assert.equal(gerado.getCell(9, 4).value ?? null, null);
 });
 
-test("a data é a competência, e não o dia da geração", async () => {
+test("as linhas de doador têm a mesma borda do cabeçalho", async () => {
+  const modelo = await carregarModelo();
+  const gerado = await gerar();
+
+  // A primeira versão saiu sem borda nenhuma nas linhas de dado, porque o
+  // modelo é um gabarito vazio e não havia o que copiar.
+  const bordaDoCabecalho = ladosDaBorda(modelo.getCell("A6"));
+  assert.equal(bordaDoCabecalho, "bottom,left,right,top");
+
+  for (const linha of [7, 8]) {
+    for (let coluna = 1; coluna <= ABATEMENT_TEMPLATE.columns.length; coluna += 1) {
+      assert.equal(
+        ladosDaBorda(gerado.getCell(linha, coluna)),
+        bordaDoCabecalho,
+        `L${linha}C${coluna} está sem os quatro lados da borda`,
+      );
+    }
+  }
+
+  // E a moldura para onde os dados param — senão a tabela desceria pela
+  // planilha inteira.
+  assert.equal(ladosDaBorda(gerado.getCell(9, 1)), "");
+});
+
+test("VALOR sai formatado em reais, com a região fixada", async () => {
+  const gerado = await gerar();
+  const celula = gerado.getCell(7, 2);
+
+  // `[$R$-416]` fixa o pt-BR. Sem isso os separadores seguem a máquina de quem
+  // abre, e o mesmo número sai `R$ 1.234,00` num lugar e `R$ 1,234.00` noutro.
+  assert.equal(celula.numFmt, "[$R$-416] #,##0.00");
+  // O valor continua sendo a quantidade de doações — o formato é de exibição.
+  assert.equal(celula.value, 12);
+  assert.equal(typeof celula.value, "number");
+});
+
+test("a data é o último dia do terceiro mês após a competência", async () => {
   const gerado = await gerar();
   const celula = gerado.getCell(7, 1);
 
   // Precisa ser data de verdade, não texto: a coluna se chama DATA e entra na
   // chave única do destino.
   assert.ok(celula.value instanceof Date, "a célula deveria conter uma data");
-  assert.equal(celula.value.toISOString().slice(0, 10), "2026-04-01");
+  // Competência de abril lança em 31/07.
+  assert.equal(celula.value.toISOString().slice(0, 10), "2026-07-31");
   assert.equal(celula.numFmt, "dd/mm/yyyy");
 });
 
-test("a data não desliza de dia por causa do fuso", () => {
-  // Construir a data em horário local faria, em UTC-3, o valor virar as 03:00
-  // do dia anterior — e a planilha mostraria o último dia do mês anterior.
-  // É o mesmo defeito que já apareceu na formatação de datas da interface.
-  for (const mes of ["2026-01-01", "2026-04-01", "2025-12-01"]) {
-    assert.equal(
-      toCompetenceDate(mes).toISOString().slice(0, 10),
-      mes,
-      `${mes} deslizou de dia`,
-    );
-  }
+test("o último dia acompanha o tamanho do mês e a virada de ano", () => {
+  // Os dois exemplos conhecidos caem em meses de 31 dias e não distinguiriam
+  // "último dia do mês" de "dia 31 fixo".
+  assert.equal(toAbatementDate("2026-04-01").toISOString().slice(0, 10), "2026-07-31");
+  assert.equal(toAbatementDate("2026-05-01").toISOString().slice(0, 10), "2026-08-31");
 
-  assert.equal(toCompetenceDate(""), null);
-  assert.equal(toCompetenceDate("qualquer coisa"), null);
+  // Estes distinguem.
+  assert.equal(toAbatementDate("2026-01-01").toISOString().slice(0, 10), "2026-04-30");
+  assert.equal(toAbatementDate("2025-11-01").toISOString().slice(0, 10), "2026-02-28");
+  assert.equal(toAbatementDate("2023-11-01").toISOString().slice(0, 10), "2024-02-29");
+  assert.equal(toAbatementDate("2025-10-01").toISOString().slice(0, 10), "2026-01-31");
+
+  assert.equal(toAbatementDate(""), null);
+  assert.equal(toAbatementDate("qualquer coisa"), null);
+});
+
+test("a data não desliza de dia por causa do fuso", () => {
+  // Construir a data em horário local faria, em UTC-3, o valor cair no dia
+  // anterior. É o mesmo defeito que já apareceu na formatação de datas da
+  // interface.
+  const data = toAbatementDate("2026-04-01");
+
+  assert.equal(data.getUTCDate(), 31);
+  assert.equal(data.getUTCMonth(), 6, "julho é o mês de índice 6");
+  assert.equal(data.getUTCHours(), 0);
 });
 
 test("gerar duas vezes o mesmo mês produz a mesma chave única", async () => {
