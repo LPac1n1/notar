@@ -546,9 +546,30 @@ BI sobre a nota individual, em dois níveis: painel da plataforma (todos os proj
 
 **Armadilhas de escrita registradas**: escrever arquivo por script de patch comeu backslash de regex três vezes (`/d/` → `/d/`) e uma vez transformou `" "` em byte NUL. Mitigação: `String.fromCharCode(92)` para o backslash, e conferir com `grep` depois de escrever.
 
+## Planilha de abatimento no formato do sistema de baixa (commits 272-273)
+
+O usuário anexou `base_extrato.xlsx`, o gabarito que o sistema de abatimento importa, e pediu que a planilha saísse exatamente assim. Saiu de CSV para **.xlsx**.
+
+O modelo NÃO é uma tabela simples: três parâmetros no topo (`AGENCA 0`, `CONTA 0`, `COD. BANCO NFP2607`), nota mesclada em D1:E3, duas linhas em branco, e só na **linha 6** o cabeçalho `DATA | VALOR | DESCRIÇÃO | NOME | CPF`. Errar qualquer posição faz o destino ler tudo deslocado.
+
+- **Demanda saiu de coluna e virou nome de arquivo** — não existe coluna para ela no modelo. A divisão por demanda (um arquivo por demanda, zip quando há mais de uma) continua.
+- **A DATA é o último dia do TERCEIRO mês após a competência** (abril → 31/07, maio → 31/08; regra dada pelo usuário). Derivada da competência e não do dia da geração: a chave única do destino é (Agencia, Conta, Cod. Banco, Data, Valor, Nome), então reexportar o mesmo mês tem de produzir a mesma chave. Os dois exemplos dados caem em meses de 31 dias e não distinguem "último dia" de "dia 31" — os testes travam janeiro→30/04 e novembro→28 ou 29/02.
+- **Marcador SHA-1 escondido** na coluna 235 da linha 3 do modelo. Não deriva de nada óbvio e o gabarito não tem linha de dado, então não é soma de verificação. Reproduzido literalmente: remover custaria uma falha de importação sem explicação.
+- **Bordas e moeda vieram numa segunda rodada** (commit 273): o gabarito é VAZIO, então não havia linha de dado para copiar e a primeira versão saiu sem borda e sem formato. `[$R$-416]` fixa o pt-BR — sem isso os separadores seguem a máquina de quem abre (renderizado num ambiente de locale inglês para confirmar).
+- O teste compara o gerado **contra o arquivo do usuário**, célula a célula; o e2e baixa pelo app e reabre.
+
+## Painel de Moradia: mês selecionável e reestruturação (commits 274-275)
+
+- **Seletor de mês** no cabeçalho. Recorta SÓ o bloco de apuração — cadastro, inconsistência e totais do projeto não pertencem a competência nenhuma. Dois cuidados: o aviso de atraso passou a olhar o mês MAIS RECENTE (antes lia o exibido, e abrir janeiro acusaria atraso falso), e o "mês anterior" da comparação é o vizinho na lista de importações, não o do calendário (março não importado ⇒ o anterior a abril é fevereiro). Removido um `LIMIT 6` que teria limitado o seletor a seis meses.
+- `latestMonth` virou `month` no payload e nos consumidores: com o mês selecionável, o nome mentia. `newestMonth` é o novo campo para o aviso de atraso.
+- **Conteúdo novo**: progresso do abatimento como barra (era dois números soltos em cartões separados), variação contra o mês anterior, taxa de participação e estreias no mês. A quebra por demanda saiu de um modal e virou tabela visível; o modal "último mês importado" foi removido por repetir o que a página passou a mostrar.
+- **Ocultar valores** (`useHiddenValues`): botão nos três painéis, começa OCULTO e lembra a escolha. A loja fica fora do React com `useSyncExternalStore` — é preferência de usuário, como o tema, e um contexto exigiria provedor em cada painel.
+- O mascaramento é uma regra de CSS ancorada em `[data-values-hidden]`, não uma condição por componente: `.numeric` já marcava todo número. Primeira versão usava desfoque; o usuário pediu bolinhas, e `-webkit-text-security: disc` faz isso por caractere. O desfoque ficou como retaguarda em `@supports` — cair para texto legível seria falha de privacidade silenciosa.
+- `TextWithValues` mascara só os NÚMEROS das frases de apoio. Cobrir a frase inteira virava uma fileira de pontinhos e o cartão perdia o significado junto com o valor. Usa a posição do `split` com grupo de captura, e não `test()` com regex global — `test` avança `lastIndex` e erraria do segundo número em diante.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 270**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 276**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
