@@ -1,6 +1,7 @@
 import { listDonors } from "./donorService.js";
 import { listImportCpfSummary, listImports } from "./importService.js";
 import { listAbatementSheetRows } from "./monthly/abatementSheet.js";
+import { buildAbatementWorkbookBytes } from "./monthly/abatementSheetWorkbook.js";
 import { listMonthlySummaries } from "./monthlyService.js";
 import {
   listReconciliationByDonor,
@@ -24,6 +25,11 @@ const MATCH_STATUS_LABEL = {
   matched: "Casado",
   divergent: "Valor divergente",
 };
+
+// Tipo MIME do .xlsx. Sem ele o navegador entrega o arquivo como binário
+// genérico e o Excel não se oferece para abri-lo.
+const XLSX_MIME_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 // UTF-8 BOM. Sem ele o Excel abre o CSV em ANSI e quebra os acentos.
 const CSV_BOM = "\uFEFF";
@@ -267,32 +273,26 @@ export async function exportReconciliationPairsCsv(filters = {}) {
   return { rowCount: rows.length };
 }
 
-const ABATEMENT_SHEET_COLUMNS = [
-  { key: "cpf", label: "CPF" },
-  { key: "donorName", label: "Nome completo" },
-  { key: "demand", label: "Demanda" },
-  { key: "description", label: "Descrição" },
-  { key: "notesCount", label: "Quantidade de doações" },
-];
-
 /**
  * Planilha de abatimento para importar no sistema externo que dá baixa nas
- * doações. Uma linha por CPF de doador com notas no mês — inclusive auxiliares,
- * que no resumo mensal aparecem somados ao titular mas aqui precisam de linha
- * própria porque o abatimento lá é por CPF.
+ * doações. Uma linha por CPF de doador com notas no mês — inclusive
+ * auxiliares, que no resumo mensal aparecem somados ao titular mas aqui
+ * precisam de linha própria porque o abatimento lá é por CPF.
  *
- * Sai UM ARQUIVO POR DEMANDA, porque a importação no outro sistema é feita
- * demanda a demanda. Demandas sem nenhuma doação no mês simplesmente não
- * geram arquivo — a query já só devolve CPFs com notas, então o agrupamento
- * nunca produz um grupo vazio.
+ * Sai no formato .xlsx do modelo do sistema de destino (`base_extrato.xlsx`),
+ * e não em CSV: o modelo tem um bloco de parâmetros no topo, uma nota
+ * mesclada e duas linhas em branco antes do cabeçalho das colunas. Nada disso
+ * sobrevive a um CSV.
+ *
+ * A demanda não é coluna no modelo de destino — ela vive no NOME DO ARQUIVO,
+ * porque a importação lá é feita demanda a demanda. Demandas sem doação no
+ * mês não geram arquivo: a consulta já só devolve CPF com nota, então o
+ * agrupamento nunca produz grupo vazio.
  *
  * Com mais de uma demanda os arquivos vão num .zip (mesmo padrão dos
- * relatórios PDF/JPEG por demanda); com uma só, baixa o CSV direto.
- *
- * A coluna "Descrição" já vem pronta no formato que o outro sistema espera
- * (ver `buildAbatementDescription`), então o operador só sobe o arquivo.
+ * relatórios PDF/JPEG por demanda); com uma só, baixa a planilha direto.
  */
-export async function exportAbatementSheetCsv({ referenceMonth } = {}) {
+export async function exportAbatementSheetWorkbook({ referenceMonth } = {}) {
   const rows = await listAbatementSheetRows({ referenceMonth });
   const monthSuffix = referenceMonth
     ? `-${String(referenceMonth).slice(0, 7)}`
@@ -313,29 +313,31 @@ export async function exportAbatementSheetCsv({ referenceMonth } = {}) {
     rowsByDemand.get(demandName).push(row);
   }
 
-  const files = Array.from(rowsByDemand.entries())
-    .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
-    .map(([demandName, demandRows]) => ({
-      fileName: `notar-abatimento-${buildSlug(demandName) || "demanda"}${monthSuffix}.csv`,
-      demandName,
-      rowCount: demandRows.length,
-      csvContent: buildCsvContent(ABATEMENT_SHEET_COLUMNS, demandRows),
-    }));
+  const files = await Promise.all(
+    Array.from(rowsByDemand.entries())
+      .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
+      .map(async ([demandName, demandRows]) => ({
+        fileName: `notar-abatimento-${buildSlug(demandName) || "demanda"}${monthSuffix}.xlsx`,
+        demandName,
+        rowCount: demandRows.length,
+        bytes: await buildAbatementWorkbookBytes({
+          rows: demandRows,
+          referenceMonth,
+        }),
+      })),
+  );
 
   if (files.length === 1) {
-    downloadCsv(files[0].fileName, files[0].csvContent);
-  } else {
-    const encoder = new TextEncoder();
-    const archiveName = `notar-abatimento${monthSuffix}.zip`;
     downloadFile({
-      fileName: archiveName,
-      // BOM por arquivo: cada CSV é aberto individualmente no Excel depois de
-      // descompactado, e sem ele os acentos quebram — igual ao `downloadCsv`.
+      fileName: files[0].fileName,
+      content: new Blob([files[0].bytes], { type: XLSX_MIME_TYPE }),
+      mimeType: XLSX_MIME_TYPE,
+    });
+  } else {
+    downloadFile({
+      fileName: `notar-abatimento${monthSuffix}.zip`,
       content: createZipArchive(
-        files.map((file) => ({
-          name: file.fileName,
-          bytes: encoder.encode(CSV_BOM + file.csvContent),
-        })),
+        files.map((file) => ({ name: file.fileName, bytes: file.bytes })),
       ),
       mimeType: "application/zip",
     });

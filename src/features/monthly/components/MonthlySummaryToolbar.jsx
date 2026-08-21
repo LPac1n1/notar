@@ -61,7 +61,7 @@ export default function MonthlySummaryToolbar({
             isLoading={isExportingAbatementSheet}
             loadingLabel="Gerando planilha..."
             leftIcon={<DownloadIcon className="h-4 w-4" />}
-            title="Planilha por CPF (nome, demanda, descrição e quantidade de doações) para importar no sistema que faz o abatimento. Exige um mês selecionado."
+            title="Planilha .xlsx por CPF, no formato que o sistema de abatimento importa. Sai uma por demanda. Exige um mês selecionado."
           >
             Planilha de abatimento
           </Button>

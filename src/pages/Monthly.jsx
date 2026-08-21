@@ -25,7 +25,7 @@ import { useMonthlyStatusHandlers } from "../features/monthly/hooks/useMonthlySt
 import { createActionHistoryEntry } from "../services/actionHistoryService";
 import {
   exportMonthlySummariesCsv,
-  exportAbatementSheetCsv,
+  exportAbatementSheetWorkbook,
   exportReconciliationByDonorCsv,
 } from "../services/exportService";
 // PDF + JPEG report modules pull a large dependency chain (custom PDF
@@ -530,7 +530,7 @@ export default function Monthly() {
     try {
       const result = await monthlyOperation.run(
         () =>
-          exportAbatementSheetCsv({ referenceMonth: filters.referenceMonth }),
+          exportAbatementSheetWorkbook({ referenceMonth: filters.referenceMonth }),
         { loadingMessage: "Gerando planilha de abatimento..." },
       );
       const exportSummary =
@@ -540,7 +540,7 @@ export default function Monthly() {
       await createActionHistoryEntry({
         actionType: "export",
         entityType: "export",
-        entityId: "abatement-sheet-csv",
+        entityId: "abatement-sheet",
         label: "Planilha de abatimento",
         description: exportSummary,
         payload: {
