@@ -525,9 +525,30 @@ Medido antes de mexer: exportar 60 mil linhas dava **552ms de thread principal t
 - Item de menu chamado **"Anotações gerais"**: dentro de um projeto os dois blocos aparecem juntos, e dois itens com o mesmo nome só se distinguiriam pelo cabeçalho acima deles.
 - Busca por texto em título e conteúdo, sem acento e com as tags do editor removidas. Vazio de busca distinto do vazio de lista.
 
+## Inteligência sobre notas fiscais (commits 269-270)
+
+BI sobre a nota individual, em dois níveis: painel da plataforma (todos os projetos e doadores) e perfil do doador.
+
+**O que NÃO existe**: cidade e estado. Nenhuma das duas planilhas traz essas colunas e nenhum dos dois pipelines as captura — filtrar por elas exigiria antes que o arquivo de origem passasse a informá-las.
+
+**Base única** (`services/notes/noteAnalyticsSql.js`, módulo puro): `note_base` resolve doador, projeto (pelo vínculo vigente NO MÊS DA NOTA), estabelecimento e crédito de uma vez. Listagem, contagem, indicadores, faixas e ranking partem dela — bases separadas por pergunta fariam os números da mesma tela discordarem quando um filtro fosse aplicado num lugar e esquecido em outro.
+
+- `donor_by_cpf` e `credit_by_note` são CTEs AGREGADAS, não JOINs diretos: um pareamento duplicado multiplicaria a nota e inflaria toda soma da tela sem sinal nenhum. Teste trava a contagem.
+- `retorno` = crédito / valor, calculado na base e não em cada consumidor.
+- Ordenação por lista fechada (`NOTE_SORT_COLUMNS`) porque o DuckDB não aceita `?` em `ORDER BY`; valor fora da lista cai no padrão. Teste tenta `'; DROP TABLE ...`.
+- **Faixas de valor com limites meio-abertos** ([mín, máx)). Os rótulos originais diziam "Até R$ 50" para a faixa que EXCLUI R$ 50 — o e2e pegou. Agora "Menos de R$ 50" / "R$ 50 a R$ 100", com o limite pertencendo à faixa que começa nele.
+- **"Compras excepcionais"** = decil superior de crédito do recorte (`quantile_cont(credito, 0.9)`), não um valor fixo em reais que envelheceria. É pergunta diferente do ranking geral: no teste, o MERCADO domina o crédito total por volume e NÃO aparece entre as excepcionais.
+- Período aceita mês ou data completa; o fim do período abre para o último dia do mês (fevereiro bissexto conferido em teste).
+
+**Componente único para as duas telas** (`features/notesAnalytics/`): `NoteAnalyticsExplorer` com `lockedFilters` (contexto da página, entra por cima do que o usuário escolhe e some da barra), `hiddenFilters`, `hiddenColumns` e `showSummary`. O perfil do doador PERDEU a tabela própria — `listDonorDonations`/`countDonorDonations` e o SQL delas foram removidos.
+
+**Bug real corrigido durante o trabalho**: `handleSort` chamava `setDirection` dentro do updater de `setSort`. Updater precisa ser puro; no React 19 ele roda duas vezes e a inversão acontecia duas vezes, voltando ao sentido original — clicar duas vezes na mesma coluna não invertia nada. Virou um estado único `{sort, direction}`. Pego pelo e2e, não por inspeção.
+
+**Armadilhas de escrita registradas**: escrever arquivo por script de patch comeu backslash de regex três vezes (`/d/` → `/d/`) e uma vez transformou `" "` em byte NUL. Mitigação: `String.fromCharCode(92)` para o backslash, e conferir com `grep` depois de escrever.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 267**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 270**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
