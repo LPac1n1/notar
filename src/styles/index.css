@@ -156,6 +156,25 @@ textarea {
   font-feature-settings: "tnum" 1;
 }
 
+/* Modo de valores ocultos dos painéis.
+ *
+ * O desfoque é aplicado pelo CONTÊINER, e não por cada número: `.numeric` já
+ * marca todo dado que o usuário lê como valor, então esconder vira uma regra
+ * só em vez de uma condição em dezenas de componentes. `.sensitive` cobre o
+ * que carrega valor mas não é número puro — o texto de apoio de uma ficha,
+ * por exemplo.
+ *
+ * `filter` não altera o layout, então a página não se mexe ao alternar.
+ *
+ * A seleção é bloqueada para o valor não sair por cópia acidental enquanto
+ * está oculto; o clique continua passando, senão uma ficha inteira deixaria
+ * de abrir só porque o número dela está borrado. */
+[data-values-hidden="true"] .numeric,
+[data-values-hidden="true"] .sensitive {
+  filter: blur(7px);
+  user-select: none;
+}
+
 /* Divisor — traço que continua após o label da seção.
  * <div class="section-rule"><span>EYEBROW</span></div> */
 .section-rule {

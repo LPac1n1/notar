@@ -1,6 +1,8 @@
 export {
   ArrowLeft as BackIcon,
   ArrowUpDown as SortIcon,
+  Eye as ShowValuesIcon,
+  EyeOff as HideValuesIcon,
   Bold as BoldIcon,
   Bug as BugIcon,
   Keyboard as KeyboardIcon,

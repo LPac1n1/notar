@@ -3,6 +3,7 @@ import DataTable from "../../../components/ui/DataTable";
 import EmptyState from "../../../components/ui/EmptyState";
 import Eyebrow from "../../../components/ui/Eyebrow";
 import FeedbackMessage from "../../../components/ui/FeedbackMessage";
+import HiddenValuesToggle from "../../../components/ui/HiddenValuesToggle";
 import LoadingScreen from "../../../components/ui/LoadingScreen";
 import MetricCard from "../../../components/ui/MetricCard";
 import PageHeader from "../../../components/ui/PageHeader";
@@ -14,6 +15,7 @@ import EstablishmentIntelligenceSection from "./EstablishmentIntelligenceSection
 import ProjectDonorCreditSection from "./ProjectDonorCreditSection";
 import { useDatabaseChangeEffect } from "../../../hooks/useDatabaseChangeEffect";
 import { useDataResource } from "../../../hooks/useDataResource";
+import { useHiddenValues } from "../../../hooks/useHiddenValues";
 import { getProjectCreditOverview } from "../../../services/projectCreditService";
 import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
@@ -73,6 +75,7 @@ function buildMonthRows(months) {
     .reverse();
 }
 export default function ProjectCreditDashboard({ project }) {
+  const { isHidden, toggle, attributes } = useHiddenValues();
   const loader = useCallback(() => getProjectCreditOverview(), []);
   const filters = useMemo(() => EMPTY_FILTERS, []);
 
@@ -121,6 +124,7 @@ export default function ProjectCreditDashboard({ project }) {
         title="Dashboard"
         subtitle={`Créditos gerados pelos doadores de ${project?.name ?? "este projeto"}.`}
         className="mb-6"
+        actions={<HiddenValuesToggle isHidden={isHidden} onToggle={toggle} />}
       />
       <FeedbackMessage message={error} tone="error" />
 
@@ -130,7 +134,7 @@ export default function ProjectCreditDashboard({ project }) {
           description="Cadastre os doadores deste projeto. O crédito aparece aqui depois que as planilhas do mês forem importadas e conciliadas."
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6" {...attributes}>
           {/* ─── Quanto este projeto gerou ───────────────────────────── */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <MetricCard

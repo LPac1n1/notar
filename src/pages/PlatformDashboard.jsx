@@ -3,6 +3,7 @@ import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
 import Eyebrow from "../components/ui/Eyebrow";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import HiddenValuesToggle from "../components/ui/HiddenValuesToggle";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import MetricCard from "../components/ui/MetricCard";
 import PageHeader from "../components/ui/PageHeader";
@@ -10,6 +11,7 @@ import SectionCard from "../components/ui/SectionCard";
 import EstablishmentIntelligenceSection from "../features/dashboard/components/EstablishmentIntelligenceSection";
 import MonthlyTrendChart from "../features/dashboard/components/MonthlyTrendChart";
 import { useDataResource } from "../hooks/useDataResource";
+import { useHiddenValues } from "../hooks/useHiddenValues";
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { getPlatformOverview } from "../services/platformDashboardService";
 import { creditPerNote } from "../utils/creditAverage";
@@ -61,6 +63,7 @@ const INITIAL_DATA = {
  * com o crédito conciliado.
  */
 export default function PlatformDashboard() {
+  const { isHidden, toggle, attributes } = useHiddenValues();
   const loader = useCallback(() => getPlatformOverview(), []);
   const filters = useMemo(() => EMPTY_FILTERS, []);
 
@@ -98,10 +101,11 @@ export default function PlatformDashboard() {
         title="Painel da plataforma"
         subtitle="O movimento do sistema inteiro, acima dos projetos."
         className="mb-6"
+        actions={<HiddenValuesToggle isHidden={isHidden} onToggle={toggle} />}
       />
       <FeedbackMessage message={error} tone="error" />
 
-      <div className="space-y-6">
+      <div className="space-y-6" {...attributes}>
         {/* ─── Quanto a NFP creditou ───────────────────────────────────── */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <MetricCard

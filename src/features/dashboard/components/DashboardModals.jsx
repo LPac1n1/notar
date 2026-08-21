@@ -13,7 +13,7 @@ import {
 import CopyableCpf from "../../donors/components/CopyableCpf";
 import CopyableDonorName from "../../donors/components/CopyableDonorName";
 import { describeInactivity } from "../../../services/monthly/inactivityStreaks";
-import { formatDatePtBR, formatMonthYear } from "../../../utils/date";
+import { formatMonthYear } from "../../../utils/date";
 import { formatCurrency, formatInteger } from "../../../utils/format";
 import DetailList from "./DetailList";
 import InconsistencyRow from "./InconsistencyRow";
@@ -38,7 +38,7 @@ export default function DashboardModals({
   actions = null,
   dashboard,
   totals,
-  latestMonth,
+  month,
   inconsistencies,
   onClose,
   onOpenImports,
@@ -180,63 +180,11 @@ export default function DashboardModals({
     );
   }
 
-  if (activeModal === "latest-month" && latestMonth) {
-    return (
-      <Modal
-        title={`Último mês importado: ${formatMonthYear(latestMonth.referenceMonth)}`}
-        description="Resumo consolidado do mês mais recente processado."
-        icon={<MonthlyIcon className="h-5 w-5" />}
-        onClose={onClose}
-        size="xl"
-      >
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <MetricCard label="Notas no mês" value={formatInteger(latestMonth.totalNotes)} />
-          <MetricCard label="Valor por nota" value={formatCurrency(latestMonth.valuePerNote)} />
-          <MetricCard label="Total a abater" value={formatCurrency(latestMonth.totalAbatement)} />
-          <MetricCard label="Pendentes" value={formatInteger(latestMonth.pendingCount)} />
-          <MetricCard label="Realizados" value={formatInteger(latestMonth.appliedCount)} />
-        </div>
-
-        <div className="mt-4 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4 text-sm text-[var(--text-soft)]">
-          <p className="break-all">
-            Arquivo: <span className="font-medium text-[var(--text-main)]">{latestMonth.fileName}</span>
-          </p>
-          <p className="mt-1">
-            Importado em <span className="font-medium text-[var(--text-main)]">{formatDatePtBR(latestMonth.importedAt)}</span>
-          </p>
-        </div>
-
-        <div className="mt-4">
-          <DetailList emptyMessage="Nenhuma consolidação por demanda disponível para este mês.">
-            {(dashboard?.demandBreakdown ?? []).map((item) => (
-              <div
-                key={item.demand}
-                className="rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-4"
-              >
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="font-medium text-[var(--text-main)]">{item.demand}</p>
-                    <p className="mt-1 text-sm text-[var(--muted)]">
-                      {formatInteger(item.donorCount)} doador(es) • {formatInteger(item.totalNotes)} nota(s)
-                    </p>
-                  </div>
-                  <p className="font-semibold text-[var(--text-main)]">
-                    {formatCurrency(item.totalAbatement)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </DetailList>
-        </div>
-      </Modal>
-    );
-  }
-
-  if (activeModal === "latest-pending" && latestMonth) {
+  if (activeModal === "latest-pending" && month) {
     return (
       <Modal
         title="Abatimentos pendentes"
-        description={`Itens pendentes em ${formatMonthYear(latestMonth.referenceMonth)}.`}
+        description={`Itens pendentes em ${formatMonthYear(month.referenceMonth)}.`}
         icon={<WarningIcon className="h-5 w-5" />}
         onClose={onClose}
         size="lg"
@@ -265,11 +213,11 @@ export default function DashboardModals({
     );
   }
 
-  if (activeModal === "latest-unregistered" && latestMonth) {
+  if (activeModal === "latest-unregistered" && month) {
     return (
       <Modal
         title="CPFs não cadastrados no último mês"
-        description={`CPFs encontrados em ${formatMonthYear(latestMonth.referenceMonth)} sem doador correspondente.`}
+        description={`CPFs encontrados em ${formatMonthYear(month.referenceMonth)} sem doador correspondente.`}
         icon={<SearchIcon className="h-5 w-5" />}
         onClose={onClose}
         size="xl"

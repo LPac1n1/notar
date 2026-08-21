@@ -4,10 +4,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import Eyebrow from "../components/ui/Eyebrow";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
+import HiddenValuesToggle from "../components/ui/HiddenValuesToggle";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import PageHeader from "../components/ui/PageHeader";
-import DashboardCurrentMonthBanner from "../features/dashboard/components/DashboardCurrentMonthBanner";
-import DashboardLatestMonthSection from "../features/dashboard/components/DashboardLatestMonthSection";
+import SelectInput from "../components/ui/SelectInput";
+import DashboardMonthDetailSection from "../features/dashboard/components/DashboardMonthDetailSection";
+import DashboardMonthOverview from "../features/dashboard/components/DashboardMonthOverview";
 import DashboardModals from "../features/dashboard/components/DashboardModals";
 import DashboardOverviewCards from "../features/dashboard/components/DashboardOverviewCards";
 import DashboardReviewSection from "../features/dashboard/components/DashboardReviewSection";
@@ -18,22 +20,28 @@ import { useDashboardActions } from "../features/dashboard/hooks/useDashboardAct
 import { useDatabaseChangeEffect } from "../hooks/useDatabaseChangeEffect";
 import { useDataRefreshIndicator } from "../hooks/useDataRefreshIndicator";
 import { useDataResource } from "../hooks/useDataResource";
+import { useHiddenValues } from "../hooks/useHiddenValues";
 import { useActiveProject } from "../hooks/useProject";
 import { useProjectPath } from "../hooks/useProjectPath";
 import { getDashboardOverview } from "../services/dashboardService";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
+import { formatMonthYear } from "../utils/date";
 
 /**
  * Dashboard em quatro zonas, do que exige ação para o que é só consulta:
  *
- *   1. Mês corrente — banner com o último mês e os dois CTAs de rotina.
- *   2. O que precisa de atenção — "Pontos para revisar", agora resolvível
- *      dentro dos próprios modais. Subiu de posição: era a quarta seção,
- *      abaixo de três blocos de leitura passiva.
- *   3. Como está indo — evolução mensal (gráfico) e o recorte do último
- *      mês, com as duas seções que falam dele lado a lado.
- *   4. Consulta — ranking filtrável, conciliação, importações recentes e
- *      os totais globais como rodapé.
+ *   1. O mês — cabeçalho do mês ESCOLHIDO, com progresso do abatimento,
+ *      variação contra o mês anterior e os dois CTAs de rotina; abaixo,
+ *      o detalhe de participação e a quebra por demanda.
+ *   2. O que precisa de atenção — "Pontos para revisar", resolvível
+ *      dentro dos próprios modais.
+ *   3. Como está indo — evolução ao longo dos meses.
+ *   4. Consulta — ranking filtrável e os totais do projeto como rodapé.
+ *
+ * O mês é escolhido no cabeçalho da página e recorta SÓ a zona 1. Cadastro,
+ * inconsistência e totais do projeto não pertencem a competência nenhuma —
+ * recortá-los faria o painel afirmar que um doador cadastrado hoje não
+ * existia em março.
  *
  * Nenhuma zona gasta espaço quando está vazia.
  */
@@ -64,8 +72,20 @@ function FullDashboard() {
   const navigate = useNavigate();
   const projectPath = useProjectPath();
 
-  const dashboardLoader = useCallback(() => getDashboardOverview(), []);
-  const dashboardFilters = useMemo(() => ({}), []);
+  const { isHidden, toggle, attributes } = useHiddenValues();
+  // Vazio significa "o mais recente", e é assim que a página abre. Guardar o
+  // mês escolhido em estado, e não na URL, é deliberado: é um recorte de
+  // leitura, não um lugar — um link para o painel deve levar ao mês atual.
+  const [selectedMonth, setSelectedMonth] = useState("");
+
+  const dashboardLoader = useCallback(
+    ({ referenceMonth }) => getDashboardOverview({ referenceMonth }),
+    [],
+  );
+  const dashboardFilters = useMemo(
+    () => ({ referenceMonth: selectedMonth }),
+    [selectedMonth],
+  );
   const {
     data: dashboard,
     isLoading,
@@ -134,7 +154,21 @@ function FullDashboard() {
     importCount: 0,
     processedImportCount: 0,
   };
-  const latestMonth = dashboard?.latestMonth ?? null;
+  const month = dashboard?.month ?? null;
+  const newestMonth = dashboard?.newestMonth ?? null;
+  const demandBreakdown = dashboard?.demandBreakdown ?? [];
+  const availableMonths = useMemo(
+    () => dashboard?.availableMonths ?? [],
+    [dashboard],
+  );
+  const monthOptions = useMemo(
+    () =>
+      availableMonths.map((value) => ({
+        value,
+        label: formatMonthYear(value),
+      })),
+    [availableMonths],
+  );
   const inconsistencies = dashboard?.inconsistencies ?? {
     donationStartConflictCount: 0,
     donorWithoutDemandCount: 0,
@@ -173,8 +207,24 @@ function FullDashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Visão geral do sistema."
+        subtitle="Como o projeto está indo, mês a mês."
         className="mb-6"
+        actions={
+          <>
+            {monthOptions.length > 1 ? (
+              <SelectInput
+                label="Mês em análise"
+                name="dashboardMonth"
+                value={selectedMonth || (newestMonth ?? "")}
+                onChange={(event) => setSelectedMonth(event.target.value)}
+                options={monthOptions}
+                searchable
+                wrapperClassName="w-48"
+              />
+            ) : null}
+            <HiddenValuesToggle isHidden={isHidden} onToggle={toggle} />
+          </>
+        }
       />
       <FeedbackMessage message={error} tone="error" />
 
@@ -185,8 +235,7 @@ function FullDashboard() {
         />
       ) : null}
 
-      {/* ─── Zona 1 — Mês corrente ──────────────────────────────────── */}
-      <DashboardCurrentMonthBanner latestMonth={latestMonth} />
+
 
       {showRefreshing ? (
         <DashboardReviewSection
@@ -206,7 +255,20 @@ function FullDashboard() {
       ) : null}
 
       {showSectionsData ? (
-        <div className="space-y-6">
+        <div className="space-y-6" {...attributes}>
+          {/* ─── Zona 1 — O mês escolhido ────────────────────────────── */}
+          <DashboardMonthOverview
+            month={month}
+            newestMonth={newestMonth}
+            onOpenModal={setActiveModal}
+          />
+          <DashboardMonthDetailSection
+            activeDonorCount={totals.donorCount}
+            demandBreakdown={demandBreakdown}
+            month={month}
+            onOpenModal={setActiveModal}
+          />
+
           {/* ─── Zona 2 — O que precisa da minha atenção ─────────────── */}
           <DashboardReviewSection
             inconsistencies={inconsistencies}
@@ -217,16 +279,6 @@ function FullDashboard() {
           {/* ─── Zona 3 — Como está indo ─────────────────────────────── */}
           <Eyebrow as="rule">Evolução</Eyebrow>
           <DashboardTrendSection />
-          {/* As duas seções do último mês ficam adjacentes: antes estavam
-              separadas por outras três, e o usuário lia "Março de 2026" em
-              quatro pontos distintos da página sem perceber que eram o
-              mesmo recorte. Empilhadas e não lado a lado — o resumo tem 5
-              métricas, e em meia largura os rótulos truncam e os valores se
-              sobrepõem. */}
-          <DashboardLatestMonthSection
-            latestMonth={latestMonth}
-            onOpenModal={setActiveModal}
-          />
 
           {/* ─── Zona 4 — Consulta ───────────────────────────────────── */}
           <Eyebrow as="rule">Consulta</Eyebrow>
@@ -253,7 +305,7 @@ function FullDashboard() {
           activeModal={activeModal}
           dashboard={dashboard}
           totals={totals}
-          latestMonth={latestMonth}
+          month={month}
           inconsistencies={inconsistencies}
           onClose={closeModal}
           onOpenImports={() => navigate("/importacoes")}

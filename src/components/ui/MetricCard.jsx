@@ -25,8 +25,8 @@ export default function MetricCard({
     : "rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-5 text-left transition-colors duration-150";
 
   const helperClass = compact
-    ? "mt-1 text-xs leading-5 text-[var(--muted)]"
-    : "mt-2.5 text-sm leading-6 text-[var(--muted)]";
+    ? "sensitive mt-1 text-xs leading-5 text-[var(--muted)]"
+    : "sensitive mt-2.5 text-sm leading-6 text-[var(--muted)]";
 
   const content = (
     <>

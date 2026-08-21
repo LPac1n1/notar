@@ -20,9 +20,11 @@ import {
 import { buildDonorInactivityStreaksSql } from "./monthly/inactivityStreaksSql";
 import { getCached, setCached } from "./queryCache.js";
 
-// A chave inclui o projeto: sem isso, trocar de projeto serviria o
-// panorama do anterior a partir do cache.
-const dashboardCacheKey = () => `dashboard:overview:${getActiveProjectId()}`;
+// A chave inclui o projeto E o mês escolhido: sem o projeto, trocar de
+// projeto serviria o panorama do anterior; sem o mês, trocar de mês
+// devolveria o mês anterior a partir do cache.
+const dashboardCacheKey = (referenceMonth) =>
+  `dashboard:overview:${getActiveProjectId()}:${referenceMonth || "ultimo"}`;
 const DASHBOARD_TTL_MS = 30_000;
 
 function toNumber(value) {
@@ -110,16 +112,23 @@ export async function getTopDonorFilterOptions() {
  * Promise.all groups we land in 200-300ms because DuckDB pipelines the
  * statements internally.
  */
-export async function getDashboardOverview() {
-  const cached = getCached(dashboardCacheKey());
+/**
+ * `referenceMonth` escolhe o mês do bloco mensal. Sem ele, o mais recente.
+ *
+ * O painel inteiro NÃO muda de mês: cadastros, inconsistências e totais do
+ * projeto não pertencem a competência nenhuma. O que o mês recorta é o bloco
+ * de apuração — notas, abatimento, demandas, participação.
+ */
+export async function getDashboardOverview({ referenceMonth = "" } = {}) {
+  const cached = getCached(dashboardCacheKey(referenceMonth));
   if (cached !== undefined) return cached;
 
-  const result = await _fetchDashboardOverview();
-  setCached(dashboardCacheKey(), result, DASHBOARD_TTL_MS);
+  const result = await _fetchDashboardOverview(referenceMonth);
+  setCached(dashboardCacheKey(referenceMonth), result, DASHBOARD_TTL_MS);
   return result;
 }
 
-async function _fetchDashboardOverview() {
+async function _fetchDashboardOverview(referenceMonth) {
   // O dashboard é do PROJETO ATIVO. Tudo que deriva de doador ou de demanda
   // ganha o recorte; importação e conciliação NÃO, porque a base é uma só
   // para toda a plataforma — os números delas são a verdade compartilhada.
@@ -197,7 +206,6 @@ async function _fetchDashboardOverview() {
       FROM imports
       WHERE status = 'processed'
       ORDER BY reference_month DESC, imported_at DESC
-      LIMIT 6
     `),
     query(`
       SELECT
@@ -398,7 +406,20 @@ async function _fetchDashboardOverview() {
       (row) => row.monthsWithoutDonating >= INACTIVITY_ALERT_THRESHOLD,
     );
 
-  const latestImport = recentImportsRows[0] ?? null;
+  // A lista de meses com importação processada alimenta o seletor. Sai de
+  // `recentImports`, que já vem ordenada do mais recente para o mais antigo.
+  const availableMonths = [
+    ...new Set(recentImportsRows.map((row) => row.reference_month).filter(Boolean)),
+  ];
+
+  const newestImport = recentImportsRows[0] ?? null;
+  // Mês pedido que não existe cai no mais recente em vez de esvaziar a tela:
+  // pode ser um link antigo, ou a importação daquele mês foi apagada.
+  const selectedImport =
+    (referenceMonth &&
+      recentImportsRows.find((row) => row.reference_month === referenceMonth)) ||
+    newestImport;
+  const latestImport = selectedImport;
 
   let latestMonth = null;
   let demandBreakdown = [];
@@ -413,6 +434,18 @@ async function _fetchDashboardOverview() {
 
   if (latestImport) {
     const latestImportId = latestImport.id;
+    const selectedMonthKey = latestImport.reference_month ?? "";
+    // O mês anterior é o vizinho na lista de importações processadas, e não
+    // o mês do calendário: se março não foi importado, o anterior a abril é
+    // fevereiro. Comparar com um mês vazio diria que a arrecadação despencou.
+    const selectedIndex = recentImportsRows.findIndex(
+      (row) => row.id === latestImportId,
+    );
+    const previousImport =
+      selectedIndex >= 0 ? (recentImportsRows[selectedIndex + 1] ?? null) : null;
+    // Sem mês anterior, a consulta roda com um id que não casa com nada e
+    // devolve zeros — mais simples que ramificar a fase inteira.
+    const previousImportId = previousImport?.id ?? "";
     // Phase 2: four queries narrowed to the latest import. Bind the id via
     // prepared parameters since the value originated from the previous
     // query's result row (string-built it would be safe today, but prepared
@@ -422,6 +455,7 @@ async function _fetchDashboardOverview() {
       demandRows,
       latestPendingRows,
       latestUnregisteredRows,
+      comparisonRows,
     ] = await Promise.all([
       queryPrepared(
         `
@@ -520,6 +554,52 @@ async function _fetchDashboardOverview() {
         `,
         [latestImportId],
       ),
+      // O mês anterior e os doadores que estrearam no mês escolhido.
+      //
+      // Um número sozinho não diz se o mês foi bom: 1.200 notas é ótimo
+      // depois de 900 e preocupante depois de 1.500. A comparação vem da
+      // MESMA ida ao banco para não abrir a chance de descrever um estado
+      // diferente do bloco que ela acompanha.
+      //
+      // `previousImportId` pode ser nulo — no primeiro mês não há anterior —,
+      // e aí a consulta devolve zeros que o mapeamento converte em ausência
+      // de comparação.
+      queryPrepared(
+        `
+          SELECT
+            coalesce((
+              SELECT sum(notes_count)
+              FROM import_cpf_summary
+              WHERE import_id = ?
+                AND ${cpfLinkScope}
+            ), 0) AS previous_notes,
+            coalesce((
+              SELECT sum(abatement_amount)
+              FROM monthly_donor_summary
+              WHERE import_id = ?
+                AND ${summaryScope}
+            ), 0) AS previous_abatement,
+            coalesce((
+              SELECT count(DISTINCT donor_id)
+              FROM monthly_donor_summary
+              WHERE import_id = ?
+                AND ${summaryScope}
+            ), 0) AS previous_donors,
+            coalesce((
+              SELECT count(*)
+              FROM donors
+              WHERE donors.is_active = TRUE
+                AND strftime(donors.donation_start_date, '%Y-%m-01') = ?
+                AND ${donorScope}
+            ), 0) AS new_donors
+        `,
+        [
+          previousImportId,
+          previousImportId,
+          previousImportId,
+          selectedMonthKey,
+        ],
+      ),
     ]);
 
     latestMonth = latestMonthRows[0]
@@ -534,6 +614,17 @@ async function _fetchDashboardOverview() {
           pendingCount: toNumber(latestMonthRows[0].pending_count),
           appliedCount: toNumber(latestMonthRows[0].applied_count),
           unregisteredCpfCount: toNumber(latestMonthRows[0].unregistered_cpf_count),
+          newDonorCount: toNumber(comparisonRows[0]?.new_donors),
+          // Nulo quando não há mês anterior importado: a tela mostra o
+          // indicador sem variação, em vez de uma queda de 100% inventada.
+          previous: previousImport
+            ? {
+                referenceMonth: previousImport.reference_month,
+                totalNotes: toNumber(comparisonRows[0]?.previous_notes),
+                totalAbatement: toNumber(comparisonRows[0]?.previous_abatement),
+                donorCount: toNumber(comparisonRows[0]?.previous_donors),
+              }
+            : null,
         }
       : null;
 
@@ -578,7 +669,12 @@ async function _fetchDashboardOverview() {
       totalCredit: toNumber(totalsRows[0]?.total_credit),
       totalAbated: toNumber(totalsRows[0]?.total_abated),
     },
-    latestMonth,
+    // O bloco do mês ESCOLHIDO. `newestMonth` é o mês mais recente com
+    // importação, e serve ao aviso de atraso — que não pode olhar o mês
+    // selecionado, senão abrir um mês antigo acusaria atraso inexistente.
+    month: latestMonth,
+    newestMonth: newestImport?.reference_month ?? null,
+    availableMonths,
     latestMonthPendingSummaries,
     latestMonthUnregisteredCpfSamples,
     activeDonors: activeDonorRows.map((row) => ({
