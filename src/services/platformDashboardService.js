@@ -44,6 +44,10 @@ export async function getPlatformOverview() {
       // é doação de quem não está no sistema. Fica à vista porque é
       // exatamente a diferença entre o conciliado e a soma dos projetos.
       matchedWithoutDonor: matchedCredit - matchedWithDonor,
+      // Quantas notas da planilha de créditos entraram no total acima. Serve
+      // de denominador para a média sobre TODAS as notas, que é uma pergunta
+      // diferente da média sobre as notas que nós doamos.
+      spreadsheetNotesCount: toNumber(creditRows[0]?.credit_notes_count),
     },
     notesCount: toNumber(notesRows[0]?.notes_count),
     invalidNotesCount: toNumber(notesRows[0]?.invalid_notes_count),

@@ -264,3 +264,50 @@ test("sem doador nenhum, a planilha sai só com o cabeçalho", async () => {
   assert.equal(gerado.getCell(ABATEMENT_TEMPLATE.headerRow, 1).value, "DATA");
   assert.equal(gerado.getCell(7, 1).value ?? null, null);
 });
+
+test("a linha de um auxiliar sai com o nome e o CPF do titular", async () => {
+  // A planilha é importada num sistema que abate na conta de quem responde
+  // pelo grupo. Por isso NOME e CPF são os do titular, enquanto a DESCRIÇÃO
+  // continua nomeando a pessoa que de fato mandou as notas — sem ela, não
+  // haveria como saber a quem pertence cada lançamento do mesmo titular.
+  const gerado = await gerar({
+    rows: [
+      {
+        cpf: "222.333.444-56",
+        donorName: "JOAO AUXILIAR",
+        sheetName: "MARIA SILVA",
+        sheetCpf: "111.444.777-35",
+        notesCount: 5,
+        description: "Doações NFP - JOAO AUXILIAR - Abr/2026",
+      },
+    ],
+  });
+
+  const linha = gerado.getRow(7);
+  assert.equal(linha.getCell(4).value, "MARIA SILVA");
+  assert.equal(linha.getCell(5).value, "111.444.777-35");
+  // O auxiliar não some: é ele que a descrição identifica.
+  assert.equal(linha.getCell(3).value, "Doações NFP - JOAO AUXILIAR - Abr/2026");
+  assert.equal(linha.getCell(2).value, 5);
+});
+
+test("sem identidade de planilha, a linha vale por si", async () => {
+  // Titular comum não tem `sheetName`/`sheetCpf` vindos de um join — e uma
+  // linha órfã (auxiliar cuja pessoa de referência não resolve) também não.
+  // Nos dois casos a linha precisa continuar saindo com a própria identidade
+  // em vez de vir em branco.
+  const gerado = await gerar({
+    rows: [
+      {
+        cpf: "529.982.247-25",
+        donorName: "ANA MARIA DE SOUZA",
+        notesCount: 3,
+        description: "Doações NFP - Abr/2026",
+      },
+    ],
+  });
+
+  const linha = gerado.getRow(7);
+  assert.equal(linha.getCell(4).value, "ANA MARIA DE SOUZA");
+  assert.equal(linha.getCell(5).value, "529.982.247-25");
+});

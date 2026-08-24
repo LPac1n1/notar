@@ -33,6 +33,7 @@ const INITIAL_DATA = {
     matchedWithDonor: 0,
     unidentified: 0,
     matchedWithoutDonor: 0,
+    spreadsheetNotesCount: 0,
   },
   notesCount: 0,
   invalidNotesCount: 0,
@@ -80,9 +81,23 @@ export default function PlatformDashboard() {
   });
 
   const overview = data ?? INITIAL_DATA;
+  // Duas médias, porque são duas perguntas.
+  //
+  // A primeira olha do NOSSO lado: de cada nota que os doadores mandaram,
+  // quanto já voltou em crédito conciliado. Nota que ainda não casou puxa
+  // esse número para baixo — e é assim que tem de ser, porque ela é uma nota
+  // que doamos e ainda não rendeu.
+  //
+  // A segunda olha do lado da NFP: quanto ela credita por nota, na planilha
+  // inteira, independentemente de conciliação. É o valor de referência do
+  // programa, e não muda conforme a nossa importação avança.
   const averagePerNote = creditPerNote(
     overview.credit.matched,
     overview.notesCount,
+  );
+  const averagePerSpreadsheetNote = creditPerNote(
+    overview.credit.spreadsheet,
+    overview.credit.spreadsheetNotesCount,
   );
   const hasCredit = overview.credit.spreadsheet > 0;
 
@@ -124,12 +139,25 @@ export default function PlatformDashboard() {
             helper="Crédito da planilha que não encontrou nota de doação. Costuma ser nota que ainda não foi importada."
           />
           <MetricCard
-            label="Média por nota"
+            label="Média por nota conciliada"
             value={averagePerNote === null ? "—" : formatCurrency(averagePerNote)}
             helper={
               averagePerNote === null
                 ? "Nenhuma nota doada ainda."
-                : `${formatCurrency(overview.credit.matched)} conciliados em ${formatInteger(overview.notesCount)} nota(s) válida(s).`
+                : `${formatCurrency(overview.credit.matched)} conciliados em ${formatInteger(overview.notesCount)} nota(s) doada(s).`
+            }
+          />
+          <MetricCard
+            label="Média por nota da planilha"
+            value={
+              averagePerSpreadsheetNote === null
+                ? "—"
+                : formatCurrency(averagePerSpreadsheetNote)
+            }
+            helper={
+              averagePerSpreadsheetNote === null
+                ? "Nenhuma planilha de créditos importada ainda."
+                : `${formatCurrency(overview.credit.spreadsheet)} em ${formatInteger(overview.credit.spreadsheetNotesCount)} nota(s) da NFP, conciliadas ou não.`
             }
           />
         </div>

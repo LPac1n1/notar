@@ -7,9 +7,13 @@ import { donorBelongedToProjectAtMonth } from "../project/projectAssignmentSql.j
  *
  * Pontos que a query resolve e que não são óbvios:
  *
- *  • Agrupa por `donor_cpf_links` (CPF), a mesma chave que o sistema de destino
- *    usa para abater. Auxiliares têm cadastro de doador próprio, então cada um
- *    sai numa linha com a contagem dele — nunca somado ao titular.
+ *  • Agrupa por `donor_cpf_links` (CPF), então cada auxiliar sai numa linha com
+ *    a contagem dele — nunca somada à do titular.
+ *
+ *  • MAS as colunas NOME e CPF da planilha levam a identidade do TITULAR
+ *    (`sheet_name` / `sheet_cpf`), porque é na conta dele que o abatimento é
+ *    lançado. Quem distingue as linhas do grupo é a DESCRIÇÃO, que continua
+ *    trazendo o nome de cada pessoa.
  *
  *  • `group_has_auxiliaries` decide se o nome entra na descrição. É TRUE para
  *    todo auxiliar (por definição o grupo dele tem um) e para o titular que
@@ -31,6 +35,13 @@ export function buildAbatementSheetSql(projectId) {
   SELECT
     donor_cpf_links.cpf AS cpf,
     donors.name AS donor_name,
+    -- Identidade que vai para as colunas NOME e CPF da planilha. Para um
+    -- auxiliar é a do TITULAR: o sistema de destino abate na conta de quem
+    -- responde pelo grupo, e o auxiliar continua identificado na DESCRIÇÃO.
+    -- O coalesce evita linha sem nome quando o vínculo com a pessoa de
+    -- referência não resolve — nesse caso a linha volta a valer por si.
+    coalesce(holder_people.name, donors.name) AS sheet_name,
+    coalesce(holder_people.cpf, donor_cpf_links.cpf) AS sheet_cpf,
     donors.demand AS demand,
     donors.donor_type AS donor_type,
     sum(import_cpf_summary.notes_count) AS notes_count,
@@ -50,6 +61,10 @@ export function buildAbatementSheetSql(projectId) {
     AND donor_cpf_links.is_active = TRUE
   INNER JOIN donors
     ON donors.id = donor_cpf_links.donor_id
+  -- LEFT: só o auxiliar tem holder_person_id. Para o titular o join não casa,
+  -- e o coalesce acima faz a linha usar a identidade dele mesmo.
+  LEFT JOIN people AS holder_people
+    ON holder_people.id = donors.holder_person_id
   WHERE import_cpf_summary.reference_month = ?
     AND import_cpf_summary.notes_count > 0
     AND ${donorBelongedToProjectAtMonth(
@@ -60,6 +75,8 @@ export function buildAbatementSheetSql(projectId) {
   GROUP BY
     donor_cpf_links.cpf,
     donors.name,
+    holder_people.name,
+    holder_people.cpf,
     donors.demand,
     donors.donor_type,
     donors.person_id

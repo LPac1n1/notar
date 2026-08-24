@@ -16,6 +16,9 @@
  * São TRÊS grandezas distintas, e confundi-las produz número errado:
  *
  *   spreadsheet_credit  tudo o que a NFP creditou.
+ *   credit_notes_count  quantas notas da planilha geraram esse crédito. É o
+ *                       denominador da média sobre TODAS as notas — inclusive
+ *                       as que não casaram com doação nenhuma.
  *   matched_credit      o que casou com uma nota de doação importada. NÃO
  *                       exige doador cadastrado — a conciliação compara
  *                       (CNPJ, número, valor) entre as duas planilhas.
@@ -34,6 +37,7 @@
 export const PLATFORM_CREDIT_TOTALS_SQL = `
   SELECT
     coalesce(sum(credit_notes.credito), 0) AS spreadsheet_credit,
+    count(*) AS credit_notes_count,
     coalesce(sum(
       CASE WHEN EXISTS (
         SELECT 1

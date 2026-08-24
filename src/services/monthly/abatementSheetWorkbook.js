@@ -230,10 +230,13 @@ export async function buildAbatementWorkbookBytes({ rows = [], referenceMonth })
     valueCell.numFmt = ABATEMENT_TEMPLATE.currencyFormat;
 
     sheet.getCell(rowNumber, 3).value = row.description ?? "";
-    sheet.getCell(rowNumber, 4).value = row.donorName ?? "";
+    // Identidade do TITULAR quando a linha é de um auxiliar — o abatimento é
+    // lançado na conta de quem responde pelo grupo. Quem distingue as linhas
+    // é a descrição, que traz o nome de cada pessoa do grupo.
+    sheet.getCell(rowNumber, 4).value = row.sheetName ?? row.donorName ?? "";
     // CPF como TEXTO: como número perderia o zero à esquerda de quem tem CPF
     // começando em zero.
-    sheet.getCell(rowNumber, 5).value = row.cpf ?? "";
+    sheet.getCell(rowNumber, 5).value = row.sheetCpf ?? row.cpf ?? "";
 
     for (let column = 1; column <= ABATEMENT_TEMPLATE.columns.length; column += 1) {
       applyRowStyle(sheet.getCell(rowNumber, column));

@@ -2,7 +2,7 @@ import { listDemands } from "../../../services/demandService";
 import { listMonthlySummaries } from "../../../services/monthlyService";
 import { formatMonthYear, hasDonationStartConflict } from "../../../utils/date";
 import { getContrastTextColor } from "../../../utils/demandColor";
-import { formatInteger } from "../../../utils/format";
+import { formatCurrency, formatInteger } from "../../../utils/format";
 import { buildSlug } from "../../../utils/slug";
 import { estimateTextWidth, wrapText } from "../pdf/simplePdf";
 import { mapDemandGroups } from "../utils/donationReportGroups";
@@ -419,40 +419,52 @@ function drawPeopleTable({
 export function drawDonationReport(doc, reportData) {
   const pageState = { y: 0 };
   const tableWidth = doc.width - PAGE_MARGIN * 2;
+  // A coluna de valor abatido fica ao lado da de doações de propósito: as duas
+  // descrevem a mesma linha em unidades diferentes (quantidade e dinheiro), e
+  // lê-las juntas é o que deixa o valor por nota evidente sem precisar dizê-lo.
+  const abatementColumn = (width) => ({
+    label: "Valor abatido",
+    width,
+    getValue: (row) => formatCurrency(row.abatementAmount ?? 0),
+    bold: true,
+  });
+
   const holdersColumns = [
     {
       label: "Doador titular",
-      width: tableWidth * 0.72,
+      width: tableWidth * 0.52,
       getValue: (row) => row.name,
       getSubValue: (row) => getAdjustmentNoteText(row),
       bold: true,
     },
     {
       label: "Doações",
-      width: tableWidth * 0.28,
+      width: tableWidth * 0.22,
       getValue: (row) => getDonationCountLabel(row, reportData),
       bold: true,
     },
+    abatementColumn(tableWidth * 0.26),
   ];
   const auxiliariesColumns = [
     {
       label: "Doador auxiliar",
-      width: tableWidth * 0.48,
+      width: tableWidth * 0.34,
       getValue: (row) => row.name,
       getSubValue: (row) => getAdjustmentNoteText(row),
       bold: true,
     },
     {
       label: "Auxilia",
-      width: tableWidth * 0.28,
+      width: tableWidth * 0.22,
       getValue: (row) => row.holderName || "Pessoa de referência",
     },
     {
       label: "Doações",
-      width: tableWidth * 0.24,
+      width: tableWidth * 0.18,
       getValue: (row) => getDonationCountLabel(row, reportData),
       bold: true,
     },
+    abatementColumn(tableWidth * 0.26),
   ];
 
   drawDocumentHeader(doc, reportData, pageState);

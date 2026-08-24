@@ -29,6 +29,12 @@ export async function listAbatementSheetRows({ referenceMonth } = {}) {
       cpf: formatCpf(row.cpf),
       cpfValue: row.cpf ?? "",
       donorName,
+      // O que sai nas colunas NOME e CPF da planilha: do titular quando a
+      // linha é de um auxiliar, da própria pessoa quando é de um titular.
+      // `donorName` acima segue sendo o dono do CPF que gerou as notas, e é
+      // ele que aparece na descrição.
+      sheetName: row.sheet_name ?? donorName,
+      sheetCpf: formatCpf(row.sheet_cpf ?? row.cpf),
       demand: row.demand ?? "",
       donorType: row.donor_type === "auxiliary" ? "auxiliary" : "holder",
       donorTypeLabel: row.donor_type === "auxiliary" ? "Auxiliar" : "Titular",

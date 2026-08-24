@@ -2185,6 +2185,18 @@ test("abatement sheet emits one row per donor CPF with the auxiliary-aware descr
       VALUES ('imp', DATE '2026-04-01', 'f.csv', 10, 'processed')
     `);
 
+    // As pessoas por trás dos doadores. `p-h1` é a titular do grupo A, e é a
+    // identidade dela que precisa aparecer nas colunas NOME e CPF da linha do
+    // auxiliar — sem estas linhas o LEFT JOIN não acharia nada e o teste
+    // passaria pelo caminho de fallback, sem exercitar o que interessa.
+    await conn.query(`
+      INSERT INTO people (id, name, cpf, is_active)
+      VALUES
+        ('p-h1', 'MARIA SILVA',    '11111111111', TRUE),
+        ('p-a1', 'JOAO AUXILIAR',  '22222222222', TRUE),
+        ('p-h2', 'CARLOS SOZINHO', '33333333333', TRUE)
+    `);
+
     // Group A: holder with one auxiliary -> BOTH rows carry the name.
     // Group B: solo holder -> short description, no name.
     await conn.query(`
@@ -2240,6 +2252,20 @@ test("abatement sheet emits one row per donor CPF with the auxiliary-aware descr
 
     assert.equal(String(byCpf.get("22222222222").demand), "CESTAS");
     assert.equal(String(byCpf.get("33333333333").demand), "REMEDIOS");
+
+    // NOME e CPF da planilha: o auxiliar leva a identidade do TITULAR, porque
+    // o abatimento é lançado na conta de quem responde pelo grupo. A linha
+    // continua sendo dele — a contagem acima é a dele, e a descrição abaixo
+    // traz o nome dele.
+    assert.equal(String(byCpf.get("22222222222").sheet_name), "MARIA SILVA");
+    assert.equal(String(byCpf.get("22222222222").sheet_cpf), "11111111111");
+
+    // Titular usa a própria identidade: o LEFT JOIN não casa e o coalesce
+    // devolve o que já estava na linha.
+    assert.equal(String(byCpf.get("11111111111").sheet_name), "MARIA SILVA");
+    assert.equal(String(byCpf.get("11111111111").sheet_cpf), "11111111111");
+    assert.equal(String(byCpf.get("33333333333").sheet_name), "CARLOS SOZINHO");
+    assert.equal(String(byCpf.get("33333333333").sheet_cpf), "33333333333");
 
     // Descriptions, built by the same helper the export uses.
     assert.equal(
@@ -3500,6 +3526,17 @@ test("platform credit splits the spreadsheet into matched and unidentified", asy
     assert.equal(planilha, 24);
     assert.equal(conciliado, 12);
     assert.equal(planilha - conciliado, 12);
+
+    // O denominador da média sobre TODAS as notas conta as 4 notas válidas —
+    // as 3 que casaram mais a órfã. A inválida fica fora, senão a média cairia
+    // por causa de uma linha que não representa doação nenhuma.
+    //
+    // Contar só as casadas daria 12/3 = R$ 4,00 e esconderia justamente o que
+    // esta média existe para mostrar: o crédito que a NFP concedeu por nota,
+    // independentemente de a conciliação já ter alcançado a nota ou não.
+    const notasDaPlanilha = Number(rows[0].credit_notes_count);
+    assert.equal(notasDaPlanilha, 4);
+    assert.equal(planilha / notasDaPlanilha, 6);
   } finally {
     await conn.close();
   }

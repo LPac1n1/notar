@@ -18,6 +18,10 @@ function addPersonToDemandGroup(group, summary) {
     donationStartDate: summary.donationStartDate ?? "",
     notesCount: 0,
     monthNotesCount: 0,
+    // Acompanha `notesCount` passo a passo: o valor abatido é a contagem de
+    // notas vezes o valor por nota do mês, então somar um sem somar o outro
+    // faria a coluna de dinheiro contradizer a de doações na mesma linha.
+    abatementAmount: 0,
     adjustmentNotesCount: 0,
     adjustmentDescription: "",
     adjustmentRangeStartMonth: "",
@@ -31,11 +35,13 @@ function addPersonToDemandGroup(group, summary) {
     if (summary.adjustmentSubsumesMonth) {
       currentPerson.notesCount = adjustmentNotes;
       currentPerson.monthNotesCount = 0;
+      currentPerson.abatementAmount = Number(summary.abatementAmount ?? 0);
       currentPerson.adjustmentNotesCount = adjustmentNotes;
       currentPerson.adjustmentSubsumesMonth = true;
     } else if (!currentPerson.adjustmentSubsumesMonth) {
       currentPerson.notesCount += Number(summary.notesCount ?? 0);
       currentPerson.monthNotesCount += Number(summary.monthNotesCount ?? 0);
+      currentPerson.abatementAmount += Number(summary.abatementAmount ?? 0);
       currentPerson.adjustmentNotesCount += adjustmentNotes;
     }
 
@@ -54,6 +60,7 @@ function addPersonToDemandGroup(group, summary) {
     const notesCount = Number(summary.notesCount ?? 0);
     currentPerson.notesCount += notesCount;
     currentPerson.monthNotesCount += notesCount;
+    currentPerson.abatementAmount += Number(summary.abatementAmount ?? 0);
   }
 
   target.set(summary.donorId, currentPerson);
