@@ -1,7 +1,5 @@
 import { nanoid } from "nanoid";
 import {
-  escapeSqlString,
-  execute,
   executePrepared,
   query,
   queryPrepared,
@@ -18,6 +16,7 @@ import { reconcileCredits } from "../reconciliation/creditReconciliationService"
 import {
   brOrUsDoubleSqlExpression,
   buildCsvSource,
+  buildRegisteredFileName,
   escapeIdentifier,
   numeroNotaSqlExpression,
 } from "../import/sqlExpressions";
@@ -156,7 +155,11 @@ async function populateCreditNotesFromCsv({
   const matchKeyExpr = `(${cnpjExpr}) || '|' || (${numeroExpr})`;
   const valorCentsExpr = `cast(round(coalesce(${valorExpr}, 0) * 100) AS BIGINT)`;
 
-  await execute(`
+  // As expressões interpoladas acima são SQL (nomes de coluna descobertos por
+  // DESCRIBE, já validados contra o cabeçalho do arquivo). O único VALOR aqui
+  // é o id da importação, e ele vai por parâmetro.
+  await executePrepared(
+    `
     INSERT INTO credit_notes (
       id,
       credit_import_id,
@@ -175,7 +178,7 @@ async function populateCreditNotesFromCsv({
     )
     SELECT
       CAST(uuid() AS VARCHAR),
-      '${escapeSqlString(creditImportId)}',
+      ?,
       ${cnpjExpr},
       ${textColumn(creditColumns.emitente)},
       ${numeroExpr},
@@ -192,7 +195,9 @@ async function populateCreditNotesFromCsv({
     WHERE
       length(${cnpjExpr}) >= 14
       OR ${numeroExpr} <> ''
-  `);
+  `,
+    [creditImportId],
+  );
 }
 
 async function aggregateCreditImportTotals(creditImportId) {
@@ -226,7 +231,7 @@ export async function prepareCreditImportPreview(file) {
     );
   }
 
-  const registeredFileName = `${nanoid()}-${file.name}`;
+  const registeredFileName = buildRegisteredFileName(nanoid());
   try {
     const sourceMetadata = await registerSpreadsheetPreviewFile(
       file,
@@ -314,12 +319,15 @@ export async function processCreditImport({
   });
   assertCreditColumnsPresent(creditColumns);
 
-  const existingImport = await query(`
+  const existingImport = await queryPrepared(
+    `
     SELECT id
     FROM credit_imports
-    WHERE reference_month = '${escapeSqlString(normalizedMonth)}'
+    WHERE reference_month = ?
     LIMIT 1
-  `);
+  `,
+    [normalizedMonth],
+  );
 
   if (existingImport.length > 0) {
     throw new Error(
@@ -371,15 +379,18 @@ export async function processCreditImport({
         });
         const totals = await aggregateCreditImportTotals(creditImportId);
 
-        await execute(`
+        await executePrepared(
+          `
           UPDATE credit_imports
           SET
-            total_rows = ${totals.totalRows},
-            valid_rows = ${totals.validRows},
+            total_rows = ?,
+            valid_rows = ?,
             status = 'processed',
             updated_at = CURRENT_TIMESTAMP
-          WHERE id = '${escapeSqlString(creditImportId)}'
-        `);
+          WHERE id = ?
+        `,
+          [totals.totalRows, totals.validRows, creditImportId],
+        );
 
         reportProgress({
           step: "reconciling-credits",
@@ -516,15 +527,21 @@ export async function deleteCreditImport(creditImportId) {
   // user's disk, so "undo delete" is naturally "re-import". A separate
   // confirmation modal carries the warning to the user up front.
   await runInTransaction(async () => {
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM credit_notes
-      WHERE credit_import_id = '${escapeSqlString(creditImportId)}'
-    `);
+      WHERE credit_import_id = ?
+    `,
+      [creditImportId],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM credit_imports
-      WHERE id = '${escapeSqlString(creditImportId)}'
-    `);
+      WHERE id = ?
+    `,
+      [creditImportId],
+    );
   });
 
   await createActionHistoryEntry({
@@ -599,7 +616,7 @@ export async function prepareReimportCreditPreview(creditImportId, file) {
     );
   }
 
-  const registeredFileName = `${nanoid()}-${file.name}`;
+  const registeredFileName = buildRegisteredFileName(nanoid());
   try {
     await registerSpreadsheetPreviewFile(file, registeredFileName);
 
@@ -735,10 +752,13 @@ export async function applyReimportCredit(previewData, { onProgress } = {}) {
           step: "inserting-notes",
           label: "Substituindo créditos anteriores...",
         });
-        await execute(`
+        await executePrepared(
+          `
           DELETE FROM credit_notes
-          WHERE credit_import_id = '${escapeSqlString(creditImportId)}'
-        `);
+          WHERE credit_import_id = ?
+        `,
+          [creditImportId],
+        );
 
         await populateCreditNotesFromCsv({
           creditImportId,

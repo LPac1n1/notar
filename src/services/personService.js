@@ -1,10 +1,8 @@
 import { nanoid } from "nanoid";
 import {
   buildTextSearchCondition,
-  escapeSqlString,
   executePrepared,
   normalizeCpf,
-  query,
   queryPrepared,
 } from "./db";
 import { getActiveProjectId } from "./activeProject.js";
@@ -394,7 +392,8 @@ export async function updatePerson({
 }
 
 export async function deletePerson(id) {
-  const rows = await query(`
+  const rows = await queryPrepared(
+    `
     SELECT
       id,
       name,
@@ -403,21 +402,26 @@ export async function deletePerson(id) {
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM people
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
       AND is_active = TRUE
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (rows.length === 0) {
     return;
   }
 
-  const linkedDonor = await query(`
+  const linkedDonor = await queryPrepared(
+    `
     SELECT id, is_active
     FROM donors
-    WHERE person_id = '${escapeSqlString(id)}'
+    WHERE person_id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (linkedDonor.length > 0) {
     throw new Error(
@@ -427,14 +431,17 @@ export async function deletePerson(id) {
     );
   }
 
-  const linkedAuxiliaries = await query(`
+  const linkedAuxiliaries = await queryPrepared(
+    `
     SELECT id
     FROM donors
-    WHERE holder_person_id = '${escapeSqlString(id)}'
+    WHERE holder_person_id = ?
       AND donor_type = 'auxiliary'
       AND is_active = TRUE
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (linkedAuxiliaries.length > 0) {
     throw new Error("Esta pessoa está vinculada a auxiliares e não pode ser removida agora.");

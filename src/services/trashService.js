@@ -1,32 +1,28 @@
 import { nanoid } from "nanoid";
 import {
-  escapeSqlString,
   execute,
   executePrepared,
   normalizeCpf,
   query,
+  queryPrepared,
   runInTransaction,
 } from "./db";
 import { createActionHistoryEntry } from "./actionHistoryService";
 import { reconcileCredits } from "./reconciliation/creditReconciliationService";
 import { reconcileImportsForCpfs } from "./importService";
 
-function serializeSqlValue(value) {
-  if (value === null || value === undefined) {
-    return "NULL";
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "TRUE" : "FALSE";
-  }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : "NULL";
-  }
-
-  return `'${escapeSqlString(String(value))}'`;
-}
-
+/**
+ * Reinsere as linhas guardadas no payload da lixeira.
+ *
+ * Os VALORES vão por parâmetro. Eles vêm de um JSON gravado pelo app, mas
+ * esse JSON também chega de arquivo de backup importado pelo usuário — ou
+ * seja, é conteúdo que pode ter qualquer coisa dentro. Parametrizar tira
+ * essa entrada do caminho de montagem do SQL.
+ *
+ * Os NOMES DE COLUNA continuam interpolados porque o DuckDB não aceita `?`
+ * em posição de identificador. A proteção aqui é outra: uma coluna que não
+ * exista na tabela faz o INSERT falhar, e o restore inteiro é revertido.
+ */
 async function insertRows(tableName, rows = []) {
   for (const row of rows) {
     const columns = Object.keys(row);
@@ -35,12 +31,19 @@ async function insertRows(tableName, rows = []) {
       continue;
     }
 
-    const values = columns.map((column) => serializeSqlValue(row[column]));
+    const placeholders = columns.map(() => "?").join(", ");
+    const values = columns.map((column) => {
+      const value = row[column];
+      return value === undefined ? null : value;
+    });
 
-    await execute(`
+    await executePrepared(
+      `
       INSERT INTO ${tableName} (${columns.join(", ")})
-      VALUES (${values.join(", ")})
-    `);
+      VALUES (${placeholders})
+    `,
+      values,
+    );
   }
 }
 
@@ -157,17 +160,23 @@ export async function countTrashItems() {
 }
 
 export async function deleteTrashItemPermanently(id) {
-  const rows = await query(`
+  const rows = await queryPrepared(
+    `
     SELECT id, entity_type, entity_id, label
     FROM trash_items
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
-  await execute(`
+  await executePrepared(
+    `
     DELETE FROM trash_items
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+    WHERE id = ?
+  `,
+    [id],
+  );
 
   if (rows[0]) {
     await createActionHistoryEntry({
@@ -211,12 +220,15 @@ async function restoreProject(payload) {
   const projectRow = payload.projects?.[0];
 
   if (projectRow?.slug) {
-    const existing = await query(`
+    const existing = await queryPrepared(
+      `
       SELECT id
       FROM projects
-      WHERE slug = '${escapeSqlString(projectRow.slug)}'
+      WHERE slug = ?
       LIMIT 1
-    `);
+    `,
+      [projectRow.slug],
+    );
 
     if (existing.length > 0) {
       throw new Error(
@@ -235,12 +247,15 @@ async function restoreDemand(payload) {
   const demandRow = payload.demands?.[0];
 
   if (demandRow?.name) {
-    const existingDemand = await query(`
+    const existingDemand = await queryPrepared(
+      `
       SELECT id
       FROM demands
-      WHERE lower(trim(name)) = lower(trim('${escapeSqlString(demandRow.name)}'))
+      WHERE lower(trim(name)) = lower(trim(?))
       LIMIT 1
-    `);
+    `,
+      [demandRow.name],
+    );
 
     if (existingDemand.length > 0) {
       throw new Error(
@@ -270,12 +285,15 @@ async function restorePerson(payload) {
     return;
   }
 
-  const existingPerson = await query(`
+  const existingPerson = await queryPrepared(
+    `
     SELECT id
     FROM people
-    WHERE cpf = '${escapeSqlString(normalizeCpf(personRow.cpf))}'
+    WHERE cpf = ?
     LIMIT 1
-  `);
+  `,
+    [normalizeCpf(personRow.cpf)],
+  );
 
   if (existingPerson.length > 0) {
     throw new Error(
@@ -293,13 +311,19 @@ async function restoreDonor(payload) {
   const cpfs = donorCpfLinks.map((link) => normalizeCpf(link.cpf));
 
   if (cpfs.length > 0) {
-    const cpfList = cpfs.map((cpf) => `'${escapeSqlString(cpf)}'`).join(", ");
-    const existingLinks = await query(`
+    // Um `?` por CPF: a lista muda de tamanho a cada restauração, então o
+    // SQL é montado com a quantidade certa de marcadores e os valores vão
+    // todos por parâmetro.
+    const placeholders = cpfs.map(() => "?").join(", ");
+    const existingLinks = await queryPrepared(
+      `
       SELECT cpf
       FROM donor_cpf_links
-      WHERE cpf IN (${cpfList})
+      WHERE cpf IN (${placeholders})
       LIMIT 1
-    `);
+    `,
+      cpfs,
+    );
 
     if (existingLinks.length > 0) {
       throw new Error(
@@ -313,12 +337,15 @@ async function restoreDonor(payload) {
 
   for (const donor of donors) {
     if (!donor.person_id) {
-      const existingPerson = await query(`
+      const existingPerson = await queryPrepared(
+        `
         SELECT id
         FROM people
-        WHERE cpf = '${escapeSqlString(normalizeCpf(donor.cpf))}'
+        WHERE cpf = ?
         LIMIT 1
-      `);
+      `,
+        [normalizeCpf(donor.cpf)],
+      );
 
       if (existingPerson.length > 0) {
         donor.person_id = existingPerson[0].id;
@@ -347,24 +374,30 @@ async function restoreDonor(payload) {
       if (payloadHolderDonor?.person_id) {
         donor.holder_person_id = payloadHolderDonor.person_id;
       } else {
-        const existingHolderDonorRows = await query(`
+        const existingHolderDonorRows = await queryPrepared(
+          `
           SELECT person_id, cpf
           FROM donors
-          WHERE id = '${escapeSqlString(donor.holder_donor_id)}'
+          WHERE id = ?
           LIMIT 1
-        `);
+        `,
+          [donor.holder_donor_id],
+        );
 
         const existingHolderDonor = existingHolderDonorRows[0];
 
         if (existingHolderDonor?.person_id) {
           donor.holder_person_id = existingHolderDonor.person_id;
         } else if (existingHolderDonor?.cpf) {
-          const existingHolderPerson = await query(`
+          const existingHolderPerson = await queryPrepared(
+            `
             SELECT id
             FROM people
-            WHERE cpf = '${escapeSqlString(normalizeCpf(existingHolderDonor.cpf))}'
+            WHERE cpf = ?
             LIMIT 1
-          `);
+          `,
+            [normalizeCpf(existingHolderDonor.cpf)],
+          );
 
           if (existingHolderPerson.length > 0) {
             donor.holder_person_id = existingHolderPerson[0].id;
@@ -375,12 +408,15 @@ async function restoreDonor(payload) {
   }
 
   for (const person of people) {
-    const existingPersonRows = await query(`
+    const existingPersonRows = await queryPrepared(
+      `
       SELECT id
       FROM people
-      WHERE id = '${escapeSqlString(person.id)}'
+      WHERE id = ?
       LIMIT 1
-    `);
+    `,
+      [person.id],
+    );
 
     if (existingPersonRows.length === 0) {
       await insertRows("people", [person]);
@@ -397,25 +433,31 @@ async function restoreDonor(payload) {
   );
 
   for (const donor of donors.filter((item) => item.donor_type === "holder")) {
-    await execute(`
+    await executePrepared(
+      `
       UPDATE donors
       SET
-        holder_donor_id = '${escapeSqlString(donor.id)}',
+        holder_donor_id = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE holder_person_id = '${escapeSqlString(donor.holder_person_id || donor.person_id)}'
+      WHERE holder_person_id = ?
         AND donor_type = 'auxiliary'
-    `);
+    `,
+      [donor.id, donor.holder_person_id || donor.person_id],
+    );
   }
 
   for (const auxiliaryId of payload.auxiliaryIdsToRelink ?? []) {
-    await execute(`
+    await executePrepared(
+      `
       UPDATE donors
       SET
-        holder_donor_id = '${escapeSqlString(payload.entityId)}',
+        holder_donor_id = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = '${escapeSqlString(auxiliaryId)}'
+      WHERE id = ?
         AND donor_type = 'auxiliary'
-    `);
+    `,
+      [payload.entityId, auxiliaryId],
+    );
   }
 
   await reconcileImportsForCpfs(cpfs);
@@ -425,12 +467,15 @@ async function restoreImport(payload) {
   const importRow = payload.imports?.[0];
 
   if (importRow?.reference_month) {
-    const existingImport = await query(`
+    const existingImport = await queryPrepared(
+      `
       SELECT id
       FROM imports
-      WHERE reference_month = '${escapeSqlString(importRow.reference_month)}'
+      WHERE reference_month = ?
       LIMIT 1
-    `);
+    `,
+      [importRow.reference_month],
+    );
 
     if (existingImport.length > 0) {
       throw new Error(
@@ -454,12 +499,15 @@ async function restoreCreditImport(payload) {
 }
 
 export async function restoreTrashItem(id) {
-  const rows = await query(`
+  const rows = await queryPrepared(
+    `
     SELECT id, entity_type, entity_id, label, payload_json
     FROM trash_items
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (rows.length === 0) {
     throw new Error("Item da lixeira não encontrado.");
@@ -501,10 +549,13 @@ export async function restoreTrashItem(id) {
         await reconcileCredits({ emitChange: false });
       }
 
-      await execute(`
+      await executePrepared(
+        `
         DELETE FROM trash_items
-        WHERE id = '${escapeSqlString(id)}'
-      `);
+        WHERE id = ?
+      `,
+        [id],
+      );
 
       await createActionHistoryEntry({
         actionType: "restore",

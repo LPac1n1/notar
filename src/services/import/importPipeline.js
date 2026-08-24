@@ -1,7 +1,5 @@
 import { nanoid } from "nanoid";
 import {
-  escapeSqlString,
-  execute,
   executePrepared,
   normalizeCpf,
   query,
@@ -18,6 +16,7 @@ import { backfillDonationStartDates } from "../donor/donationStart";
 import {
   brOrUsDoubleSqlExpression,
   buildCsvSource,
+  buildRegisteredFileName,
   buildInvalidStatusExpression,
   escapeIdentifier,
   normalizeCpfSqlExpression,
@@ -99,7 +98,11 @@ async function populateDonationNotesFromCsv({
   // check used for "matched" vs "divergent" classification.
   const valorCentsExpr = `cast(round(coalesce(${valorExpr}, 0) * 100) AS BIGINT)`;
 
-  await execute(`
+  // As expressões acima são SQL (colunas descobertas por DESCRIBE e já
+  // validadas contra o cabeçalho do arquivo). Os dois VALORES — id da
+  // importação e mês — vão por parâmetro.
+  await executePrepared(
+    `
     INSERT INTO donation_notes (
       id,
       import_id,
@@ -119,9 +122,9 @@ async function populateDonationNotesFromCsv({
     )
     SELECT
       CAST(uuid() AS VARCHAR),
-      '${escapeSqlString(importId)}',
+      ?,
       ${normalizedCpfExpression},
-      '${escapeSqlString(normalizedMonth)}',
+      ?,
       ${numeroExpr},
       ${valorExpr},
       ${dateColumn(donationColumns.dataNota)},
@@ -135,7 +138,9 @@ async function populateDonationNotesFromCsv({
       CURRENT_TIMESTAMP
     FROM ${buildCsvSource(registeredFileName)}
     WHERE length(${normalizedCpfExpression}) = 11
-  `);
+  `,
+    [importId, normalizedMonth],
+  );
 
   // CNPJ Entidade Social is constant per planilha — pick the first non-empty
   // value (≥14 digits after stripping separators) and persist it on the
@@ -241,7 +246,7 @@ export async function prepareImportPreview(file) {
     );
   }
 
-  const registeredFileName = `${nanoid()}-${file.name}`;
+  const registeredFileName = buildRegisteredFileName(nanoid());
   try {
     const sourceMetadata = await registerSpreadsheetPreviewFile(
       file,
@@ -305,12 +310,15 @@ export async function createImportRecord({
     throw new Error("Informe um valor por nota maior que zero.");
   }
 
-  const existingImport = await query(`
+  const existingImport = await queryPrepared(
+    `
     SELECT id
     FROM imports
-    WHERE reference_month = '${escapeSqlString(normalizedMonth)}'
+    WHERE reference_month = ?
     LIMIT 1
-  `);
+  `,
+    [normalizedMonth],
+  );
 
   if (existingImport.length > 0) {
     throw new Error(
@@ -377,10 +385,13 @@ export async function saveImportCpfSummary({
 
   await runInTransaction(
     async () => {
-      await execute(`
+      await executePrepared(
+        `
         DELETE FROM import_cpf_summary
-        WHERE import_id = '${escapeSqlString(importId)}'
-      `);
+        WHERE import_id = ?
+      `,
+        [importId],
+      );
 
       // Chunked multi-row INSERT — single-row INSERT in a loop costs one
       // SQL parse + plan + execute roundtrip per CPF, which on a 10k+
@@ -391,19 +402,10 @@ export async function saveImportCpfSummary({
       // DuckDB's parsed-SQL size limit.
       if (validEntries.length > 0) {
         const BULK_INSERT_CHUNK_SIZE = 200;
-        const importIdLiteral = `'${escapeSqlString(importId)}'`;
-        const monthLiteral = `'${escapeSqlString(normalizedMonth)}'`;
-        const buildValuesClause = (entry) =>
-          `(
-            '${escapeSqlString(nanoid())}',
-            ${importIdLiteral},
-            ${monthLiteral},
-            '${escapeSqlString(entry.normalizedCpf)}',
-            ${entry.notesCount},
-            ${entry.invalidNotesCount},
-            FALSE,
-            CURRENT_TIMESTAMP
-          )`;
+        // Uma tupla de marcadores por linha do bloco, e todos os valores num
+        // array plano. O SQL passa a variar só na QUANTIDADE de tuplas, nunca
+        // no conteúdo — mesmo padrão já usado no bulk insert de reconcileImport.
+        const ROW_PLACEHOLDERS = "(?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP)";
 
         for (
           let chunkStart = 0;
@@ -414,9 +416,18 @@ export async function saveImportCpfSummary({
             chunkStart,
             chunkStart + BULK_INSERT_CHUNK_SIZE,
           );
-          const valuesSql = chunk.map(buildValuesClause).join(",\n");
+          const valuesSql = chunk.map(() => ROW_PLACEHOLDERS).join(",\n");
+          const params = chunk.flatMap((entry) => [
+            nanoid(),
+            importId,
+            normalizedMonth,
+            entry.normalizedCpf,
+            entry.notesCount,
+            entry.invalidNotesCount,
+          ]);
 
-          await execute(`
+          await executePrepared(
+            `
             INSERT INTO import_cpf_summary (
               id,
               import_id,
@@ -428,18 +439,23 @@ export async function saveImportCpfSummary({
               updated_at
             )
             VALUES ${valuesSql}
-          `);
+          `,
+            params,
+          );
         }
       }
 
-      await execute(`
+      await executePrepared(
+        `
         UPDATE imports
         SET
-          reference_month = '${escapeSqlString(normalizedMonth)}',
-          total_rows = ${totalRows},
+          reference_month = ?,
+          total_rows = ?,
           updated_at = CURRENT_TIMESTAMP
-        WHERE id = '${escapeSqlString(importId)}'
-      `);
+        WHERE id = ?
+      `,
+        [normalizedMonth, totalRows, importId],
+      );
     },
     { emitChange: false },
   );
@@ -678,9 +694,11 @@ export async function deleteImport(importId) {
       CAST(imported_at AS VARCHAR) AS imported_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM imports
-    WHERE id = '${escapeSqlString(importId)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [importId],
+  );
 
   if (importRows.length === 0) {
     return;
@@ -699,8 +717,10 @@ export async function deleteImport(importId) {
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM import_cpf_summary
-    WHERE import_id = '${escapeSqlString(importId)}'
-  `);
+    WHERE import_id = ?
+  `,
+    [importId],
+  );
 
   const monthlySummaryRows = await query(`
     SELECT
@@ -719,8 +739,10 @@ export async function deleteImport(importId) {
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM monthly_donor_summary
-    WHERE import_id = '${escapeSqlString(importId)}'
-  `);
+    WHERE import_id = ?
+  `,
+    [importId],
+  );
 
   const trashItemId = nanoid();
 
@@ -756,25 +778,37 @@ export async function deleteImport(importId) {
       ],
     );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM monthly_donor_summary
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
+      WHERE import_id = ?
+    `,
+      [importId],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM import_cpf_summary
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
+      WHERE import_id = ?
+    `,
+      [importId],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM donation_notes
-      WHERE import_id = '${escapeSqlString(importId)}'
-    `);
+      WHERE import_id = ?
+    `,
+      [importId],
+    );
 
-    await execute(`
+    await executePrepared(
+      `
       DELETE FROM imports
-      WHERE id = '${escapeSqlString(importId)}'
-    `);
+      WHERE id = ?
+    `,
+      [importId],
+    );
   });
 
   await createActionHistoryEntry({
@@ -907,7 +941,7 @@ export async function prepareReimportPreview(importId, file) {
     );
   }
 
-  const registeredFileName = `${nanoid()}-${file.name}`;
+  const registeredFileName = buildRegisteredFileName(nanoid());
   try {
     await registerSpreadsheetPreviewFile(file, registeredFileName);
 
@@ -1093,10 +1127,13 @@ export async function applyReimport(previewData, { onProgress } = {}) {
         // the chained `reconcileImport` call inside it preserves
         // abatement_status from the existing monthly_donor_summary rows
         // before deleting them.
-        await execute(`
+        await executePrepared(
+          `
           DELETE FROM donation_notes
-          WHERE import_id = '${escapeSqlString(importId)}'
-        `);
+          WHERE import_id = ?
+        `,
+          [importId],
+        );
 
         let cpfCounts;
 

@@ -1,31 +1,3 @@
-export function escapeSqlString(value) {
-  return String(value ?? "").replaceAll("'", "''");
-}
-
-export function serializeSqlValue(value) {
-  if (value === null || value === undefined) {
-    return "NULL";
-  }
-
-  if (value instanceof Date) {
-    return `'${escapeSqlString(value.toISOString())}'`;
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "TRUE" : "FALSE";
-  }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : "NULL";
-  }
-
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-
-  return `'${escapeSqlString(String(value))}'`;
-}
-
 /**
  * Builds the WHERE fragment for the free-text search box shared by the list
  * pages ("digite qualquer coisa e filtre por isso"), as opposed to the

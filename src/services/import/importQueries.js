@@ -1,7 +1,5 @@
 import {
-  escapeSqlString,
   normalizeCpf,
-  query,
   queryPrepared,
   startOfMonth,
 } from "../db";
@@ -22,33 +20,36 @@ export async function listImports(filters = {}) {
     status = "",
   } = filters;
   const conditions = [];
+  const params = [];
 
   if (importId.trim()) {
-    conditions.push(`id = '${escapeSqlString(importId.trim())}'`);
+    conditions.push("id = ?");
+    params.push(importId.trim());
   }
 
   if (fileName.trim()) {
-    conditions.push(
-      `lower(file_name) LIKE lower('%${escapeSqlString(fileName.trim())}%')`,
-    );
+    // O nome do arquivo vem de quem enviou a planilha, então é o único
+    // filtro daqui com texto livre de verdade. Os curingas ficam FORA do
+    // parâmetro: dentro dele o `%` seria comparado como caractere literal.
+    conditions.push("lower(file_name) LIKE lower('%' || ? || '%')");
+    params.push(fileName.trim());
   }
 
   if (referenceMonth) {
-    conditions.push(
-      `reference_month = '${escapeSqlString(startOfMonth(referenceMonth))}'`,
-    );
+    conditions.push("reference_month = CAST(? AS DATE)");
+    params.push(startOfMonth(referenceMonth));
   }
 
   if (status.trim()) {
-    conditions.push(
-      `lower(status) = lower('${escapeSqlString(status.trim())}')`,
-    );
+    conditions.push("lower(status) = lower(?)");
+    params.push(status.trim());
   }
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const rows = await query(`
+  const rows = await queryPrepared(
+    `
     SELECT
       id,
       strftime(reference_month, '%Y-%m-01') AS reference_month,
@@ -63,7 +64,9 @@ export async function listImports(filters = {}) {
     FROM imports
     ${whereClause}
     ORDER BY reference_month DESC, imported_at DESC
-  `);
+  `,
+    params,
+  );
 
   return rows.map((row) => ({
     id: row.id,

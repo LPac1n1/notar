@@ -10,6 +10,7 @@ import {
 } from "./snapshotSources.js";
 import {
   execute,
+  executePrepared,
   flushAfterTransaction,
   getConnection,
   initDB,
@@ -18,7 +19,6 @@ import {
 } from "./connection.js";
 import { notifyDatabaseChanged } from "./events.js";
 import { query } from "./connection.js";
-import { serializeSqlValue } from "./sql.js";
 
 export const RESTORE_TABLE_COLUMNS = {
   projects: [
@@ -397,19 +397,28 @@ export async function restoreDatabaseSnapshot(
             chunkStart,
             chunkStart + BULK_INSERT_CHUNK_SIZE,
           );
-          const valuesSql = chunk
-            .map((row) => {
-              const values = sampleColumns.map((columnName) =>
-                serializeSqlValue(row[columnName]),
-              );
-              return `(${values.join(", ")})`;
-            })
-            .join(",\n");
+          // Os valores vêm do arquivo de backup, que é conteúdo fornecido
+          // pelo usuário — é a entrada menos confiável que chega ao banco.
+          // Por isso vão todos por parâmetro, e o SQL varia só na quantidade
+          // de tuplas. Os nomes de coluna continuam interpolados porque o
+          // DuckDB não aceita `?` em posição de identificador, mas eles já
+          // passaram pela allowlist de `allowedColumns` logo acima.
+          const rowPlaceholders = `(${sampleColumns.map(() => "?").join(", ")})`;
+          const valuesSql = chunk.map(() => rowPlaceholders).join(",\n");
+          const params = chunk.flatMap((row) =>
+            sampleColumns.map((columnName) => {
+              const value = row[columnName];
+              return value === undefined ? null : value;
+            }),
+          );
 
-          await execute(`
+          await executePrepared(
+            `
             INSERT INTO ${tableName} (${sampleColumns.join(", ")})
             VALUES ${valuesSql}
-          `);
+          `,
+            params,
+          );
           restoredRows += chunk.length;
           notifyProgress(tableName);
         }

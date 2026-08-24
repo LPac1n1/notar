@@ -1,10 +1,7 @@
 import { nanoid } from "nanoid";
 import {
   buildTextSearchCondition,
-  escapeSqlString,
-  execute,
   executePrepared,
-  query,
   queryPrepared,
 } from "./db";
 import { getActiveProjectId } from "./activeProject.js";
@@ -246,7 +243,8 @@ export async function updateDemand({
 }
 
 export async function deleteDemand(id) {
-  const demandRows = await query(`
+  const demandRows = await queryPrepared(
+    `
     SELECT
       id,
       name,
@@ -255,25 +253,30 @@ export async function deleteDemand(id) {
       CAST(created_at AS VARCHAR) AS created_at,
       CAST(updated_at AS VARCHAR) AS updated_at
     FROM demands
-    WHERE id = '${escapeSqlString(id)}'
+    WHERE id = ?
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (demandRows.length === 0) {
     return;
   }
 
-  const linkedDonors = await query(`
+  const linkedDonors = await queryPrepared(
+    `
     SELECT id
     FROM donors
     WHERE lower(trim(demand)) = lower(trim((
       SELECT name
       FROM demands
-      WHERE id = '${escapeSqlString(id)}'
+      WHERE id = ?
       LIMIT 1
     )))
     LIMIT 1
-  `);
+  `,
+    [id],
+  );
 
   if (linkedDonors.length > 0) {
     throw new Error("Não é possível remover uma demanda vinculada a doadores.");
@@ -288,11 +291,12 @@ export async function deleteDemand(id) {
     },
   });
 
-  await execute(
+  await executePrepared(
     `
       DELETE FROM demands
-      WHERE id = '${escapeSqlString(id)}'
+      WHERE id = ?
     `,
+    [id],
     { source: "demands", domains: ["demands", "trash"] },
   );
 

@@ -24,7 +24,6 @@ export {
 
 export {
   buildTextSearchCondition,
-  escapeSqlString,
   normalizeCpfSqlExpression,
 } from "./db/sql.js";
 

@@ -1,8 +1,6 @@
 import {
   buildTextSearchCondition,
-  escapeSqlString,
   normalizeCpf,
-  query,
   queryPrepared,
 } from "../db";
 import { listAdjustmentsForDonor } from "../abatementAdjustmentService";
@@ -251,7 +249,8 @@ export async function listHolderDonors() {
 }
 
 export async function listDonorCpfLinks(donorId) {
-  const rows = await query(`
+  const rows = await queryPrepared(
+    `
     SELECT
       id,
       donor_id,
@@ -261,9 +260,11 @@ export async function listDonorCpfLinks(donorId) {
       link_type,
       is_active
     FROM donor_cpf_links
-    WHERE donor_id = '${escapeSqlString(donorId)}'
+    WHERE donor_id = ?
     ORDER BY name ASC, cpf ASC
-  `);
+  `,
+    [donorId],
+  );
 
   return rows.map((row) => ({
     id: row.id,

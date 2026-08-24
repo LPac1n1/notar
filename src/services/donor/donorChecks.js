@@ -1,6 +1,5 @@
 import {
-  escapeSqlString,
-  execute,
+  executePrepared,
   normalizeCpf,
   queryPrepared,
 } from "../db";
@@ -333,7 +332,8 @@ export async function syncAuxiliaryHolderDonorIds(personIds = []) {
   );
 
   for (const personId of normalizedPersonIds) {
-    await execute(`
+    await executePrepared(
+      `
       UPDATE donors
       SET
         holder_donor_id = (
@@ -347,8 +347,10 @@ export async function syncAuxiliaryHolderDonorIds(personIds = []) {
         ),
         updated_at = CURRENT_TIMESTAMP
       WHERE donor_type = 'auxiliary'
-        AND holder_person_id = '${escapeSqlString(personId)}'
-    `);
+        AND holder_person_id = ?
+    `,
+      [personId],
+    );
   }
 }
 

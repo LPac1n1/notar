@@ -1,4 +1,4 @@
-import { escapeSqlString, normalizeCpfSqlExpression } from "../db";
+import { normalizeCpfSqlExpression } from "../db";
 import { INVALID_ORDER_STATUS_PATTERNS } from "../../utils/import";
 
 export { normalizeCpfSqlExpression };
@@ -17,8 +17,27 @@ export function escapeIdentifier(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+/**
+ * Nome do arquivo virtual registrado no DuckDB para uma importação.
+ *
+ * Só dígitos e letras do nanoid, mais a extensão. O nome que o usuário deu
+ * ao arquivo NÃO entra aqui: ele ia parar dentro de `read_csv_auto('...')`,
+ * e o DuckDB não aceita parâmetro em argumento de função de tabela — ou
+ * seja, seria a única entrada do usuário que ainda precisaria ser escapada
+ * à mão para chegar ao SQL.
+ *
+ * Nada se perde: este nome é um identificador interno, nunca é exibido. O
+ * nome real do arquivo é guardado em `imports.file_name`, que já vai por
+ * parâmetro.
+ */
+export function buildRegisteredFileName(id) {
+  return `${String(id).replace(/[^A-Za-z0-9_-]/g, "")}.csv`;
+}
+
 export function buildCsvSource(fileName) {
-  return `read_csv_auto('${escapeSqlString(fileName)}', all_varchar = true)`;
+  // O nome vem sempre de `buildRegisteredFileName`, que só produz
+  // [A-Za-z0-9_-] seguido de `.csv` — não há aspa para escapar.
+  return `read_csv_auto('${fileName}', all_varchar = true)`;
 }
 
 /**
@@ -78,8 +97,17 @@ export function buildInvalidStatusExpression(orderStatusColumn) {
     return "FALSE";
   }
 
-  return `(${INVALID_ORDER_STATUS_PATTERNS.map(
-    (pattern) =>
-      `lower(coalesce(CAST(${escapeIdentifier(orderStatusColumn)} AS VARCHAR), '')) LIKE '%${escapeSqlString(pattern)}%'`,
-  ).join(" OR ")})`;
+  // `INVALID_ORDER_STATUS_PATTERNS` é uma lista fixa no código, nunca entrada
+  // do usuário. A checagem abaixo existe para que continue assim: se alguém
+  // acrescentar um padrão com aspa, a importação falha alto aqui em vez de
+  // produzir SQL malformado silenciosamente.
+  return `(${INVALID_ORDER_STATUS_PATTERNS.map((pattern) => {
+    if (/['\\]/.test(pattern)) {
+      throw new Error(
+        `Padrão de status inválido não pode conter aspa ou barra: ${pattern}`,
+      );
+    }
+
+    return `lower(coalesce(CAST(${escapeIdentifier(orderStatusColumn)} AS VARCHAR), '')) LIKE '%${pattern}%'`;
+  }).join(" OR ")})`;
 }

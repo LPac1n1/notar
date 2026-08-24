@@ -14,7 +14,6 @@ import {
   BACKFILL_PROJECT_ORDER_SQL,
   ENSURE_DEFAULT_PROJECT_SQL,
 } from "../project/projectAssignmentSql.js";
-import { escapeSqlString } from "./sql.js";
 
 export const MIGRATIONS = [
   {
@@ -1146,10 +1145,19 @@ export async function runMigrations(conn) {
     }
 
     await migration.up(conn);
-    await conn.query(`
-      INSERT INTO schema_version (id, name, applied_at)
-      VALUES (${migration.id}, '${escapeSqlString(migration.name)}', CURRENT_TIMESTAMP)
-    `);
+    // `migration.name` é um literal declarado em MIGRATIONS, logo acima neste
+    // mesmo arquivo — nunca entrada do usuário. Ainda assim vai por parâmetro,
+    // para que não exista NENHUM caminho no projeto que monte SQL concatenando
+    // texto: a regra vira estrutural em vez de depender de quem escreve.
+    const stmt = await conn.prepare(
+      `INSERT INTO schema_version (id, name, applied_at)
+       VALUES (?, ?, CURRENT_TIMESTAMP)`,
+    );
+    try {
+      await stmt.query(migration.id, migration.name);
+    } finally {
+      await stmt.close();
+    }
     appliedIds.push(migration.id);
   }
 

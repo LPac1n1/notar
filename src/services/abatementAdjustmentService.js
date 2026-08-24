@@ -1,7 +1,5 @@
 import { nanoid } from "nanoid";
 import {
-  escapeSqlString,
-  execute,
   executePrepared,
   queryPrepared,
   runInTransaction,
@@ -396,10 +394,13 @@ export async function deleteAbatementAdjustment(id, { donorName = "" } = {}) {
 
   const adjustment = existing[0];
 
-  await execute(`
+  await executePrepared(
+    `
     DELETE FROM abatement_adjustments
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+    WHERE id = ?
+  `,
+    [id],
+  );
 
   await createActionHistoryEntry({
     actionType: "delete",
@@ -426,16 +427,23 @@ export async function updateAbatementAdjustmentStatus({
 
   const normalizedStatus = status === "applied" ? "applied" : "pending";
 
-  await execute(`
+  // `abatement_marked_at` continua interpolado porque os dois lados são
+  // palavras-chave de SQL, não valores — `?` não substitui CURRENT_TIMESTAMP.
+  // E `normalizedStatus` já é uma das duas constantes acima, nunca o que
+  // chegou do chamador.
+  await executePrepared(
+    `
     UPDATE abatement_adjustments
     SET
-      abatement_status = '${escapeSqlString(normalizedStatus)}',
+      abatement_status = ?,
       abatement_marked_at = ${
         normalizedStatus === "applied" ? "CURRENT_TIMESTAMP" : "NULL"
       },
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = '${escapeSqlString(id)}'
-  `);
+    WHERE id = ?
+  `,
+    [normalizedStatus, id],
+  );
 
   await createActionHistoryEntry({
     actionType: "update",
