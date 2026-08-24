@@ -13,14 +13,12 @@ import {
   ASSIGNMENT_OPEN_END,
   ASSIGNMENT_OPEN_START,
   COUNT_DONORS_WITHOUT_PROJECT_SQL,
-  CREDIT_ATTRIBUTION_IDENTITY_SQL,
   DONORS_WITHOUT_PROJECT_SQL,
   CREDIT_BY_PROJECT_SQL,
   DEFAULT_PROJECT_COLOR,
   DEFAULT_PROJECT_ID,
   MODULE_DEPENDENCIES,
   NEW_PROJECT_MODULES,
-  OVERLAPPING_ASSIGNMENTS_SQL,
 } from "./project/projectAssignmentSql.js";
 
 /**
@@ -381,24 +379,6 @@ export async function listDonorAssignments(donorId) {
   return rows.map(mapAssignmentRow);
 }
 
-export async function findDonorProjectAtMonth(donorId, referenceMonth) {
-  const rows = await queryPrepared(
-    `
-    SELECT projects.id, projects.name, projects.slug, projects.modules,
-           projects.color, projects.is_active,
-           CAST(projects.created_at AS VARCHAR) AS created_at
-    FROM donor_project_assignments AS dpa
-    INNER JOIN projects ON projects.id = dpa.project_id
-    WHERE dpa.donor_id = ?
-      AND CAST(? AS DATE) BETWEEN dpa.valid_from AND dpa.valid_to
-    LIMIT 1
-  `,
-    [donorId, startOfMonth(referenceMonth)],
-  );
-
-  return rows.length ? mapProjectRow(rows[0]) : null;
-}
-
 /**
  * Primeiro vínculo de um doador — usado no cadastro.
  *
@@ -518,27 +498,6 @@ export async function listCreditByProject() {
     referenceMonth: row.reference_month,
     totalCredit: Number(row.total_credit ?? 0),
   }));
-}
-
-/**
- * Verificação do invariante central:
- *   Σ(por projeto) + Σ(não atribuído) = Σ(conciliado)
- *
- * `difference` diferente de zero significa vigência sobreposta — crédito
- * contado duas vezes. É a checagem mais barata que existe para o modo de
- * falha mais grave do modelo.
- */
-export async function checkCreditAttributionIdentity() {
-  const rows = await query(CREDIT_ATTRIBUTION_IDENTITY_SQL);
-  const row = rows[0] ?? {};
-
-  return {
-    attributed: Number(row.com_projeto ?? 0),
-    unattributed: Number(row.sem_projeto ?? 0),
-    totalReconciled: Number(row.total_conciliado ?? 0),
-    difference: Number(row.diferenca ?? 0),
-    isBalanced: Number(row.diferenca ?? 0) === 0,
-  };
 }
 
 /**
@@ -670,16 +629,6 @@ export async function listDonorsWithoutProject() {
     id: row.id,
     name: row.name,
     cpf: row.cpf,
-  }));
-}
-
-export async function listOverlappingAssignments() {
-  const rows = await query(OVERLAPPING_ASSIGNMENTS_SQL);
-
-  return rows.map((row) => ({
-    donorId: row.donor_id,
-    leftId: row.left_id,
-    rightId: row.right_id,
   }));
 }
 

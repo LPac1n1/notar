@@ -1,5 +1,4 @@
 import { listDonors } from "./donorService.js";
-import { listImportCpfSummary, listImports } from "./importService.js";
 import { listAbatementSheetRows } from "./monthly/abatementSheet.js";
 import { buildAbatementWorkbookBytes } from "./monthly/abatementSheetWorkbook.js";
 import { listMonthlySummaries } from "./monthlyService.js";
@@ -117,69 +116,6 @@ export async function exportMonthlySummariesCsv(filters = {}) {
   );
 
   return { rowCount: summaries.length };
-}
-
-export async function exportImportCpfSummaryCsv(filters = {}) {
-  const cpfSummary = await listImportCpfSummary(filters);
-  const rows = cpfSummary.map((item) => ({
-    cpf: item.cpf,
-    sourceName: item.sourceName || "",
-    donorName: item.donorName || "",
-    donorType: item.donorType === "auxiliary" ? "Auxiliar" : item.donorType === "holder" ? "Titular" : "",
-    holderName: item.holderName || "",
-    demand: item.demand || "",
-    notesCount: item.notesCount,
-    monthCount: item.monthCount,
-    registrationStatus: item.isRegisteredDonor ? "Vinculado" : "Não vinculado",
-    appearanceMonths: item.appearances
-      .map((appearance) => appearance.referenceMonth)
-      .join(", "),
-    appearanceFiles: item.appearances
-      .flatMap((appearance) => appearance.fileNames)
-      .join(", "),
-  }));
-
-  const csvContent = buildCsvContent(
-    [
-      { key: "cpf", label: "CPF" },
-      { key: "sourceName", label: "Doador do CPF" },
-      { key: "donorName", label: "Doador vinculado" },
-      { key: "donorType", label: "Tipo do doador" },
-      { key: "holderName", label: "Pessoa vinculada" },
-      { key: "demand", label: "Demanda" },
-      { key: "notesCount", label: "Total de notas" },
-      { key: "monthCount", label: "Quantidade de meses" },
-      { key: "registrationStatus", label: "Status de cadastro" },
-      { key: "appearanceMonths", label: "Meses encontrados" },
-      { key: "appearanceFiles", label: "Arquivos" },
-    ],
-    rows,
-  );
-
-  downloadCsv("notar-cpfs-encontrados.csv", csvContent);
-
-  return { rowCount: rows.length };
-}
-
-export async function exportImportsCsv(filters = {}) {
-  const imports = await listImports(filters);
-  const csvContent = buildCsvContent(
-    [
-      { key: "referenceMonth", label: "Mês de referência" },
-      { key: "fileName", label: "Arquivo" },
-      { key: "valuePerNote", label: "Valor por nota" },
-      { key: "totalRows", label: "Total de linhas" },
-      { key: "matchedRows", label: "Linhas compatíveis" },
-      { key: "matchedDonors", label: "Doadores que doaram encontrados" },
-      { key: "status", label: "Status" },
-      { key: "importedAt", label: "Importado em" },
-    ],
-    imports,
-  );
-
-  downloadCsv("notar-historico-importacoes.csv", csvContent);
-
-  return { rowCount: imports.length };
 }
 
 /**

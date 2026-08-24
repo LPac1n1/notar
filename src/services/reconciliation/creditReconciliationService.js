@@ -397,43 +397,6 @@ export async function getReconciliationOverview() {
 }
 
 /**
- * Per-donor matched totals — drives the donor profile credit panel and the
- * comparison "abatido (sistema) × crédito real (NFP)".
- *
- * Sums `credit_notes.credito` over all matched reconciliations where the
- * paired donation belongs to the donor (resolved via CPF → donor_cpf_links).
- */
-export async function getDonorCreditTotals(donorId) {
-  if (!donorId) {
-    return { totalCredit: 0, matchedNoteCount: 0 };
-  }
-
-  const rows = await queryPrepared(
-    `
-      SELECT
-        count(*) AS matched_count,
-        coalesce(sum(credit_notes.credito), 0) AS total_credit
-      FROM credit_reconciliation
-      INNER JOIN donation_notes
-        ON donation_notes.id = credit_reconciliation.donation_note_id
-      INNER JOIN donor_cpf_links
-        ON donor_cpf_links.cpf = donation_notes.cpf
-        AND donor_cpf_links.is_active = TRUE
-      INNER JOIN credit_notes
-        ON credit_notes.id = credit_reconciliation.credit_note_id
-      WHERE credit_reconciliation.match_status = 'matched'
-        AND donor_cpf_links.donor_id = ?
-    `,
-    [donorId],
-  );
-
-  return {
-    totalCredit: toNumber(rows[0]?.total_credit),
-    matchedNoteCount: toNumber(rows[0]?.matched_count),
-  };
-}
-
-/**
  * Full reconciliation summary for one donor — totals plus the comparison
  * status and counts of unmatched donations on the donor's side. Credit
  * orphans aren't included because credits carry no CPF, so they can't be
@@ -891,42 +854,6 @@ export async function getCreditImportMatchStats(creditImportId) {
 }
 
 /**
- * Lists credit orphans (credits with no matching donation) for the
- * diagnostic UI. Returns up to `limit` entries.
- */
-export async function listOrphanedCredits({ limit = 100 } = {}) {
-  const rows = await query(`
-    SELECT
-      credit_notes.id,
-      credit_notes.cnpj_estabelecimento,
-      credit_notes.emitente,
-      credit_notes.numero_nota,
-      strftime(credit_notes.data_emissao, '%Y-%m-%d') AS data_emissao,
-      credit_notes.credito,
-      strftime(credit_imports.reference_month, '%Y-%m-01') AS reference_month
-    FROM credit_reconciliation
-    INNER JOIN credit_notes
-      ON credit_notes.id = credit_reconciliation.credit_note_id
-    LEFT JOIN credit_imports
-      ON credit_imports.id = credit_notes.credit_import_id
-    WHERE credit_reconciliation.match_status = 'credit_only'
-    ORDER BY credit_notes.data_emissao DESC, credit_notes.numero_nota ASC
-    LIMIT ${Number(limit) || 100}
-  `);
-
-  return rows.map((row) => ({
-    id: row.id,
-    cnpjEstabelecimento: row.cnpj_estabelecimento,
-    emitente: row.emitente,
-    numeroNota: row.numero_nota,
-    dataEmissao: row.data_emissao,
-    credito: toNumber(row.credito),
-    referenceMonth: row.reference_month,
-  }));
-}
-
-
-/**
  * Per-donor reconciliation rollup for the Fase 5 CSV export. One row per
  * active donor with their total credit (matched + divergent kept on the
  * credit-real column, divergent breakouts as separate counters), total
@@ -1150,44 +1077,4 @@ export async function listReconciliationPairs({
       valorDifference: valorCredit - valorDonation,
     };
   });
-}
-
-/**
- * Lists donation orphans (donations with no matching credit) for the
- * diagnostic UI. Returns up to `limit` entries.
- */
-export async function listOrphanedDonations({ limit = 100 } = {}) {
-  const rows = await query(`
-    SELECT
-      donation_notes.id,
-      donation_notes.cpf,
-      donation_notes.cnpj_estabelecimento,
-      donation_notes.numero_nota,
-      strftime(donation_notes.data_nota, '%Y-%m-%d') AS data_nota,
-      strftime(donation_notes.reference_month, '%Y-%m-01') AS reference_month,
-      donors.name AS donor_name,
-      donors.id AS donor_id
-    FROM credit_reconciliation
-    INNER JOIN donation_notes
-      ON donation_notes.id = credit_reconciliation.donation_note_id
-    LEFT JOIN donor_cpf_links
-      ON donor_cpf_links.cpf = donation_notes.cpf
-      AND donor_cpf_links.is_active = TRUE
-    LEFT JOIN donors
-      ON donors.id = donor_cpf_links.donor_id
-    WHERE credit_reconciliation.match_status = 'donation_only'
-    ORDER BY donation_notes.data_nota DESC, donation_notes.numero_nota ASC
-    LIMIT ${Number(limit) || 100}
-  `);
-
-  return rows.map((row) => ({
-    id: row.id,
-    cpf: row.cpf,
-    cnpjEstabelecimento: row.cnpj_estabelecimento,
-    numeroNota: row.numero_nota,
-    dataNota: row.data_nota,
-    referenceMonth: row.reference_month,
-    donorId: row.donor_id ?? "",
-    donorName: row.donor_name ?? "",
-  }));
 }

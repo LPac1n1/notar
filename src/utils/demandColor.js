@@ -45,13 +45,3 @@ export function getContrastTextColor(hexColor) {
 
   return luminance > 0.62 ? "#12151C" : "#FFFFFF";
 }
-
-export function getDemandColorOption(color) {
-  const normalizedColor = normalizeDemandColor(color);
-  return (
-    DEMAND_COLOR_PALETTE.find((option) => option.value === normalizedColor) ?? {
-      value: normalizedColor,
-      label: "Personalizada",
-    }
-  );
-}

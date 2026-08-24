@@ -87,15 +87,3 @@ export async function listMonthlySummaries({
   return rows.slice(safeOffset, safeOffset + safeLimit);
 }
 
-/**
- * Returns the count of monthly summary rows matching the same filter shape
- * as `listMonthlySummaries`. Useful for driving server-side pagination
- * (combine with `listMonthlySummaries({ ...filters, limit, offset })`). The
- * count includes synthesized rows for active donors without any matching
- * `monthly_donor_summary` row, so it stays consistent with the client-side
- * count of `listMonthlySummaries`.
- */
-export async function countMonthlySummaries(filters = {}) {
-  const rows = await listMonthlySummaries({ ...filters, limit: undefined });
-  return rows.length;
-}

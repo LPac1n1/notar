@@ -148,8 +148,6 @@ export const DEFAULT_NOTE_SORT = "credito";
  * resto do sistema usa — mas elas ficam alcançáveis, já que existir no arquivo
  * e não ter virado doação é justamente o que alguém pode querer investigar.
  */
-export const NOTE_STATUS_OPTIONS = ["valid", "invalid", "all"];
-
 function statusCondition(status) {
   if (status === "invalid") return "note_base.is_valid = FALSE";
   if (status === "all") return "";

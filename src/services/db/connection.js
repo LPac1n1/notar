@@ -24,16 +24,8 @@ let initPromise = null;
 let transactionDepth = 0;
 let onAfterTransaction = async () => {};
 
-export function getDuckDb() {
-  return db;
-}
-
 export function getConnection() {
   return conn;
-}
-
-export function getTransactionDepth() {
-  return transactionDepth;
 }
 
 export function setOnAfterTransaction(handler) {
