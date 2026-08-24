@@ -52,7 +52,7 @@ Objetivo: trocar `escapeSqlString` por prepared statements onde houver entrada d
 - [x] **Auditoria final** — `escapeSqlString` zero em queries SELECT que processam filtro do usuário. As ~191 ocorrências remanescentes estão em:
   - **WHERE id = '...'** com IDs gerados por nanoid no servidor (não-input direto do usuário): donorService:302/367/388/402/407/505/523/528/542/544, personService, noteService, trashService, etc.
   - **INSERT/UPDATE values** com strings já validadas (`normalizePersonName`, `normalizeCpf` valida 11 dígitos, `normalizeDemandName`, etc.).
-  - **buildCsvSource(registeredFileName)** — fileName é gerado internamente, não é input do usuário.
+  - ~~**buildCsvSource(registeredFileName)** — fileName é gerado internamente, não é input do usuário.~~ **ERRADO, corrigido no commit 282**: o nome incluía o `file.name` que o usuário deu ao arquivo. Ver a seção da auditoria, Fase 4.
   - Migrar essas para prepared seria refatoração mecânica, baixo retorno em segurança, médio em consistência. Pode ser feito em uma futura passada.
 
 **Estado atual:** SELECT/filter paths blindados via prepared statements. Identifier injection mitigada com whitelist runtime. 39/39 testes passando (32 unit + 7 integração com DuckDB-Node real). Build OK. Lint 0 erros.
@@ -567,9 +567,77 @@ O modelo NÃO é uma tabela simples: três parâmetros no topo (`AGENCA 0`, `CON
 - O mascaramento é uma regra de CSS ancorada em `[data-values-hidden]`, não uma condição por componente: `.numeric` já marcava todo número. Primeira versão usava desfoque; o usuário pediu bolinhas, e `-webkit-text-security: disc` faz isso por caractere. O desfoque ficou como retaguarda em `@supports` — cair para texto legível seria falha de privacidade silenciosa.
 - `TextWithValues` mascara só os NÚMEROS das frases de apoio. Cobrir a frase inteira virava uma fileira de pontinhos e o cartão perdia o significado junto com o valor. Usa a posição do `split` com grupo de captura, e não `test()` com regex global — `test` avança `lastIndex` e erraria do segundo número em diante.
 
+## Auditoria da plataforma + roadmap derivado (commits 279-287)
+
+Usuário pediu auditoria completa de 17 áreas e, na sequência, um roadmap do que valia melhorar. Os dois documentos foram publicados como artifacts. Auditoria: 9 achados (1 crítico, 2 altos, 4 médios, 2 baixos), tudo medido contra o sistema rodando. Roadmap: 5 fases, executadas do início ao fim.
+
+**Duas correções que o roadmap fez na própria auditoria** (achadas ao medir, não ao ler código):
+- A lentidão da Gestão Mensal não era "paginar a tela". Era que `listDonorMonthReconciliationStatuses()` e `getDonorInactivityStreakMap()` **não aceitavam parâmetro nenhum** — varriam todo o histórico e montavam um Map de (doadores × meses) na thread principal a cada abertura, com o usuário olhando um mês só.
+- "Paginar Demandas e Projetos" caiu: essas listas não crescem com o tempo (Projetos carrega um punhado de linhas e uma contagem; Demandas é limitada pelo que a organização cadastra). Era cerimônia.
+
+### Fase 1 — Limpeza (commit 279)
+
+15 funções exportadas sem consumidor, removidas. Verificado por varredura antes de apagar: cada uma declarada uma vez e mencionada em lugar nenhum (nem em teste). Dois casos precisaram de decisão:
+- `checkCreditAttributionIdentity` / `listOverlappingAssignments`: os SQL delas (`CREDIT_ATTRIBUTION_IDENTITY_SQL`, `OVERLAPPING_ASSIGNMENTS_SQL`) **são consumidos direto pelos testes de integração**. Só os invólucros estavam órfãos; o invariante central continua coberto.
+- `listOrphanedCredits` / `listOrphanedDonations`: a auditoria tinha marcado como "talvez valha expor em vez de apagar". Fui verificar — o Dashboard **já mostra** `creditOnly`/`donationOnly` na seção de conciliação. Respondiam pergunta que já está na tela.
+
+### Fase 2 — O ganho medido (commit 280)
+
+`listDonorMonthReconciliationStatuses({ referenceMonth })` recorta os **dois** lados (crédito e abatimento) no mesmo mês. Recortar só um compararia um mês contra o abatimento de todos os meses e a coluna "Saldo" mostraria diferença que nunca existiu — há teste dedicado para isso.
+
+Medido contra DuckDB real, 400 doadores × 24 meses (115.200 notas):
+
+| Escopo | Linhas | Consulta | Map | Total |
+|---|---|---|---|---|
+| Todo o histórico (antes) | 9.600 | 80 ms | 57 ms | **137 ms** |
+| Só o mês exibido | 400 | 21 ms | 2 ms | **23 ms** |
+
+Seis vezes mais rápido, e o custo para de crescer com o acervo (linhas = doadores × meses). SQL extraído para `reconciliation/donorMonthStatusSql.js` (módulo puro) para o teste rodar a consulta de produção. Inatividade: **não** é recortada por mês (a métrica é estado atual) — passou a só ser carregada quando a visão pode exibir o emblema, e a leitura devolve mapa vazio nos demais meses em vez de zerar o estado.
+
+3 testes novos, verificados por reintrodução do bug: falham com o recorte quebrado.
+
+### Fase 3 — Autosave de anotações (commit 281)
+
+`e2e/notes-autosave.spec.js`, 4 testes. Era o único ponto do sistema que pode perder trabalho digitado à mão sem deixar rastro. Cobre os dois lados da janela de 800ms (`AUTO_SAVE_DELAY_MS`): fechar antes (exercita o flush no fechamento) e esperar (exercita o temporizador), mais reabrir nota intocada e editar existente. Verificado por reintrodução: 3 dos 4 falham com o flush removido.
+
+Armadilha registrada: o card de anotação **não abre pelo texto** — tem botão "Editar" próprio.
+
+### Fase 4 — SQL e arquivos grandes (commits 282-285, 287)
+
+**`escapeSqlString` deixou de existir no projeto** (era 13 arquivos). Conversões que mudaram o risco de verdade:
+- `importQueries.listImports`: o filtro por nome de arquivo é o único com texto livre do usuário. Curingas ficam **fora** do parâmetro (`LIKE '%' || ? || '%'`) — dentro seriam comparados como caractere literal.
+- `trashService.insertRows` e `backup.js`: os valores vêm de arquivo de backup enviado pelo usuário, a entrada menos confiável que chega ao banco. Bulk insert virou tuplas de `?` com params achatados. **Limite de bind medido antes**: 50.000 parâmetros passam no DuckDB, e o maior bloco usa 7.500 — cabe com folga.
+- **`buildRegisteredFileName(nanoid())`**: descoberta de que `registeredFileName` era nanoid + `file.name` — ou seja, o nome que o **usuário** deu ao arquivo ia parar dentro de `read_csv_auto('...')`, onde o DuckDB não aceita parâmetro. Em vez de escapar, o nome passou a ser só `[A-Za-z0-9_-].csv`. Nada se perde: é identificador interno, o nome real vive em `imports.file_name`. O comentário antigo do CLAUDE.md que dizia "fileName é gerado internamente" estava **errado**.
+- `buildInvalidStatusExpression`: padrões são lista fixa no código; ganhou checagem que **falha alto** se alguém acrescentar um com aspa.
+
+**Splits** (todos por barril, zero consumidor alterado):
+- `creditReconciliationService` 1.046 → 29 (motor / stats / por-doador / diagnóstico / listagens + helpers).
+- `importPipeline` 1.237 → 23 (`donationSpreadsheet` / `importRecords` / `importProcess` / `importDelete` / `importReimport`).
+- `Monthly.jsx` 995 → 798, via `useMonthlyExports` (os 5 exportadores não compartilham nada com o resto da página).
+- `registerSpreadsheetPreviewFile` era **idêntica byte a byte** nos dois pipelines (42 linhas). Consolidada em `import/spreadsheetSource.js`.
+
+**`Donors.jsx` (863) NÃO foi dividido, de propósito.** Os handlers já são finos (10 linhas cada, porque `useMutationAction` faz o trabalho), o estado é plano e as abstrações já estão aplicadas. As linhas são 5 modais + CRUD completo, não emaranhado. Extrair `DonorModals` daria um componente com ~25 props — moveria a complexidade em vez de reduzi-la. `migrations.js` (1.160) também fica: cresce por acréscimo e nunca é lido de ponta a ponta.
+
+**Efeito colateral que virou correção real:** ao encolher `Monthly.jsx`, o analisador do `react-hooks` passou a conseguir processá-lo e apontou 4 violações de `set-state-in-effect` que **já existiam** e eram invisíveis só porque o arquivo era grande demais. Três foram corrigidas de verdade, com ganho de comportamento:
+- Sobreposição otimista e limpeza de seleção viraram **ajuste durante o render** (padrão documentado do React). Em efeito, existia um quadro em que o palpite antigo aparecia sobre os dados novos, e a barra de ações em massa dizia "3 selecionados" sobre outra lista.
+- A âncora automática de mês trocou o `useRef` por **estado**, mantendo a semântica de uma vez só (que o e2e depende).
+- A quarta é falso positivo e ficou com `eslint-disable` justificado: as três funções são `async` e só escrevem estado **depois do `await`** — verificado uma a uma.
+
+### Fase 5 — Um item feito, dois adiados com gatilho (commit 286)
+
+**Feito: teste de reimportação** (`e2e/import-reimport.spec.js`, 3 testes). Era o maior buraco de cobertura do sistema — `applyReimport` **apaga** as notas do mês e reescreve a partir do arquivo novo, com zero teste ponta a ponta. A fixture nova difere da original em **três eixos ao mesmo tempo** (mais notas válidas, CPF novo, status corrigido); num eixo só, uma reimportação que ignorasse os outros dois passaria. Verificado por reintrodução: neutralizar o DELETE faz o teste "substitui em vez de somar" falhar.
+
+Isso satisfez o portão do item "unificar pipelines de importação" — e a unificação, medida, resultou nas 42 linhas idênticas já consolidadas (o resto dos dois pipelines difere de verdade: tabelas, colunas, validação e encadeamento de conciliação).
+
+**Adiados, com o número que os reabre** (usuário confirmou):
+- **Sincronização incremental por tabela** — dispara quando o snapshot comprimido passar de **5 MB** (hoje ≈ 0,34 MB com 1 ano de uso). Cada gravação ainda reescreve o banco inteiro; enquanto o arquivo for pequeno, a complexidade não se paga.
+- **Paginação server-side da Gestão Mensal** — dispara acima de **5.000 linhas num único mês**. A Fase 2 já removeu o custo que crescia sozinho; o que sobra é a lista em si, e adotá-la exige rework da página mais complexa do sistema.
+
+**Estado ao fim:** 222 testes unitários/integração, 80 e2e, lint 0 erros, build OK.
+
 ## Convenções do projeto
 
-- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 276**.
+- Cada commit é numerado sequencialmente (`commit 56`, `commit 57`, ...). Estamos em **commit 288**.
 - Co-authored-by: `Claude Sonnet 4.6 <noreply@anthropic.com>` em todos os commits.
 - Mensagens de commit são curtas (`commit N`) — o conteúdo vai no diff.
 - Prefer `Edit` ao invés de `Write` para arquivos existentes.
