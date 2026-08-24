@@ -22,24 +22,7 @@ import FirstVisitHint from "../components/ui/FirstVisitHint";
 import { useConsolidatedMonthlyDonors } from "../features/monthly/hooks/useConsolidatedMonthlyDonors";
 import { useMonthlyOverviewMetrics } from "../features/monthly/hooks/useMonthlyOverviewMetrics";
 import { useMonthlyStatusHandlers } from "../features/monthly/hooks/useMonthlyStatusHandlers";
-import { createActionHistoryEntry } from "../services/actionHistoryService";
-import {
-  exportMonthlySummariesCsv,
-  exportAbatementSheetWorkbook,
-  exportReconciliationByDonorCsv,
-} from "../services/exportService";
-// PDF + JPEG report modules pull a large dependency chain (custom PDF
-// writer, zip archiver, JPEG canvas pipeline). Dynamic-import them at the
-// point of use so a user who never exports a report doesn't pay the cost
-// in the initial bundle.
-const loadPdfReportExporter = () =>
-  import("../features/reports/services/donationPdfReportService").then(
-    (mod) => mod.exportDonationReportPdf,
-  );
-const loadJpegReportExporter = () =>
-  import("../features/reports/services/donationJpegReportService").then(
-    (mod) => mod.exportDonationReportJpeg,
-  );
+import { useMonthlyExports } from "../features/monthly/hooks/useMonthlyExports";
 import { listImports } from "../services/importService";
 import { listMonthlySummaries } from "../services/monthlyService";
 import {
@@ -48,8 +31,6 @@ import {
 } from "../services/reconciliation/creditReconciliationService";
 import { getDonorInactivityStreakMap } from "../services/monthly/inactivityStreaks";
 import { getAppScrollTop, scrollAppTo } from "../utils/appScroll";
-import { getErrorMessage } from "../utils/error";
-import { formatInteger } from "../utils/format";
 import { formatMonthYear } from "../utils/date";
 import { formatCpf } from "../utils/cpf";
 import { buildSelectOptions } from "../utils/select";
@@ -61,6 +42,8 @@ import { useDataSyncFeedback } from "../hooks/useDataSyncFeedback";
 import { useDelayedLoading } from "../hooks/useDelayedLoading";
 import { useProjectPath } from "../hooks/useProjectPath";
 import { logError } from "../services/logger";
+
+const EMPTY_INACTIVITY = new Map();
 
 function normalizeMonthlyFilters(filters) {
   return filters.referenceMonth
@@ -98,13 +81,6 @@ export default function Monthly() {
   // when filters change or after a successful bulk apply so the operator
   // doesn't accidentally re-act on stale rows.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [isExporting, setIsExporting] = useState(false);
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isExportingJpeg, setIsExportingJpeg] = useState(false);
-  const [isExportingReconciliation, setIsExportingReconciliation] =
-    useState(false);
-  const [isExportingAbatementSheet, setIsExportingAbatementSheet] =
-    useState(false);
   const [showBulkAbatementModal, setShowBulkAbatementModal] = useState(false);
   const [catchUpDonor, setCatchUpDonor] = useState(null);
   const [isBulkAbating, setIsBulkAbating] = useState(false);
@@ -138,9 +114,14 @@ export default function Monthly() {
   // optimistic guess is automatically discarded.
   const [optimisticStatusOverrides, setOptimisticStatusOverrides] = useState({});
 
-  useEffect(() => {
+  // Ajuste DURANTE o render, e não em efeito: o efeito só roda depois da
+  // primeira pintura, então existiria um quadro em que o palpite otimista
+  // antigo aparece sobreposto aos dados novos que acabaram de chegar.
+  const [overrideSource, setOverrideSource] = useState(rawSummaries);
+  if (overrideSource !== rawSummaries) {
+    setOverrideSource(rawSummaries);
     setOptimisticStatusOverrides({});
-  }, [rawSummaries]);
+  }
 
   const summaries = useMemo(() => {
     if (Object.keys(optimisticStatusOverrides).length === 0) {
@@ -187,25 +168,27 @@ export default function Monthly() {
   // "Meses importados") também deixa `referenceMonth` vazio e o efeito
   // reiria imediatamente, tornando a visão consolidada "Abatimentos por
   // doador" impossível de alcançar depois da primeira importação.
-  const hasAutoAnchoredRef = useRef(false);
-  useEffect(() => {
-    if (hasAutoAnchoredRef.current) return;
+  // A trava virou ESTADO, e o ajuste acontece no render em vez de num efeito.
+  // Em efeito, a lista chegaria a ser pintada uma vez sem mês nenhum antes de
+  // a âncora entrar — e é justamente esse quadro que a visão consolidada
+  // ocupa, fazendo a tela piscar entre as duas visões.
+  const [hasAutoAnchored, setHasAutoAnchored] = useState(false);
+
+  if (!hasAutoAnchored) {
     if (filters.referenceMonth) {
-      // Already has a month (e.g. seeded from a deep-link's location.state)
-      // — the auto-anchor decision point has passed, disarm permanently.
-      hasAutoAnchoredRef.current = true;
-      return;
+      // Já chegou com mês (deep-link via location.state) — o ponto de decisão
+      // passou, desarma para sempre.
+      setHasAutoAnchored(true);
+    } else if (availableImports[0]?.referenceMonth) {
+      const mostRecentMonth = availableImports[0].referenceMonth;
+      setHasAutoAnchored(true);
+      setFilters((current) =>
+        current.referenceMonth
+          ? current
+          : { ...current, referenceMonth: mostRecentMonth },
+      );
     }
-    if (availableImports.length === 0) return;
-    const mostRecentMonth = availableImports[0]?.referenceMonth ?? "";
-    if (!mostRecentMonth) return;
-    hasAutoAnchoredRef.current = true;
-    setFilters((current) =>
-      current.referenceMonth
-        ? current
-        : { ...current, referenceMonth: mostRecentMonth },
-    );
-  }, [availableImports, filters.referenceMonth]);
+  }
 
   // Keyed by (donor, month) so each row's "Crédito real" / "Saldo" describe
   // the month that row is about. The previous all-time rollup repeated the
@@ -244,8 +227,11 @@ export default function Monthly() {
         String(latestImportedMonth).slice(0, 10));
 
   const loadInactivityStreaks = useCallback(async () => {
+    // Sem limpar o mapa aqui: quando a visão não pode exibir o emblema, quem
+    // resolve isso é a leitura (`inactivityForDisplay`, abaixo). Zerar o
+    // estado neste ponto era uma escrita síncrona dentro do efeito de carga,
+    // e ainda faria a consulta ser refeita ao voltar para o mês recente.
     if (!canShowInactivity) {
-      setInactivityByDonor(new Map());
       return;
     }
 
@@ -257,10 +243,25 @@ export default function Monthly() {
     }
   }, [canShowInactivity]);
 
+  // O emblema de inatividade descreve o ESTADO ATUAL do doador, então só faz
+  // sentido nas linhas do mês mais recente. Num mês anterior a leitura devolve
+  // um mapa vazio em vez de zerar o estado — assim voltar ao mês recente não
+  // exige refazer a consulta.
+  const inactivityForDisplay = canShowInactivity ? inactivityByDonor : EMPTY_INACTIVITY;
+
+  // Carga inicial dos três dados auxiliares.
+  //
+  // A regra `set-state-in-effect` marca este efeito, mas aqui ela erra: as
+  // três funções são `async` e só escrevem estado DEPOIS do `await`, que é
+  // exatamente o caso que a própria regra descreve como legítimo ("subscribe
+  // for updates from some external system, calling setState in a callback").
+  // Verificado uma a uma: nenhuma tem escrita síncrona no corpo.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     loadAvailableImports();
     loadReconciliationStatuses();
     loadInactivityStreaks();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [loadAvailableImports, loadReconciliationStatuses, loadInactivityStreaks]);
 
   const refreshAll = useCallback(async () => {
@@ -289,11 +290,36 @@ export default function Monthly() {
   const dataSyncFeedback = useDataSyncFeedback();
   const hasSelectedReferenceMonth = Boolean(filters.referenceMonth);
 
+  const {
+    handleExport,
+    handleExportReconciliationCsv,
+    handleExportAbatementSheet,
+    handleExportPdf,
+    handleExportJpeg,
+    isExporting,
+    isExportingPdf,
+    isExportingJpeg,
+    isExportingReconciliation,
+    isExportingAbatementSheet,
+  } = useMonthlyExports({
+    filters,
+    hasSelectedReferenceMonth,
+    monthlyOperation,
+    setError,
+    setSuccessMessage,
+    setSuccessAction,
+  });
+
   // Selection helpers. Clear whenever the underlying month / filters
   // shift so the bar never carries over stale ids the user can't see.
-  useEffect(() => {
+  //
+  // Também durante o render: em efeito, a barra de ações em massa apareceria
+  // por um quadro dizendo "3 selecionados" sobre uma lista que já é outra.
+  const [selectionFilters, setSelectionFilters] = useState(filters);
+  if (selectionFilters !== filters) {
+    setSelectionFilters(filters);
     setSelectedIds(new Set());
-  }, [filters]);
+  }
 
   const handleToggleSelect = useCallback((summaryId, nextSelected) => {
     setSelectedIds((current) => {
@@ -447,229 +473,6 @@ export default function Monthly() {
         : {}),
       [name]: value,
     }));
-  };
-
-  const handleExport = async () => {
-    setError("");
-    setSuccessAction(null);
-    // Show the hint up-front when no month is selected so the user sees it
-    // while the CSV builds. After the export resolves we replace it with the
-    // result message.
-    setSuccessMessage(
-      !hasSelectedReferenceMonth
-        ? "Exportando a visão geral. Se quiser um mês específico, selecione um mês antes."
-        : "",
-    );
-    setIsExporting(true);
-
-    try {
-      const result = await monthlyOperation.run(
-        () => exportMonthlySummariesCsv(filters),
-        {
-          loadingMessage: "Exportando resumo mensal...",
-        },
-      );
-      await createActionHistoryEntry({
-        actionType: "export",
-        entityType: "export",
-        entityId: "monthly-csv",
-        label: "Gestão mensal CSV",
-        description: `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
-        payload: {
-          filters,
-          rowCount: result.rowCount,
-        },
-      });
-      setSuccessMessage(
-        `${result.rowCount} linha(s) exportada(s) do resumo mensal em CSV.`,
-      );
-    } catch (err) {
-      logError("MonthlyPage.exportCsv", err);
-      setError("Não foi possível exportar o resumo mensal.");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleExportReconciliationCsv = async () => {
-    if (isExportingReconciliation) return;
-    setError("");
-    setSuccessMessage("");
-    setSuccessAction(null);
-    setIsExportingReconciliation(true);
-    try {
-      // Mirror the current Monthly filters into the export so the user
-      // downloads "what they see". Reference month + reconciliation status
-      // are the two that actually narrow the donor rollup.
-      const result = await monthlyOperation.run(
-        () =>
-          exportReconciliationByDonorCsv({
-            referenceMonth: filters.referenceMonth,
-            statusFilter:
-              filters.reconciliationStatus &&
-              filters.reconciliationStatus !== "all"
-                ? filters.reconciliationStatus
-                : "",
-          }),
-        { loadingMessage: "Exportando conciliação..." },
-      );
-      await createActionHistoryEntry({
-        actionType: "export",
-        entityType: "export",
-        entityId: "reconciliation-by-donor-csv",
-        label: "Conciliação por doador CSV",
-        description: `${result.rowCount} doador(es) exportado(s) na conciliação.`,
-        payload: {
-          referenceMonth: filters.referenceMonth,
-          statusFilter: filters.reconciliationStatus,
-          rowCount: result.rowCount,
-        },
-      });
-      setSuccessMessage(
-        `${result.rowCount} doador(es) exportado(s) na conciliação.`,
-      );
-    } catch (err) {
-      logError("MonthlyPage.exportReconciliation", err);
-      setError("Não foi possível exportar a conciliação.");
-    } finally {
-      setIsExportingReconciliation(false);
-    }
-  };
-
-  // Planilha para o sistema externo dar baixa nas doações. Exige um mês
-  // selecionado: a descrição de cada linha carrega o mês, então uma exportação
-  // "todos os meses" produziria descrições ambíguas no destino.
-  const handleExportAbatementSheet = async () => {
-    if (isExportingAbatementSheet) return;
-    setError("");
-    setSuccessMessage("");
-    setSuccessAction(null);
-
-    if (!filters.referenceMonth) {
-      setError(
-        "Selecione um mês antes de exportar a planilha de abatimento — a descrição de cada linha depende do mês.",
-      );
-      return;
-    }
-
-    setIsExportingAbatementSheet(true);
-    try {
-      const result = await monthlyOperation.run(
-        () =>
-          exportAbatementSheetWorkbook({ referenceMonth: filters.referenceMonth }),
-        { loadingMessage: "Gerando planilha de abatimento..." },
-      );
-      const exportSummary =
-        result.rowCount === 0
-          ? "Nenhuma doação neste mês — nenhuma planilha foi gerada."
-          : `${result.rowCount} CPF(s) em ${result.demandCount} planilha(s), uma por demanda.`;
-      await createActionHistoryEntry({
-        actionType: "export",
-        entityType: "export",
-        entityId: "abatement-sheet",
-        label: "Planilha de abatimento",
-        description: exportSummary,
-        payload: {
-          referenceMonth: filters.referenceMonth,
-          rowCount: result.rowCount,
-          demandCount: result.demandCount,
-          fileNames: result.fileNames,
-        },
-      });
-      setSuccessMessage(exportSummary);
-    } catch (err) {
-      logError("MonthlyPage.exportAbatementSheet", err);
-      setError("Não foi possível exportar a planilha de abatimento.");
-    } finally {
-      setIsExportingAbatementSheet(false);
-    }
-  };
-
-  const handleExportPdf = async () => {
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsExportingPdf(true);
-      const exportDonationReportPdf = await loadPdfReportExporter();
-      const result = await monthlyOperation.run(
-        () => exportDonationReportPdf(filters),
-        {
-          loadingMessage: "Gerando PDFs por demanda...",
-        },
-      );
-      if (result.archiveName) {
-        await createActionHistoryEntry({
-          actionType: "export",
-          entityType: "export",
-          entityId: "donation-report-zip",
-          label: result.archiveName,
-          description: `ZIP gerado com ${formatInteger(result.demandCount)} PDF(s).`,
-          payload: {
-            archiveName: result.archiveName,
-            demandCount: result.demandCount,
-            filters,
-            rowCount: result.rowCount,
-          },
-        });
-        setSuccessMessage(
-          `ZIP gerado com ${formatInteger(result.demandCount)} PDF(s) e ${formatInteger(result.rowCount)} pessoa(s).`,
-        );
-      } else {
-        await createActionHistoryEntry({
-          actionType: "export",
-          entityType: "export",
-          entityId: "donation-report-pdf",
-          label: result.fileName ?? "PDF por demanda",
-          description: `PDF gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
-          payload: {
-            fileName: result.fileName ?? "",
-            filters,
-            rowCount: result.rowCount,
-          },
-        });
-        setSuccessMessage(
-          `PDF gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
-        );
-      }
-    } catch (err) {
-      logError("MonthlyPage.exportPdf", err);
-      setError(getErrorMessage(err, "Não foi possível gerar os PDFs por demanda."));
-    } finally {
-      setIsExportingPdf(false);
-    }
-  };
-
-  const handleExportJpeg = async () => {
-    try {
-      setError("");
-      setSuccessMessage("");
-      setSuccessAction(null);
-      setIsExportingJpeg(true);
-      const exportDonationReportJpeg = await loadJpegReportExporter();
-      const result = await monthlyOperation.run(
-        () => exportDonationReportJpeg(filters),
-        {
-          loadingMessage: "Gerando JPEGs por demanda...",
-        },
-      );
-      if (result.archiveName) {
-        setSuccessMessage(
-          `ZIP gerado com ${formatInteger(result.demandCount)} JPEG(s) e ${formatInteger(result.rowCount)} pessoa(s).`,
-        );
-      } else {
-        setSuccessMessage(
-          `JPEG gerado com ${formatInteger(result.rowCount)} pessoa(s).`,
-        );
-      }
-    } catch (err) {
-      logError("MonthlyPage.exportJpeg", err);
-      setError(
-        getErrorMessage(err, "Não foi possível gerar os JPEGs por demanda."),
-      );
-    } finally {
-      setIsExportingJpeg(false);
-    }
   };
 
   const handleClearRefinements = () => {
@@ -960,7 +763,7 @@ export default function Monthly() {
               onNavigate={handleOpenDonorProfile}
               onStatusChange={handleStatusChange}
               reconciliationByDonor={reconciliationByDonor}
-              inactivityByDonor={inactivityByDonor}
+              inactivityByDonor={inactivityForDisplay}
               latestImportedMonth={latestImportedMonth}
               showReferenceMonth={!hasSelectedReferenceMonth}
               selectedIds={selectedIds}
