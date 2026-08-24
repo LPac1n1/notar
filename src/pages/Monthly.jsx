@@ -210,26 +210,52 @@ export default function Monthly() {
   // Keyed by (donor, month) so each row's "Crédito real" / "Saldo" describe
   // the month that row is about. The previous all-time rollup repeated the
   // donor's lifetime total on every one of their months.
+  //
+  // Recortado pelo mês escolhido: sem isso a consulta varria todo o
+  // histórico e montava um Map de (doadores × meses) toda vez que a tela
+  // abria, mesmo com o usuário olhando um mês só. Sem mês escolhido é a
+  // visão consolidada, que precisa mesmo de tudo.
+  const selectedMonth = filters.referenceMonth;
   const loadReconciliationStatuses = useCallback(async () => {
     try {
-      const map = await listDonorMonthReconciliationStatuses();
+      const map = await listDonorMonthReconciliationStatuses({
+        referenceMonth: selectedMonth,
+      });
       setReconciliationByDonor(map);
     } catch (err) {
       logError("Monthly.reconciliation", err);
     }
-  }, []);
+  }, [selectedMonth]);
 
   // "Há quantos meses seguidos este doador não manda nota?" — rendered as a
   // badge on the row so the user spots a stalled donor while working the
   // month, instead of having to cross-reference months by hand.
+  //
+  // A métrica é "estado atual", então o emblema só aparece nas linhas do mês
+  // mais recente. Num mês anterior o Map seria montado e nunca lido — e ele
+  // custa uma varredura de todo o histórico. Por isso a carga só acontece
+  // quando a visão pode exibi-lo: no mês mais recente, ou na consolidada
+  // (sem mês), que inclui as linhas dele.
+  const latestImportedMonth = availableImports[0]?.referenceMonth ?? "";
+  const canShowInactivity =
+    !selectedMonth ||
+    (Boolean(latestImportedMonth) &&
+      String(selectedMonth).slice(0, 10) ===
+        String(latestImportedMonth).slice(0, 10));
+
   const loadInactivityStreaks = useCallback(async () => {
+    if (!canShowInactivity) {
+      setInactivityByDonor(new Map());
+      return;
+    }
+
     try {
       const map = await getDonorInactivityStreakMap();
       setInactivityByDonor(map);
     } catch (err) {
       logError("Monthly.inactivityStreaks", err);
     }
-  }, []);
+  }, [canShowInactivity]);
 
   useEffect(() => {
     loadAvailableImports();
@@ -935,7 +961,7 @@ export default function Monthly() {
               onStatusChange={handleStatusChange}
               reconciliationByDonor={reconciliationByDonor}
               inactivityByDonor={inactivityByDonor}
-              latestImportedMonth={availableImports[0]?.referenceMonth ?? ""}
+              latestImportedMonth={latestImportedMonth}
               showReferenceMonth={!hasSelectedReferenceMonth}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}

@@ -6,6 +6,7 @@ import {
   runInTransaction,
 } from "../db";
 import { withCache } from "../queryCache.js";
+import { buildDonorMonthStatusQuery } from "./donorMonthStatusSql.js";
 import { computeReconciliationStatus } from "./reconciliationStatus";
 
 // Re-export so existing callers (`creditReconciliationService.computeReconciliationStatus`)
@@ -552,55 +553,20 @@ export function buildDonorMonthKey(donorId, referenceMonth) {
   return `${donorId ?? ""}|${String(referenceMonth ?? "").slice(0, 10)}`;
 }
 
-export async function listDonorMonthReconciliationStatuses() {
-  const rows = await query(`
-    WITH credit_by_month AS (
-      SELECT
-        donor_cpf_links.donor_id AS donor_id,
-        strftime(donation_notes.reference_month, '%Y-%m-%d') AS reference_month,
-        sum(credit_notes.credito) AS total_credit,
-        count(*) AS matched_count
-      FROM credit_reconciliation
-      INNER JOIN donation_notes
-        ON donation_notes.id = credit_reconciliation.donation_note_id
-      INNER JOIN donor_cpf_links
-        ON donor_cpf_links.cpf = donation_notes.cpf
-        AND donor_cpf_links.is_active = TRUE
-      INNER JOIN credit_notes
-        ON credit_notes.id = credit_reconciliation.credit_note_id
-      WHERE credit_reconciliation.match_status = 'matched'
-      GROUP BY
-        donor_cpf_links.donor_id,
-        strftime(donation_notes.reference_month, '%Y-%m-%d')
-    ),
-    abated_by_month AS (
-      SELECT
-        donor_id,
-        strftime(reference_month, '%Y-%m-%d') AS reference_month,
-        sum(abatement_amount) AS total_abated
-      FROM monthly_donor_summary
-      WHERE abatement_status = 'applied'
-      GROUP BY donor_id, strftime(reference_month, '%Y-%m-%d')
-    ),
-    donor_months AS (
-      SELECT donor_id, reference_month FROM credit_by_month
-      UNION
-      SELECT donor_id, reference_month FROM abated_by_month
-    )
-    SELECT
-      donor_months.donor_id,
-      donor_months.reference_month,
-      coalesce(credit_by_month.total_credit, 0) AS total_credit,
-      coalesce(credit_by_month.matched_count, 0) AS matched_count,
-      coalesce(abated_by_month.total_abated, 0) AS total_abated
-    FROM donor_months
-    LEFT JOIN credit_by_month
-      ON credit_by_month.donor_id = donor_months.donor_id
-      AND credit_by_month.reference_month = donor_months.reference_month
-    LEFT JOIN abated_by_month
-      ON abated_by_month.donor_id = donor_months.donor_id
-      AND abated_by_month.reference_month = donor_months.reference_month
-  `);
+/**
+ * `referenceMonth` recorta os DOIS lados no mesmo mês. Omitir devolve o
+ * histórico inteiro, que é o que a visão consolidada (sem mês escolhido)
+ * precisa — mas nela o custo é pedido pelo usuário, não pago à toa.
+ *
+ * Sem o recorte, abrir a Gestão Mensal num mês só ainda varria todo o
+ * histórico e montava um Map de (doadores × meses) na thread principal. O
+ * custo crescia junto com o acervo para sempre, sem nada na tela avisar.
+ */
+export async function listDonorMonthReconciliationStatuses({
+  referenceMonth = "",
+} = {}) {
+  const { sql, params } = buildDonorMonthStatusQuery({ referenceMonth });
+  const rows = await queryPrepared(sql, params);
 
   const statuses = new Map();
   for (const row of rows) {

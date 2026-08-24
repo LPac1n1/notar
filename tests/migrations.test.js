@@ -6,6 +6,7 @@ import {
   runMigrations,
 } from "../src/services/db/migrations.js";
 import { buildDonorInactivityStreaksSql } from "../src/services/monthly/inactivityStreaksSql.js";
+import { buildDonorMonthStatusQuery } from "../src/services/reconciliation/donorMonthStatusSql.js";
 import { buildAbatementSheetSql } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 import { PLATFORM_CREDIT_TOTALS_SQL } from "../src/services/dashboard/platformSql.js";
@@ -3552,6 +3553,144 @@ test("the sum per project plus unattributed equals the reconciled credit", async
     assert.equal(comProjeto, 12);
     assert.equal(semProjeto, 4);
     assert.equal(comProjeto + semProjeto, conciliado);
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Semeia dois doadores com crédito e abatimento em MESES DIFERENTES.
+ *
+ * A separação por mês é o ponto: se tudo caísse na mesma competência, uma
+ * consulta que ignorasse o recorte passaria no teste do mesmo jeito.
+ *
+ * Alice tem crédito em jan e fev, e abatimento aplicado só em jan.
+ * Bruno tem abatimento aplicado em fev, sem crédito nenhum — é o lado que
+ * prova que o recorte também vale para a metade do abatimento.
+ */
+async function seedDonorMonthStatusFixtures(conn) {
+  await conn.query(`
+    INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active, created_at, updated_at)
+    VALUES
+      ('l-a', 'donor-a', 'Alice', '11111111111', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('l-b', 'donor-b', 'Bruno', '22222222222', 'holder', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO donation_notes (id, import_id, cpf, reference_month, numero_nota, valor_nota, is_valid, created_at)
+    VALUES
+      ('dn-jan', 'imp-1', '11111111111', DATE '2025-01-01', '1', 50.00, TRUE, CURRENT_TIMESTAMP),
+      ('dn-fev', 'imp-2', '11111111111', DATE '2025-02-01', '2', 50.00, TRUE, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_notes (id, credit_import_id, numero_nota, credito, situacao, is_valid, created_at)
+    VALUES
+      ('cn-jan', 'ci-1', '1', 3.00, 'Calculado', TRUE, CURRENT_TIMESTAMP),
+      ('cn-fev', 'ci-2', '2', 7.00, 'Calculado', TRUE, CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO credit_reconciliation (id, credit_note_id, donation_note_id, match_status, created_at)
+    VALUES
+      ('r-jan', 'cn-jan', 'dn-jan', 'matched', CURRENT_TIMESTAMP),
+      ('r-fev', 'cn-fev', 'dn-fev', 'matched', CURRENT_TIMESTAMP)
+  `);
+
+  await conn.query(`
+    INSERT INTO monthly_donor_summary (
+      id, import_id, donor_id, reference_month, cpf, donor_name,
+      notes_count, value_per_note, abatement_amount, abatement_status, created_at, updated_at
+    )
+    VALUES
+      ('s-a-jan', 'imp-1', 'donor-a', DATE '2025-01-01', '11111111111', 'Alice',
+       1, 50.00, 500.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('s-b-fev', 'imp-2', 'donor-b', DATE '2025-02-01', '22222222222', 'Bruno',
+       1, 50.00, 900.00, 'applied', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+}
+
+test("o status por doador/mês devolve o histórico inteiro quando não recebe mês", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedDonorMonthStatusFixtures(conn);
+
+    const { sql, params } = buildDonorMonthStatusQuery();
+    assert.deepEqual(params, [], "sem mês não deve haver parâmetro para ligar");
+
+    const linhas = (await conn.query(sql)).toArray();
+
+    // Alice em jan e fev, Bruno em fev.
+    assert.equal(linhas.length, 3);
+  } finally {
+    await conn.close();
+  }
+});
+
+test("o status por doador/mês recorta os dois lados no mesmo mês", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedDonorMonthStatusFixtures(conn);
+
+    const { sql, params } = buildDonorMonthStatusQuery({
+      referenceMonth: "2025-01-01",
+    });
+    // Dois parâmetros porque os dois lados são recortados — crédito e
+    // abatimento precisam andar juntos.
+    assert.deepEqual(params, ["2025-01-01", "2025-01-01"]);
+
+    const stmt = await conn.prepare(sql);
+    let linhas;
+    try {
+      linhas = (await stmt.query(...params)).toArray();
+    } finally {
+      await stmt.close();
+    }
+
+    // Só Alice em janeiro. Fevereiro (dela e do Bruno) fica de fora.
+    assert.equal(linhas.length, 1);
+    assert.equal(String(linhas[0].donor_id), "donor-a");
+    assert.equal(String(linhas[0].reference_month), "2025-01-01");
+    assert.equal(Number(linhas[0].total_credit), 3);
+    assert.equal(Number(linhas[0].total_abated), 500);
+  } finally {
+    await conn.close();
+  }
+});
+
+test("recortar um mês não arrasta o abatimento de outro mês do mesmo doador", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedDonorMonthStatusFixtures(conn);
+
+    // Fevereiro: Alice tem crédito (7) e NENHUM abatimento aplicado — o dela
+    // é de janeiro. Se o recorte valesse só para o crédito, os 500 de janeiro
+    // apareceriam aqui e a coluna "Saldo" mostraria uma diferença inventada.
+    const { sql, params } = buildDonorMonthStatusQuery({
+      referenceMonth: "2025-02-01",
+    });
+
+    const stmt = await conn.prepare(sql);
+    let linhas;
+    try {
+      linhas = (await stmt.query(...params)).toArray();
+    } finally {
+      await stmt.close();
+    }
+
+    const alice = linhas.find((l) => String(l.donor_id) === "donor-a");
+    assert.ok(alice, "Alice precisa aparecer em fevereiro, pelo crédito");
+    assert.equal(Number(alice.total_credit), 7);
+    assert.equal(Number(alice.total_abated), 0);
+
+    // E Bruno aparece pelo lado oposto: abatimento sem crédito.
+    const bruno = linhas.find((l) => String(l.donor_id) === "donor-b");
+    assert.ok(bruno, "Bruno precisa aparecer em fevereiro, pelo abatimento");
+    assert.equal(Number(bruno.total_credit), 0);
+    assert.equal(Number(bruno.total_abated), 900);
   } finally {
     await conn.close();
   }
