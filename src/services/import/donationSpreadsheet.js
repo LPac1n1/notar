@@ -1,8 +1,8 @@
+export { registerSpreadsheetPreviewFile } from "./spreadsheetSource.js";
 import {
   executePrepared,
   query,
   queryPrepared,
-  registerFileText,
 } from "../db";
 import {
   brOrUsDoubleSqlExpression,
@@ -13,9 +13,6 @@ import {
   numeroNotaSqlExpression,
 } from "./sqlExpressions";
 import {
-  getImportFileExtension,
-  isExcelImportExtension,
-  readFileAsUtf8Text,
 } from "../../utils/import";
 
 /**
@@ -172,48 +169,6 @@ export async function aggregateCpfCountsFromDonationNotes(importId) {
   }));
 }
 
-export async function registerSpreadsheetPreviewFile(file, registeredFileName) {
-  const fileExtension = getImportFileExtension(file.name);
-
-  if (isExcelImportExtension(fileExtension)) {
-    const { default: ExcelJS } = await import("exceljs");
-    const workbook = new ExcelJS.Workbook();
-    const fileBuffer = await file.arrayBuffer();
-    await workbook.xlsx.load(fileBuffer);
-
-    const worksheet =
-      workbook.worksheets.find(
-        (currentWorksheet) =>
-          currentWorksheet.actualRowCount > 0 ||
-          currentWorksheet.actualColumnCount > 0,
-      ) ?? workbook.worksheets[0];
-
-    if (!worksheet) {
-      throw new Error("A planilha do Excel não possui nenhuma aba com dados.");
-    }
-
-    const csvBuffer = await workbook.csv.writeBuffer({
-      sheetName: worksheet.name,
-    });
-    const csvText = new TextDecoder("utf-8").decode(csvBuffer);
-    await registerFileText(registeredFileName, csvText);
-
-    return {
-      sourceType: "excel",
-      worksheetName: worksheet.name,
-      worksheetCount: workbook.worksheets.length,
-    };
-  }
-
-  const fileText = await readFileAsUtf8Text(file);
-  await registerFileText(registeredFileName, fileText);
-
-  return {
-    sourceType: "text",
-    worksheetName: "",
-    worksheetCount: 0,
-  };
-}
 
 /**
  * Parses cpf counts directly from a registered CSV without writing anything.
