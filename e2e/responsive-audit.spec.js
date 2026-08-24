@@ -25,11 +25,14 @@ test.setTimeout(900000);
  * memória. Um `page.goto()` no meio do teste APAGA tudo — navegue por clique.
  */
 
+// Largura E altura. A altura importa tanto quanto: `baixa` reproduz a
+// janela achatada em que a barra lateral quebrava.
 const LARGURAS = [
   { nome: "movel   ", w: 375, h: 812 },
   { nome: "tablet  ", w: 768, h: 1024 },
   { nome: "notebook", w: 1024, h: 800 },
   { nome: "desktop ", w: 1440, h: 900 },
+  { nome: "baixa   ", w: 1440, h: 600 },
 ];
 
 // Roda no navegador. Procura três classes de defeito mensuráveis.
@@ -87,6 +90,20 @@ function auditar() {
     if (rect.right > vw + 1 && cs.position !== "fixed" && !temAncestralQueRola(el)) {
       achados.push(
         `SAI-DA-TELA ${nomear(el)} right=${Math.round(rect.right)} vw=${vw}`,
+      );
+    }
+  }
+
+  // 4. Item de navegação comprimido.
+  //
+  // Item de flex nasce encolhível: faltando altura, a barra lateral
+  // achatava as linhas até virarem ilegíveis em vez de deixar a lista
+  // rolar. A altura da linha não pode depender do tamanho da janela.
+  for (const link of document.querySelectorAll("aside a[href]")) {
+    const r = link.getBoundingClientRect();
+    if (r.height > 0 && r.height < 32) {
+      achados.push(
+        `NAV-ESPREMIDO ${nomear(link)} h=${Math.round(r.height)}`,
       );
     }
   }

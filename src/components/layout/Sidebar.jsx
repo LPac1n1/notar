@@ -56,7 +56,7 @@ function NavItem({ item, compact = false, badgeCount = 0, badgeTitle = "" }) {
       to={item.to}
       end={item.end}
       className={({ isActive }) =>
-        `group relative overflow-hidden rounded-md border px-1 py-3 text-sm transition-colors duration-150 lg:px-3 ${
+        `group relative shrink-0 overflow-hidden rounded-md border px-1 py-1 text-sm transition-colors duration-150 lg:px-3 ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
             : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
@@ -72,13 +72,13 @@ function NavItem({ item, compact = false, badgeCount = 0, badgeTitle = "" }) {
             />
           ) : null}
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition ${
               isActive
                 ? "bg-[var(--accent)] text-[var(--on-accent)]"
                 : "bg-[var(--surface-elevated)] text-[var(--muted)] group-hover:bg-[var(--surface-muted)] group-hover:text-[var(--text-main)]"
             }`}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4" />
           </div>
           <div className="hidden min-w-0 lg:flex lg:flex-1 lg:items-center lg:justify-between lg:gap-2">
             <p className="font-semibold">{item.label}</p>
@@ -116,7 +116,7 @@ function FooterNavItem({ item, badgeCount = 0, badgeTitle = "" }) {
       to={item.to}
       end={item.end}
       className={({ isActive }) =>
-        `group relative flex items-center justify-center gap-3 overflow-hidden rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 lg:justify-start ${
+        `group relative flex shrink-0 items-center justify-center gap-3 overflow-hidden rounded-md border px-3 py-2.5 text-sm transition-colors duration-150 lg:justify-start ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
             : "border-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
@@ -219,17 +219,17 @@ export default function Sidebar() {
 
       <aside className="hidden h-full shrink-0 md:block md:w-20 lg:w-72">
         <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-4 text-[var(--text-main)] lg:px-4 lg:py-5">
-          <div className="relative">
+          <div className="relative shrink-0">
             <ProjectSwitcher />
           </div>
 
-          <nav className="mt-5 flex flex-1 flex-col gap-2 overflow-y-auto">
+          <nav className="mt-5 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
             {navProject ? (
               <>
                 {/* Não repete o nome do projeto: o seletor logo acima já o
                     mostra, e vê-lo duas vezes seguidas não acrescenta nada.
                     O rótulo existe para contrastar com "Plataforma". */}
-                <p className="hidden px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
+                <p className="hidden shrink-0 px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] lg:block">
                   Neste projeto
                 </p>
                 {projectNavItems.map((item) => (
@@ -258,7 +258,7 @@ export default function Sidebar() {
             ))}
           </nav>
 
-          <div className="mt-4 border-t border-[var(--line)] pt-4">
+          <div className="mt-4 shrink-0 border-t border-[var(--line)] pt-4">
             <nav className="flex flex-col gap-1">
               {AUDIT_NAV_ITEMS.map((item) => (
                 <FooterNavItem
