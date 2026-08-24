@@ -298,7 +298,7 @@ export default function Settings() {
         <div
           role="group"
           aria-label="Tema"
-          className="inline-flex rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-1"
+          className="grid grid-cols-3 gap-1 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] p-1 sm:inline-flex sm:gap-0"
         >
           {THEME_OPTIONS.map((option) => {
             const Icon = option.icon;
@@ -309,7 +309,7 @@ export default function Settings() {
                 type="button"
                 onClick={() => setTheme(option.value)}
                 aria-pressed={isActive}
-                className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`flex min-h-9 items-center justify-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors sm:justify-start ${
                   isActive
                     ? "bg-[var(--accent)] text-[var(--on-accent)] shadow-sm"
                     : "text-[var(--muted-strong)] hover:text-[var(--text-main)]"

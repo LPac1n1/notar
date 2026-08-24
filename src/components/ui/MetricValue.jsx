@@ -56,6 +56,24 @@ function resolveSizeClass(size, children) {
   return ladder[0];
 }
 
+/**
+ * Número não quebra; texto quebra.
+ *
+ * O `whitespace-nowrap` existe para impedir que um valor se parta ao meio:
+ * "R$ 1,00" quebrado depois da vírgula vira "R$ 1," na primeira linha, que
+ * se lê como outro número. Um texto não corre esse risco — e a ficha
+ * "Onde mais comprou" mostra o NOME do estabelecimento, que ficava cortado
+ * na borda por herdar uma regra pensada para algarismos.
+ */
+function wrapClass(children) {
+  const text =
+    typeof children === "string" || typeof children === "number"
+      ? String(children)
+      : "";
+
+  return /\d/.test(text) ? "whitespace-nowrap" : "break-words";
+}
+
 export default function MetricValue({
   children,
   size = "lg",
@@ -75,7 +93,7 @@ export default function MetricValue({
 
   return (
     <span
-      className={`numeric inline-block max-w-full font-medium whitespace-nowrap ${resolveSizeClass(size, children)} ${toneClass} ${className}`.trim()}
+      className={`numeric inline-block max-w-full font-medium ${wrapClass(children)} ${resolveSizeClass(size, children)} ${toneClass} ${className}`.trim()}
     >
       {children}
     </span>

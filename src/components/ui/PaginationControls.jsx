@@ -20,7 +20,7 @@ export default function PaginationControls({
   return (
     <div
       aria-label="Paginação de resultados"
-      className={`flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between ${className}`.trim()}
+      className={`flex flex-col gap-3 rounded-md border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--muted)] md:flex-row md:flex-wrap md:items-center md:justify-between ${className}`.trim()}
       role="navigation"
     >
       <div aria-live="polite">
@@ -36,7 +36,7 @@ export default function PaginationControls({
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="w-full sm:w-36">
+        <div className="w-full sm:w-32">
           <SelectInput
             name="pageSize"
             value={String(pageSize)}
@@ -51,7 +51,7 @@ export default function PaginationControls({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
           <Button
             variant="subtle"
             onClick={() => onPageChange(Math.max(1, page - 1))}
@@ -59,9 +59,9 @@ export default function PaginationControls({
             aria-label="Página anterior"
             leftIcon={<ChevronLeftIcon className="h-4 w-4" />}
           >
-            Anterior
+            <span className="hidden sm:inline">Anterior</span>
           </Button>
-          <span className="min-w-20 text-center text-xs text-[var(--muted)]">
+          <span className="min-w-12 text-center text-xs text-[var(--muted)] sm:min-w-20">
             {page}/{totalPages}
           </span>
           <Button
@@ -71,7 +71,7 @@ export default function PaginationControls({
             aria-label="Próxima página"
             rightIcon={<ChevronRightIcon className="h-4 w-4" />}
           >
-            Próxima
+            <span className="hidden sm:inline">Próxima</span>
           </Button>
         </div>
       </div>

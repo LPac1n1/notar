@@ -24,7 +24,7 @@ export default function DataTable({
   columns,
 }) {
   return (
-    <div aria-busy={ariaBusy} className="overflow-x-auto">
+    <div aria-busy={ariaBusy} className="min-w-0 overflow-x-auto">
       <table className="min-w-full divide-y divide-[var(--line)] text-left text-sm">
         {/* Legenda só para leitor de tela: a tabela já tem título visível na
             seção que a contém, então repeti-lo na tela seria redundante —

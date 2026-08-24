@@ -337,7 +337,7 @@ export default function NoteAnalyticsExplorer({
           </div>
 
           <div className="grid gap-5 xl:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <Eyebrow className="mb-3">Retorno por faixa de compra</Eyebrow>
               <DataTable
                 caption="Notas, gasto e crédito agrupados por faixa de valor da compra."
@@ -365,7 +365,7 @@ export default function NoteAnalyticsExplorer({
               </DataTable>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <Eyebrow className="mb-3">Onde estão as compras excepcionais</Eyebrow>
               {totals.topEstablishments.length ? (
                 <>

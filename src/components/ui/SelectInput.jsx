@@ -380,7 +380,7 @@ export default function SelectInput({
   return (
     <div
       ref={containerRef}
-      className={`space-y-1.5 ${className}`.trim()}
+      className={`min-w-0 space-y-1.5 ${className}`.trim()}
       data-select-name={name}
     >
       {label ? (

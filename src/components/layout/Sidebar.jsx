@@ -56,7 +56,7 @@ function NavItem({ item, compact = false, badgeCount = 0, badgeTitle = "" }) {
       to={item.to}
       end={item.end}
       className={({ isActive }) =>
-        `group relative overflow-hidden rounded-md border px-3 py-3 text-sm transition-colors duration-150 ${
+        `group relative overflow-hidden rounded-md border px-1 py-3 text-sm transition-colors duration-150 lg:px-3 ${
           isActive
             ? "border-[var(--line-strong)] bg-[var(--surface-muted)] text-[var(--text-main)]"
             : "border-transparent text-[var(--muted-strong)] hover:border-[var(--line)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-main)]"
@@ -217,7 +217,7 @@ export default function Sidebar() {
         </p>
       </div>
 
-      <aside className="hidden h-full shrink-0 md:block md:w-16 lg:w-72">
+      <aside className="hidden h-full shrink-0 md:block md:w-20 lg:w-72">
         <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-4 text-[var(--text-main)] lg:px-4 lg:py-5">
           <div className="relative">
             <ProjectSwitcher />
