@@ -1,0 +1,6 @@
+CPF,Status do Pedido,Descricao,CNPJ Estabelecimento,Número da Nota,Valor da Nota,Data da Nota
+12345678909,Documento processado com sucesso,Nota valida 1,12345678000199,2001,10.00,15/03/2026
+12345678909,Documento processado com sucesso,Nota valida 2,12345678000199,2002,10.00,16/03/2026
+12345678909,Documento processado com sucesso,Nota valida 3,12345678000199,2003,10.00,17/03/2026
+12345678909,Documento processado com sucesso,Nota valida 4,12345678000199,2006,10.00,20/03/2026
+98765432100,Documento processado com sucesso,Nota de CPF novo,12345678000199,2007,10.00,21/03/2026
