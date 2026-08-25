@@ -31,8 +31,12 @@
  */
 export const ABATEMENT_TEMPLATE = {
   sheetName: "Planilha1",
-  agencia: 0,
-  conta: 0,
+  // O gabarito vem com 0 nos dois, mas o valor que o sistema de baixa espera
+  // é 1. Como agência e conta entram na chave única do destino, mudá-los
+  // altera a chave de TODAS as linhas: uma competência já exportada com 0
+  // precisa ser reexportada para casar com o que for enviado daqui em diante.
+  agencia: 1,
+  conta: 1,
   bankCode: "NFP2607",
   noteIntro: "Campos que irão compor a chave única:\n",
   noteFields: "Agencia, Conta, Cod. Banco, Data, Valor, Nome",

@@ -61,7 +61,11 @@ test("o arquivo baixado tem o cabeçalho do modelo e uma linha por doador", asyn
   // Bloco de parâmetros do modelo.
   expect(planilha.name).toBe("Planilha1");
   expect(planilha.getCell("A1").value).toBe("AGENCA");
-  expect(planilha.getCell("B1").value).toBe(0);
+  // O gabarito traz 0, mas o sistema de baixa espera 1. Como agência e conta
+  // entram na chave única do destino, o valor é verificado aqui no arquivo
+  // realmente baixado, e não só no gerador.
+  expect(planilha.getCell("B1").value).toBe(1);
+  expect(planilha.getCell("B2").value).toBe(1);
   expect(planilha.getCell("A3").value).toBe("COD. BANCO");
   expect(planilha.getCell("B3").value).toBe("NFP2607");
 

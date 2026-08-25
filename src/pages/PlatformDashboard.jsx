@@ -101,6 +101,14 @@ export default function PlatformDashboard() {
   );
   const hasCredit = overview.credit.spreadsheet > 0;
 
+  // `months` vem em ordem cronológica, então o último é o mais recente com
+  // planilha de créditos importada. Não é necessariamente o mês corrente — a
+  // planilha da NFP sai com atraso —, por isso o cartão nomeia o mês em vez de
+  // dizer "este mês".
+  const mesMaisRecente = overview.months.length
+    ? overview.months[overview.months.length - 1]
+    : null;
+
   if (isLoading && !hasCredit && overview.totals.donorCount === 0) {
     return (
       <LoadingScreen
@@ -126,7 +134,16 @@ export default function PlatformDashboard() {
           <MetricCard
             label="Crédito nas planilhas"
             value={formatCurrency(overview.credit.spreadsheet)}
-            helper="Tudo o que a NFP creditou nas planilhas importadas."
+            helper="Tudo o que a NFP creditou nas planilhas importadas, somando todos os meses."
+          />
+          <MetricCard
+            label="Crédito do último mês"
+            value={formatCurrency(mesMaisRecente?.totalCredit ?? 0)}
+            helper={
+              mesMaisRecente
+                ? `Creditado em ${formatMonthYear(mesMaisRecente.referenceMonth)}, o mês mais recente com planilha de créditos importada.`
+                : "Nenhuma planilha de créditos importada ainda."
+            }
           />
           <MetricCard
             label="Conciliado com doações"

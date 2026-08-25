@@ -84,7 +84,13 @@ test("o bloco de cabeçalho reproduz o modelo célula a célula", async () => {
 
   // Endereços conferidos contra o modelo: mudar qualquer um desloca a leitura
   // do sistema de destino.
-  const enderecos = ["A1", "B1", "A2", "B2", "A3", "B3", "D1"];
+  //
+  // B1 e B2 (agência e conta) ficam de FORA desta comparação de propósito: o
+  // gabarito traz 0 nos dois, e o valor que o sistema de baixa espera é 1.
+  // São os únicos pontos em que divergimos do modelo, e a divergência é
+  // deliberada — por isso têm asserção própria logo abaixo, em vez de
+  // simplesmente não serem verificados.
+  const enderecos = ["A1", "A2", "A3", "B3", "D1"];
 
   for (const endereco of enderecos) {
     assert.deepEqual(
@@ -93,6 +99,9 @@ test("o bloco de cabeçalho reproduz o modelo célula a célula", async () => {
       `${endereco} divergiu do modelo`,
     );
   }
+
+  assert.equal(gerado.getCell("B1").value, 1, "AGENCA sai como 1, não 0");
+  assert.equal(gerado.getCell("B2").value, 1, "CONTA sai como 1, não 0");
 
   // O marcador escondido na coluna 235 da linha 3. Não é decoração conhecida —
   // é reproduzido porque o destino pode consultá-lo, e removê-lo faria a

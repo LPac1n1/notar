@@ -7,6 +7,10 @@ import {
   MATCHED_CREDIT_BY_DONOR_MONTH,
 } from "./project/projectAssignmentSql.js";
 import { buildMonthlyTrendSql } from "./dashboard/monthlyTrendSql.js";
+// A mesma consulta que alimenta o painel de projetos de crédito. Reusá-la faz
+// o crédito do mês bater por construção entre as duas telas, em vez de depender
+// de duas somas escritas separadamente continuarem concordando.
+import { buildProjectCreditByMonthSql } from "./dashboard/projectCreditSql.js";
 import {
   buildTopDonorsQuery,
   TOP_DONOR_FILTER_OPTIONS_SQL,
@@ -156,6 +160,7 @@ async function _fetchDashboardOverview(referenceMonth) {
     importErrorRows,
     inactivityStreakRows,
     reconciliationStats,
+    creditByMonthRows,
   ] = await Promise.all([
     query(`
       SELECT
@@ -394,7 +399,22 @@ async function _fetchDashboardOverview(referenceMonth) {
     `),
     query(buildDonorInactivityStreaksSql(projectId)),
     getReconciliationStats(),
+    query(buildProjectCreditByMonthSql(projectId)),
   ]);
+
+  // Crédito conciliado por mês, do projeto. Vira mapa para o bloco mensal
+  // pegar o mês escolhido sem varrer a lista de novo.
+  //
+  // O total de todos os meses já vem em `totals.totalCredit`, da MESMA origem
+  // (`MATCHED_CREDIT_BY_DONOR_MONTH` com o mesmo recorte de projeto) — por
+  // isso não é somado aqui de novo: duas somas independentes do mesmo número
+  // é exatamente o que faz duas telas discordarem com o tempo.
+  const creditByMonth = new Map(
+    creditByMonthRows.map((row) => [
+      row.reference_month,
+      toNumber(row.total_credit),
+    ]),
+  );
 
   // Donors that stopped sending notes for N consecutive imported months.
   // The SQL returns every active donor (streak 0 included) already sorted by
@@ -610,6 +630,11 @@ async function _fetchDashboardOverview(referenceMonth) {
           importedAt: latestMonthRows[0].imported_at,
           totalNotes: toNumber(latestMonthRows[0].total_notes),
           totalAbatement: toNumber(latestMonthRows[0].total_abatement),
+          // Crédito que a NFP de fato pagou pelas notas deste mês, já
+          // conciliado. Fica ao lado de "A abater" de propósito: um é o que o
+          // projeto vai descontar, o outro é o que entrou — e a diferença
+          // entre os dois é a pergunta que o painel existe para responder.
+          totalCredit: creditByMonth.get(latestMonthRows[0].reference_month) ?? 0,
           donorCount: toNumber(latestMonthRows[0].donor_count),
           pendingCount: toNumber(latestMonthRows[0].pending_count),
           appliedCount: toNumber(latestMonthRows[0].applied_count),
@@ -622,6 +647,7 @@ async function _fetchDashboardOverview(referenceMonth) {
                 referenceMonth: previousImport.reference_month,
                 totalNotes: toNumber(comparisonRows[0]?.previous_notes),
                 totalAbatement: toNumber(comparisonRows[0]?.previous_abatement),
+                totalCredit: creditByMonth.get(previousImport.reference_month) ?? 0,
                 donorCount: toNumber(comparisonRows[0]?.previous_donors),
               }
             : null,

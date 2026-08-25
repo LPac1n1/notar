@@ -1,4 +1,3 @@
-import { AnimatePresence } from "framer-motion";
 import {
   BrowserRouter,
   Navigate,
@@ -50,8 +49,10 @@ function AnimatedRoutes() {
   // o comportamento certo aqui — é uma mudança de ambiente.
   return (
     <Layout>
-      <AnimatePresence mode="wait" initial={false}>
-        <PageTransition key={location.pathname}>
+      {/* Sem `AnimatePresence`: a saída de página ficava entre o roteador e a
+          tela, e uma animação interrompida congelava o conteúdo na página
+          anterior. Ver o comentário em `PageTransition`. */}
+      <PageTransition key={location.pathname}>
           <Routes location={location}>
             <Route path="/" element={<Projects />} />
 
@@ -96,8 +97,7 @@ function AnimatedRoutes() {
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </PageTransition>
-      </AnimatePresence>
+      </PageTransition>
     </Layout>
   );
 }

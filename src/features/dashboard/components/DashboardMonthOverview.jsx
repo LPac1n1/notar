@@ -140,7 +140,7 @@ export default function DashboardMonthOverview({
             </p>
           ) : null}
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Figure
               label="Doadores"
               value={formatInteger(month.donorCount)}
@@ -158,6 +158,17 @@ export default function DashboardMonthOverview({
               value={formatCurrency(month.totalAbatement)}
               current={month.totalAbatement}
               previous={previous?.totalAbatement}
+            />
+            {/* O que a NFP pagou pelas notas deste mês, já conciliado. Fica
+                ao lado de "A abater" porque a leitura útil é a comparação: um
+                é o que o projeto vai descontar, o outro é o que entrou.
+                Sem a planilha de créditos do mês importada, é zero — e isso
+                também é informação. */}
+            <Figure
+              label="Crédito gerado"
+              value={formatCurrency(month.totalCredit ?? 0)}
+              current={month.totalCredit ?? 0}
+              previous={previous?.totalCredit}
             />
           </div>
 
