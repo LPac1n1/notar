@@ -7,6 +7,7 @@ import {
 } from "../src/services/db/migrations.js";
 import { buildDonorInactivityStreaksSql } from "../src/services/monthly/inactivityStreaksSql.js";
 import { buildDonorMonthStatusQuery } from "../src/services/reconciliation/donorMonthStatusSql.js";
+import { buildRaffleNumbersSql } from "../src/services/raffle/raffleNumbersSql.js";
 import { buildAbatementSheetSql } from "../src/services/monthly/abatementSheetSql.js";
 import { buildAbatementDescription } from "../src/services/monthly/abatementSheetDescription.js";
 import { PLATFORM_CREDIT_TOTALS_SQL } from "../src/services/dashboard/platformSql.js";
@@ -3728,6 +3729,140 @@ test("recortar um mês não arrasta o abatimento de outro mês do mesmo doador",
     assert.ok(bruno, "Bruno precisa aparecer em fevereiro, pelo abatimento");
     assert.equal(Number(bruno.total_credit), 0);
     assert.equal(Number(bruno.total_abated), 900);
+  } finally {
+    await conn.close();
+  }
+});
+
+/**
+ * Semeia notas de um mesmo mês em ordem de compra embaralhada, para a
+ * numeração ter de ordenar de verdade em vez de devolver a ordem de inserção.
+ *
+ * Inclui de propósito três linhas que NÃO podem receber número: nota inválida,
+ * nota sem data, e nota de um CPF que não é doador cadastrado. Cada uma delas,
+ * se entrasse, deslocaria o número de todas as seguintes.
+ */
+async function seedRaffleFixtures(conn) {
+  await conn.query(`
+    INSERT INTO donors (id, person_id, name, cpf, demand, donor_type, is_active)
+    VALUES
+      ('d-ana', 'p-ana', 'ANA MARIA DE SOUZA', '11111111111', 'CESTAS', 'holder', TRUE),
+      ('d-bru', 'p-bru', 'BRUNO SILVA',        '22222222222', 'CESTAS', 'holder', TRUE)
+  `);
+  await seedAssignments(conn, ["d-ana", "d-bru"]);
+  await conn.query(`
+    INSERT INTO donor_cpf_links (id, donor_id, name, cpf, link_type, is_active)
+    VALUES
+      ('l-ana', 'd-ana', 'ANA MARIA DE SOUZA', '11111111111', 'holder', TRUE),
+      ('l-bru', 'd-bru', 'BRUNO SILVA',        '22222222222', 'holder', TRUE)
+  `);
+
+  await conn.query(`
+    INSERT INTO donation_notes
+      (id, import_id, cpf, reference_month, numero_nota, data_nota, is_valid, created_at)
+    VALUES
+      ('n3', 'imp', '11111111111', DATE '2026-04-01', '300', DATE '2026-04-20', TRUE,  CURRENT_TIMESTAMP),
+      ('n1', 'imp', '22222222222', DATE '2026-04-01', '100', DATE '2026-04-02', TRUE,  CURRENT_TIMESTAMP),
+      ('n2', 'imp', '11111111111', DATE '2026-04-01', '200', DATE '2026-04-11', TRUE,  CURRENT_TIMESTAMP),
+      ('x-invalida',  'imp', '11111111111', DATE '2026-04-01', '400', DATE '2026-04-05', FALSE, CURRENT_TIMESTAMP),
+      ('x-sem-data',  'imp', '11111111111', DATE '2026-04-01', '500', NULL,              TRUE,  CURRENT_TIMESTAMP),
+      ('x-sem-dono',  'imp', '99999999999', DATE '2026-04-01', '600', DATE '2026-04-03', TRUE,  CURRENT_TIMESTAMP),
+      ('n-maio', 'imp', '11111111111', DATE '2026-05-01', '700', DATE '2026-05-09', TRUE, CURRENT_TIMESTAMP)
+  `);
+}
+
+test("os números da sorte seguem a ordem da compra e ignoram o que não pode ser sorteado", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedRaffleFixtures(conn);
+
+    const stmt = await conn.prepare(
+      buildRaffleNumbersSql(DEFAULT_PROJECT_ID, { scope: "month" }),
+    );
+    let linhas;
+    try {
+      linhas = (await stmt.query("2026-04-01")).toArray();
+    } finally {
+      await stmt.close();
+    }
+
+    // Três notas elegíveis em abril. A inválida, a sem data e a de CPF sem
+    // cadastro ficam de fora — e é por isso que os números vão só até 3.
+    assert.equal(linhas.length, 3);
+    assert.deepEqual(
+      linhas.map((l) => [Number(l.numero_sorte), String(l.data_nota)]),
+      [
+        [1, "2026-04-02"],
+        [2, "2026-04-11"],
+        [3, "2026-04-20"],
+      ],
+    );
+
+    // O número 1 é do Bruno, que comprou primeiro — não do primeiro inserido.
+    assert.equal(String(linhas[0].donor_name), "BRUNO SILVA");
+    assert.equal(String(linhas[0].cpf), "22222222222");
+
+    // Maio não vaza para abril.
+    assert.ok(linhas.every((l) => String(l.data_nota).startsWith("2026-04")));
+  } finally {
+    await conn.close();
+  }
+});
+
+test("o recorte anual numera o ano inteiro numa sequência só", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedRaffleFixtures(conn);
+
+    const stmt = await conn.prepare(
+      buildRaffleNumbersSql(DEFAULT_PROJECT_ID, { scope: "year" }),
+    );
+    let linhas;
+    try {
+      // Qualquer mês de 2026 delimita o ano: o recorte usa o ano da data.
+      linhas = (await stmt.query("2026-04-01")).toArray();
+    } finally {
+      await stmt.close();
+    }
+
+    // As três de abril mais a de maio, numeradas continuamente — a de maio
+    // não recomeça do 1, senão dois bilhetes diferentes teriam o mesmo número
+    // no sorteio anual.
+    assert.equal(linhas.length, 4);
+    assert.deepEqual(
+      linhas.map((l) => Number(l.numero_sorte)),
+      [1, 2, 3, 4],
+    );
+    assert.equal(String(linhas[3].data_nota), "2026-05-09");
+  } finally {
+    await conn.close();
+  }
+});
+
+test("a numeração é estável: a mesma consulta devolve os mesmos números", async () => {
+  const conn = await createTestConnection();
+  try {
+    await runMigrations(conn);
+    await seedRaffleFixtures(conn);
+
+    // Um sorteio pode ser conferido depois. Se a ordem dependesse do acaso do
+    // motor, refazer a lista trocaria os ganhadores.
+    const rodar = async () => {
+      const stmt = await conn.prepare(
+        buildRaffleNumbersSql(DEFAULT_PROJECT_ID, { scope: "month" }),
+      );
+      try {
+        return (await stmt.query("2026-04-01"))
+          .toArray()
+          .map((l) => `${l.numero_sorte}:${l.cpf}:${l.data_nota}`);
+      } finally {
+        await stmt.close();
+      }
+    };
+
+    assert.deepEqual(await rodar(), await rodar());
   } finally {
     await conn.close();
   }

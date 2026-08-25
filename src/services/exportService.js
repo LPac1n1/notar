@@ -8,6 +8,8 @@ import {
 } from "./reconciliation/creditReconciliationService.js";
 import { createZipArchive } from "../features/reports/utils/simpleZip.js";
 import { buildCsvContent } from "../utils/csv.js";
+import { formatDatePtBR } from "../utils/date.js";
+import { listRaffleNumbers } from "./raffle/raffleNumbersService.js";
 import { downloadFile } from "../utils/download.js";
 import { buildSlug } from "../utils/slug.js";
 
@@ -284,4 +286,37 @@ export async function exportAbatementSheetWorkbook({ referenceMonth } = {}) {
     demandCount: files.length,
     fileNames: files.map((file) => file.fileName),
   };
+}
+
+/**
+ * Lista de números da sorte, para sorteio.
+ *
+ * Sai com nome e CPF já mascarados — a máscara vive no serviço, não aqui,
+ * porque este arquivo é só mais um consumidor. O valor da nota e o crédito
+ * que ela gerou não aparecem porque não são consultados em lugar nenhum
+ * deste caminho.
+ */
+export async function exportRaffleNumbersCsv({
+  period = "",
+  scope = "month",
+} = {}) {
+  const rows = await listRaffleNumbers({ period, scope });
+
+  const csvContent = buildCsvContent(
+    [
+      { key: "number", label: "Número" },
+      { key: "name", label: "Nome" },
+      { key: "cpf", label: "CPF" },
+      { key: "noteDate", label: "Data da nota" },
+    ],
+    rows.map((row) => ({
+      ...row,
+      noteDate: formatDatePtBR(row.noteDate),
+    })),
+  );
+
+  const sufixo = scope === "year" ? period.slice(0, 4) : period.slice(0, 7);
+  downloadCsv(`notar-numeros-da-sorte-${sufixo}.csv`, csvContent);
+
+  return { rowCount: rows.length };
 }

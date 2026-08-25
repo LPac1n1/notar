@@ -24,6 +24,7 @@ import { PLATFORM_NOTES_SCOPE } from "../services/noteService";
 import ActionHistory from "../pages/ActionHistory";
 import PlatformDashboard from "../pages/PlatformDashboard";
 import Projects from "../pages/Projects";
+import Raffle from "../pages/Raffle";
 import Settings from "../pages/Settings";
 import Trash from "../pages/Trash";
 import NotFound from "../pages/NotFound";
@@ -63,6 +64,7 @@ function AnimatedRoutes() {
               <Route path="pessoas" element={<People />} />
               <Route path="demandas" element={<Demands />} />
               <Route path="mensal" element={<Monthly />} />
+              <Route path="sorteio" element={<Raffle />} />
               <Route path="anotacoes" element={<Notes />} />
             </Route>
 

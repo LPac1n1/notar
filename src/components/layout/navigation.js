@@ -5,6 +5,7 @@ import {
   HistoryIcon,
   ImportIcon,
   MonthlyIcon,
+  RaffleIcon,
   NotesIcon,
   ReceiptIcon,
   PlatformIcon,
@@ -64,6 +65,13 @@ export const PROJECT_NAV_ITEMS = [
     module: "demands",
     description: "Grupos atendidos e vínculos principais",
     icon: DemandIcon,
+  },
+  {
+    path: "sorteio",
+    label: "Números da sorte",
+    module: "monthly",
+    description: "Um número por nota doada, para sorteios",
+    icon: RaffleIcon,
   },
   {
     path: "anotacoes",

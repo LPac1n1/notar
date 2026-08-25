@@ -38,6 +38,7 @@ export {
   LayoutDashboard as DashboardIcon,
   List as BulletListIcon,
   ListOrdered as OrderedListIcon,
+  Ticket as RaffleIcon,
   ListTodo as DemandIcon,
   LoaderCircle as LoadingIcon,
   MoreHorizontal as MoreIcon,
