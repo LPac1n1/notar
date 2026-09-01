@@ -63,28 +63,26 @@ O dado nunca sai do navegador para ser processado. O que vai para a nuvem é um
 entra.
 
 ```mermaid
-flowchart LR
-    subgraph browser["🖥️ Seu navegador"]
-        direction TB
-        UI["Interface<br/>React"]
-        DB[("DuckDB-WASM<br/>banco em memória")]
-        UI <--> DB
+flowchart TB
+    subgraph nuvem["☁️ Supabase — só guarda o arquivo"]
+        direction LR
+        AUTH["🔑 Auth<br/>magic link"]
+        BLOB[("📦 Storage<br/>snapshot.json.gz")]
+        AUTH -.-> BLOB
     end
 
-    subgraph nuvem["☁️ Supabase"]
-        direction TB
-        AUTH["Auth<br/>magic link"]
-        BLOB["Storage<br/>snapshot.json.gz"]
+    subgraph browser["🖥️ Seu navegador — onde tudo acontece"]
+        direction LR
+        PLAN["📄 Planilhas da NFP<br/>CSV · XLSX"] --> DB
+        DB[("🦆 DuckDB-WASM<br/>SQL em memória")] --> UI["⚛️ Interface"]
+        DB --> OUT["📊 Relatórios<br/>CSV · PDF · JPEG · XLSX"]
     end
 
-    PLAN["📄 Planilhas da NFP<br/>CSV · XLSX"] -->|"importar<br/>(arquivo local)"| DB
-    BLOB -->|"hidratar ao entrar"| DB
-    DB -->|"sincronizar<br/>(debounce 2s)"| BLOB
-    AUTH -.->|"identifica a pasta"| BLOB
-    DB --> OUT["📊 Relatórios<br/>CSV · PDF · JPEG · XLSX"]
+    BLOB ==> |"1 · hidrata ao entrar"| DB
+    DB ==> |"2 · sincroniza após 2s"| BLOB
 
-    style browser fill:#eef2ff,stroke:#4f46e5
     style nuvem fill:#ecfeff,stroke:#0e7490
+    style browser fill:#eef2ff,stroke:#4f46e5
 ```
 
 **Nenhuma consulta viaja pela rede.** Filtros, agregações, conciliação e
