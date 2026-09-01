@@ -71,7 +71,14 @@ export async function reconcileCredits({ emitChange = true } = {}) {
       ) AS matchable
     FROM credit_notes
   `);
-  if (import.meta.env.DEV) {
+  // Só reporta quando há o que reportar. A conciliação roda uma vez em toda
+  // abertura do sistema, logo depois das migrations, sobre um banco ainda
+  // vazio — sem esta condição o console abria toda sessão com dois registros
+  // de zeros, e o diagnóstico ficava afogado no próprio ruído.
+  const temAlgoParaConciliar =
+    Number(donationStats?.total ?? 0) > 0 || Number(creditStats?.total ?? 0) > 0;
+
+  if (import.meta.env.DEV && temAlgoParaConciliar) {
     console.log("[reconcileCredits] inputs:", {
       donations: {
         total: Number(donationStats?.total ?? 0),
@@ -260,7 +267,9 @@ export async function reconcileCredits({ emitChange = true } = {}) {
     acc[String(row.match_status)] = Number(row.total ?? 0);
     return acc;
   }, {});
-  if (import.meta.env.DEV) {
+  // Mesma condição da entrada: sem nota nenhum dos dois lados, o resultado é
+  // um objeto vazio que não diz nada.
+  if (import.meta.env.DEV && temAlgoParaConciliar) {
     console.log("[reconcileCredits] result:", counts);
   }
 
